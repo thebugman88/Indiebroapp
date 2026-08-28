@@ -1,0 +1,6 @@
+{
+  "name": "SONIC IQ LAB",
+  "description": "Engineered by indiebrotherhood. Immersive timed music quizzes with Finish the Song, What's the Artist, audio song clip challenges, genre packs, anti-cheat timers, equalizer visuals, and Custom Quiz Studio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

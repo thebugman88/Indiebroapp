@@ -1,0 +1,6 @@
+{
+  "name": "Quick tools by indiebrotherhood",
+  "description": "A suite of dedicated, lightweight micro-tools and dual-mode lyric scratchpad for music creators and songwriters.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

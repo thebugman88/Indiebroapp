@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "src",
+    "hang-out/src",
+    "hit-analyzer_-built-by-indiebrotherhood/src",
+    "indiebrotherhood-artist-assistant/src",
+    "indiebrotherhood-semantic-lab/src",
+    "judgement-zone/src",
+    "lyric-pro-quiz-studio/src",
+    "lyric-pro-studio/src",
+    "meeting-room/src",
+    "quick-tools-by-indiebrotherhood/src",
+    "royalty-and-isrc-metadata-extractor/src",
+    "server",
+    "server.ts"
+  ]
+}

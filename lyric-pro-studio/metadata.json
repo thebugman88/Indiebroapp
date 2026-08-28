@@ -1,0 +1,6 @@
+{
+  "name": "Lyric Pro Studio",
+  "description": "Elite lyricism engine with genre and vibe customization, explicit content controls, dynamic song structures, legal protections, and dual lyric generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

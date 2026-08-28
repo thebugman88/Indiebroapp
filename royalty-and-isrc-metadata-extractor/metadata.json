@@ -1,0 +1,6 @@
+{
+  "name": "Royalty & ISRC Metadata Extractor",
+  "description": "OCR screenshot parser, file organizer, and platform export engine for ASCAP, MLC, and SoundExchange",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "IndieArtist Career OS & Assistant",
+  "description": "AI-powered indie artist career manager, metadata organizer, release scheduler, OCR split & royalty parser, and dynamic ASCAP/MLC/SoundExchange export engine.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

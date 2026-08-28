@@ -1,0 +1,6 @@
+{
+  "name": "Hit Analyzer",
+  "description": "Cross-platform hit potential analyzer built by indiebrotherhood for independent artists.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

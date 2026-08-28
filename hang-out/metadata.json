@@ -1,0 +1,6 @@
+{
+  "name": "Hang Out",
+  "description": "The ultimate live community hub for indie artists by indiebrotherhood, featuring rap battle arenas, genre collaboration chats, marketing strategy hubs, and artist lounges.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

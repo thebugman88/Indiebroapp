@@ -1,0 +1,6 @@
+{
+  "name": "Judgement Zone",
+  "description": "An IndieBrotherhood Production 2026: An elite, anonymous peer-review music evaluation platform featuring blind audio chambers, 10-judge consensus rounds, sonic matchmaking drift, multi-dimensional scoring rubrics, and judge tier progressions.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

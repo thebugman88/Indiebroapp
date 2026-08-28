@@ -1,0 +1,6 @@
+{
+  "name": "IndieBrotherhood Semantic Lab",
+  "description": "ERA Synthesis Engine with real-time lyric refactoring, cadence flow matrix, hit potential predictor, and ASCAP/MLC IP registry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
