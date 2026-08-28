@@ -30,6 +30,31 @@ export type UserLyricsOption = 'finish_lyrics' | 'ideas_from_lyrics' | 'enhance_
 
 export type StarterSection = 'verse' | 'chorus';
 
+export interface LyricLine {
+  text: string;
+  syllables: number;
+  rhyme_markers: string;
+}
+
+export interface LyricSection {
+  section_name: string;
+  rhyme_scheme: string;
+  energy_level: number;
+  lines: LyricLine[];
+}
+
+export interface SongMetadata {
+  title: string;
+  genre_style: string;
+  target_bpm: number;
+  vocal_delivery_notes: string;
+}
+
+export interface HookBreakdown {
+  core_earworm: string;
+  rhythmic_motif: string;
+}
+
 export interface LyricGenerateRequest {
   genre: string;
   customGenre?: string;
@@ -42,6 +67,8 @@ export interface LyricGenerateRequest {
   autoRandomize?: boolean;
   userLyrics?: string;
   userLyricsOption?: UserLyricsOption;
+  userId?: string;
+  userEmail?: string;
 }
 
 export interface LyricSet {
@@ -52,13 +79,40 @@ export interface LyricSet {
   explicit: boolean;
   content: string;
   summaryNote?: string;
+  song_metadata?: SongMetadata;
+  lyrics?: LyricSection[];
+  hook_breakdown?: HookBreakdown;
+}
+
+export interface SecurityRule {
+  id: string;
+  title: string;
+  description: string;
+  penalty: string;
+}
+
+export interface SecurityState {
+  status: 'ACTIVE' | 'PAUSED' | 'QUARANTINED';
+  pausedUntil?: number;
+  remainingSeconds?: number;
+  pauseReason?: string;
+  trustScore?: number;
+  guidelinesAccepted?: boolean;
 }
 
 export interface LyricGenerateResponse {
   setA: LyricSet;
   setB: LyricSet;
+  rawBlueprint?: any;
   isAiGenerated: boolean;
   timestamp: number;
+  _telemetry?: {
+    modelUsed?: string;
+    fallbackTriggered?: boolean;
+    latencyMs?: number;
+    securityStatus?: string;
+    trustScore?: number;
+  };
 }
 
 export interface SavedLyricEntry {

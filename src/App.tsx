@@ -41,6 +41,9 @@ import { LandingPage } from './components/LandingPage';
 import { AuthModal } from './components/AuthModal';
 import { ArtistProfilePage } from './components/ArtistProfilePage';
 import { DirectMessagesModal } from './components/DirectMessagesModal';
+import { NotificationCenter } from './components/NotificationCenter';
+import { NotificationToastContainer } from './components/NotificationToastContainer';
+import { AdminControlRoomModal } from './components/AdminControlRoomModal';
 import { grantUserXP } from './services/gamification';
 import {
   getCurrentAuthUser,
@@ -264,7 +267,11 @@ function SuiteApp() {
   const [currentUser, setCurrentUser] = useState<RegisteredUser>(getCurrentAuthUser);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
+  const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [unreadDms, setUnreadDms] = useState<number>(0);
+
+  const isMasterAdmin =
+    currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() || currentUser.isAdmin === true;
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -497,10 +504,13 @@ function SuiteApp() {
 
           {/* Suite Right Controls: Command Search, Universal Profile Badge & App Menu */}
           <div className="flex items-center gap-2">
+            {/* Live Universal Notification Center */}
+            <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
+
             {/* Direct Messages Trigger */}
             <button
               onClick={() => setIsDmModalOpen(true)}
-              className="relative p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-amber-400 transition"
+              className="relative p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-amber-400 transition cursor-pointer"
               title="Artist Direct Messages & Audio Voice Notes"
             >
               <MessageSquare className="w-4 h-4" />
@@ -513,7 +523,7 @@ function SuiteApp() {
 
             <button
               onClick={() => setIsPaletteOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-2 transition"
+              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-2 transition cursor-pointer"
               title="Command Palette (Cmd + K)"
             >
               <Search className="w-3.5 h-3.5" />
@@ -528,20 +538,34 @@ function SuiteApp() {
               <ProfileBadge />
             </div>
 
-            {/* Login / Admin Switcher Button */}
+            {/* Founder Christopher Ray Exclusive Admin Control Room Button (Only shows when logged in as master admin) */}
+            {isMasterAdmin && (
+              <button
+                type="button"
+                id="suite-master-admin-control-room-btn"
+                onClick={() => setIsAdminControlRoomOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-black border border-amber-300 shadow-md shadow-amber-500/20 text-xs flex items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95"
+                title="Founder Admin Control Room: Real User Logs, Live Kick/Whitelist/Blacklist & Universal Announcements"
+              >
+                <Crown className="w-4 h-4 text-zinc-950 fill-zinc-950" />
+                <span className="font-extrabold tracking-tight">Admin Room</span>
+              </button>
+            )}
+
+            {/* Login / Profile Switcher Button */}
             <button
               onClick={() => setIsAuthModalOpen(true)}
-              className={`p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold ${
+              className={`p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
                 currentUser.isAdmin
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-amber-500/40'
               }`}
-              title={currentUser.isAdmin ? 'Master Admin Active (Unlimited)' : 'Sign In / Recover Account'}
+              title={currentUser.isAdmin ? 'Master Admin Active (Unlimited Free Access)' : 'Sign In / Recover Account'}
             >
               {currentUser.isAdmin ? (
                 <>
                   <Crown className="w-4 h-4 text-amber-400" />
-                  <span className="hidden xl:inline text-[11px]">Master Admin</span>
+                  <span className="hidden xl:inline text-[11px]">Christopher Ray</span>
                 </>
               ) : (
                 <span className="text-[11px] px-1">Login</span>
@@ -1015,6 +1039,16 @@ function SuiteApp() {
       {/* GLOBAL TOAST & MODAL OVERLAYS */}
       <AchievementToast />
       <GamificationModal />
+      <NotificationToastContainer onNavigateTo={(appId) => navigateTo(appId as SuiteAppId)} />
+
+      {/* Founder Christopher Ray Admin Control Room Modal */}
+      <AdminControlRoomModal
+        isOpen={isAdminControlRoomOpen}
+        onClose={() => setIsAdminControlRoomOpen(false)}
+        currentUser={currentUser}
+        onNavigateTo={(appId) => navigateTo(appId as SuiteAppId)}
+      />
+
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}

@@ -4,7 +4,20 @@ import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
 export type SecuritySeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-export type SecurityActionTaken = 'BLOCKED_AND_QUARANTINED' | 'SELF_REPAIRED' | 'WARNED' | 'OBSERVED';
+export type SecurityActionTaken = 'BLOCKED_AND_QUARANTINED' | 'USER_ACCOUNT_PAUSED' | 'SELF_REPAIRED' | 'WARNED' | 'OBSERVED';
+
+export interface AccountSecurityState {
+  accountId: string;
+  userEmail?: string;
+  status: 'ACTIVE' | 'PAUSED' | 'QUARANTINED';
+  pausedUntil: number;
+  pauseReason: string;
+  requestTimestamps: number[];
+  rapidClicksCount: number;
+  totalRequests: number;
+  trustScore: number;
+  lastRequestTime: number;
+}
 
 export interface SecurityIncident {
   id: string;
@@ -40,6 +53,7 @@ const HEALTH_LOG_FILE = path.join(LOGS_DIR, 'system-health.log');
 const securityIncidents: SecurityIncident[] = [];
 const quarantinedIps = new Set<string>();
 const ipRequestWindows = new Map<string, { count: number; windowStart: number }>();
+const accountSecurityStore = new Map<string, AccountSecurityState>();
 let totalRequestsInspected = 0;
 let threatsBlockedCount = 0;
 let selfRepairsCount = 0;
@@ -405,4 +419,240 @@ export function remediateUnquarantineIp(ip: string): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Check and record account activity with Anti-Bot & Excessive Request Protection
+ */
+export function recordAccountRequest(params: {
+  accountId?: string;
+  userEmail?: string;
+  clientIp: string;
+  endpoint: string;
+}): {
+  allowed: boolean;
+  status: 'ACTIVE' | 'PAUSED' | 'QUARANTINED';
+  pausedUntil?: number;
+  pauseReason?: string;
+  remainingSeconds?: number;
+  trustScore: number;
+} {
+  const accountKey = params.accountId || params.userEmail || params.clientIp;
+  const now = Date.now();
+
+  let state = accountSecurityStore.get(accountKey);
+  if (!state) {
+    state = {
+      accountId: accountKey,
+      userEmail: params.userEmail,
+      status: 'ACTIVE',
+      pausedUntil: 0,
+      pauseReason: '',
+      requestTimestamps: [],
+      rapidClicksCount: 0,
+      totalRequests: 0,
+      trustScore: 100,
+      lastRequestTime: 0,
+    };
+    accountSecurityStore.set(accountKey, state);
+  }
+
+  // 1. Check if currently paused
+  if (state.status === 'PAUSED') {
+    if (now < state.pausedUntil) {
+      const remainingSeconds = Math.ceil((state.pausedUntil - now) / 1000);
+      return {
+        allowed: false,
+        status: 'PAUSED',
+        pausedUntil: state.pausedUntil,
+        pauseReason: state.pauseReason,
+        remainingSeconds,
+        trustScore: state.trustScore,
+      };
+    } else {
+      // Cooldown completed: auto-unpause
+      state.status = 'ACTIVE';
+      state.pausedUntil = 0;
+      state.pauseReason = '';
+      state.rapidClicksCount = 0;
+      state.requestTimestamps = [];
+      state.trustScore = Math.min(100, state.trustScore + 20);
+    }
+  }
+
+  // 2. Rapid Click / Bot Hammering Detection (under 1800ms)
+  const timeSinceLast = now - state.lastRequestTime;
+  state.lastRequestTime = now;
+  state.totalRequests++;
+
+  if (timeSinceLast < 1800 && state.lastRequestTime > 0) {
+    state.rapidClicksCount++;
+    state.trustScore = Math.max(10, state.trustScore - 15);
+  } else {
+    state.rapidClicksCount = Math.max(0, state.rapidClicksCount - 1);
+  }
+
+  // Clean request timestamps older than 60s
+  state.requestTimestamps = state.requestTimestamps.filter((t) => now - t < 60000);
+  state.requestTimestamps.push(now);
+
+  // 3. Excessive Request Rate & Bot Pattern Rule:
+  // - 4+ rapid clicks under 1.8s OR
+  // - > 15 lyric/ai requests in 60 seconds
+  const isBotHammering = state.rapidClicksCount >= 4;
+  const isRateFlooding = state.requestTimestamps.length > 15;
+
+  if (isBotHammering || isRateFlooding) {
+    const pauseDurationSeconds = isBotHammering ? 90 : 60;
+    state.status = 'PAUSED';
+    state.pausedUntil = now + pauseDurationSeconds * 1000;
+    state.pauseReason = isBotHammering
+      ? `Security AI Bot Defense: Automated sub-second repeated clicking detected (${state.rapidClicksCount} rapid triggers). Account paused for ${pauseDurationSeconds}s cooldown.`
+      : `Security AI Rate Sentinel: Excessive generation requests (${state.requestTimestamps.length} reqs / 60s). Account paused for ${pauseDurationSeconds}s.`;
+    state.trustScore = Math.max(5, state.trustScore - 30);
+
+    recordSecurityIncident({
+      threatOriginIp: params.clientIp,
+      endpoint: params.endpoint,
+      method: 'POST',
+      severity: 'HIGH',
+      threatType: isBotHammering ? 'BOT_RAPID_CLICK_DEFENSE' : 'EXCESSIVE_ACCOUNT_REQUESTS',
+      rawSignatureExcerpt: `Account: ${accountKey} | Reason: ${state.pauseReason}`,
+      actionTaken: 'USER_ACCOUNT_PAUSED',
+      recommendedRemediation: `Enforce ${pauseDurationSeconds}s cooldown pause. Cooldown auto-restores upon timer completion.`,
+    });
+
+    return {
+      allowed: false,
+      status: 'PAUSED',
+      pausedUntil: state.pausedUntil,
+      pauseReason: state.pauseReason,
+      remainingSeconds: pauseDurationSeconds,
+      trustScore: state.trustScore,
+    };
+  }
+
+  return {
+    allowed: true,
+    status: 'ACTIVE',
+    trustScore: state.trustScore,
+  };
+}
+
+/**
+ * Get account security status
+ */
+export function getAccountSecurityStatus(accountKey: string): AccountSecurityState {
+  const now = Date.now();
+  let state = accountSecurityStore.get(accountKey);
+  if (!state) {
+    state = {
+      accountId: accountKey,
+      status: 'ACTIVE',
+      pausedUntil: 0,
+      pauseReason: '',
+      requestTimestamps: [],
+      rapidClicksCount: 0,
+      totalRequests: 0,
+      trustScore: 100,
+      lastRequestTime: 0,
+    };
+    accountSecurityStore.set(accountKey, state);
+  }
+
+  if (state.status === 'PAUSED' && now >= state.pausedUntil) {
+    state.status = 'ACTIVE';
+    state.pausedUntil = 0;
+    state.pauseReason = '';
+  }
+
+  return state;
+}
+
+/**
+ * Manually pause an account (Security AI or Admin)
+ */
+export function pauseAccount(accountKey: string, durationSeconds: number, reason: string): AccountSecurityState {
+  const now = Date.now();
+  let state = getAccountSecurityStatus(accountKey);
+  state.status = 'PAUSED';
+  state.pausedUntil = now + durationSeconds * 1000;
+  state.pauseReason = reason;
+  state.trustScore = Math.max(0, state.trustScore - 25);
+  accountSecurityStore.set(accountKey, state);
+
+  recordSecurityIncident({
+    threatOriginIp: accountKey,
+    endpoint: '/api/security/pause-account',
+    method: 'POST',
+    severity: 'MEDIUM',
+    threatType: 'ADMIN_OR_SECURITY_AI_ACCOUNT_PAUSE',
+    rawSignatureExcerpt: `Account ${accountKey} paused for ${durationSeconds}s: ${reason}`,
+    actionTaken: 'USER_ACCOUNT_PAUSED',
+    recommendedRemediation: 'Account temporarily suspended from high-speed AI generation.',
+  });
+
+  return state;
+}
+
+/**
+ * Unpause an account
+ */
+export function unpauseAccount(accountKey: string): AccountSecurityState {
+  let state = getAccountSecurityStatus(accountKey);
+  state.status = 'ACTIVE';
+  state.pausedUntil = 0;
+  state.pauseReason = '';
+  state.rapidClicksCount = 0;
+  state.trustScore = 100;
+  accountSecurityStore.set(accountKey, state);
+
+  recordSecurityIncident({
+    threatOriginIp: accountKey,
+    endpoint: '/api/security/unpause-account',
+    method: 'POST',
+    severity: 'LOW',
+    threatType: 'ACCOUNT_SECURITY_RESTORED',
+    rawSignatureExcerpt: `Account ${accountKey} restored to ACTIVE status`,
+    actionTaken: 'OBSERVED',
+    recommendedRemediation: 'Account restored. Normal limits apply.',
+  });
+
+  return state;
+}
+
+/**
+ * Startup Security & Fair Usage Guidelines
+ */
+export function getStartupSecurityGuidelines() {
+  return {
+    version: '2026.3-PRO',
+    lastUpdated: '2026-08-28',
+    rules: [
+      {
+        id: 'rule_anti_bot',
+        title: 'Zero Automated Bot or Script Scraping',
+        description: 'Automated macros, clicker scripts, and headless bot crawlers are strictly prohibited. The Security AI continuously inspects click cadence, origin entropy, and request signatures.',
+        penalty: 'Immediate automated account quarantine & cooldown pause.',
+      },
+      {
+        id: 'rule_fair_cadence',
+        title: 'Human Creation Pacing & Fair AI Cooldown',
+        description: 'Lyric Pro generates multi-platinum studio-grade arrangements. Allow a minimum 3-4 second creative breath between generations to allow the Gemini AI neural cluster to synthesize optimal prosody.',
+        penalty: 'Repeated rapid bursts trigger temporary 60-90 second Security AI cool-off periods.',
+      },
+      {
+        id: 'rule_pure_lyrics',
+        title: 'Strict Lyricist & Prosody Output Integrity',
+        description: 'Lyric Pro only generates pure song lyrics with syllable counts, rhyme markers, energy levels, and earworm motifs. Conversational filler and system prompts are forbidden in output.',
+        penalty: 'System self-corrects and guarantees pure structured musical output.',
+      },
+      {
+        id: 'rule_commercial_ownership',
+        title: 'Originality & Commercial Ownership Rights',
+        description: 'All generated compositions are granted for commercial release, recording, and royalty distribution with zero legal liability placed upon the platform.',
+        penalty: 'Commercial protections apply to verified accounts.',
+      },
+    ],
+  };
 }

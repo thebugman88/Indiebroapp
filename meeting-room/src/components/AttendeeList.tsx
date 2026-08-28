@@ -13,6 +13,7 @@ import {
   Sparkles,
   Shield,
   Volume2,
+  UserX,
 } from 'lucide-react';
 import type { Attendee, UserRole, VoteChoice } from '../types';
 
@@ -22,8 +23,10 @@ interface AttendeeListProps {
   userRole: UserRole;
   isVoteActive: boolean;
   hasHandRaised: boolean;
+  isAdmin?: boolean;
   onToggleHandRaise: () => void;
   onUpdateRole?: (newRole: UserRole) => void;
+  onKickAttendee?: (attendeeId: string, name: string) => void;
 }
 
 export function AttendeeList({
@@ -32,8 +35,10 @@ export function AttendeeList({
   userRole,
   isVoteActive,
   hasHandRaised,
+  isAdmin,
   onToggleHandRaise,
   onUpdateRole,
+  onKickAttendee,
 }: AttendeeListProps) {
   const raisedHandsCount = attendees.filter((a) => a.hasHandRaised).length;
 
@@ -163,6 +168,18 @@ export function AttendeeList({
                   <span title="Host Moderator">
                     <Crown className="w-3.5 h-3.5 text-amber-500" />
                   </span>
+                )}
+
+                {/* Master Admin Kick Button */}
+                {isAdmin && !isSelf && onKickAttendee && (
+                  <button
+                    type="button"
+                    onClick={() => onKickAttendee(attendee.id, attendee.name)}
+                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                    title={`Kick ${attendee.name} from meeting`}
+                  >
+                    <UserX className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             </div>

@@ -26,6 +26,11 @@ import {
   getSecurityStats,
   getSecurityAuditLogs,
   remediateUnquarantineIp,
+  recordAccountRequest,
+  getAccountSecurityStatus,
+  pauseAccount,
+  unpauseAccount,
+  getStartupSecurityGuidelines,
 } from './server/codeSentinel';
 import { generateAlgorithmicLyrics } from './lyric-pro-studio/src/data/lyricTemplates';
 
@@ -188,6 +193,48 @@ app.get('/api/security/stats', (_req, res) => {
 app.get('/api/security/logs', (_req, res) => {
   const logs = getSecurityAuditLogs(100);
   res.json({ success: true, count: logs.length, logs });
+});
+
+app.get('/api/security/guidelines', (_req, res) => {
+  res.json({
+    success: true,
+    guidelines: getStartupSecurityGuidelines(),
+  });
+});
+
+app.get('/api/security/account-status', (req, res) => {
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
+  const accountKey = (req.query.accountId as string) || (req.query.userEmail as string) || clientIp;
+  const status = getAccountSecurityStatus(accountKey);
+  res.json({
+    success: true,
+    accountKey,
+    status,
+  });
+});
+
+app.post('/api/security/pause-account', (req, res) => {
+  const { accountId, durationSeconds = 90, reason = 'Excessive activity detected by Security AI' } = req.body || {};
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
+  const target = accountId || clientIp;
+  const state = pauseAccount(target, Number(durationSeconds), reason);
+  return res.json({
+    success: true,
+    action: 'PAUSED',
+    accountState: state,
+  });
+});
+
+app.post('/api/security/unpause-account', (req, res) => {
+  const { accountId } = req.body || {};
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
+  const target = accountId || clientIp;
+  const state = unpauseAccount(target);
+  return res.json({
+    success: true,
+    action: 'UNPAUSED',
+    accountState: state,
+  });
 });
 
 app.post('/api/security/remediate', (req, res) => {
@@ -896,77 +943,215 @@ Output a comprehensive hit potential breakdown in JSON format.
 });
 
 // -------------------------------------------------------------
-// 7. RESILIENT LYRIC PRO STUDIO API
+// 7. RESILIENT LYRIC PRO STUDIO API (ELITE GHOSTWRITER & SECURITY AI SENTINEL)
 // -------------------------------------------------------------
 app.post('/api/generate-lyrics', async (req: Request, res: Response) => {
-  const payload = req.body;
+  const payload = req.body || {};
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
+  const accountId = payload.userId || payload.accountId || payload.userEmail || clientIp;
+
+  // 1. Security AI Sentinel: Bot & Excessive Request Check
+  const securityCheck = recordAccountRequest({
+    accountId,
+    userEmail: payload.userEmail,
+    clientIp,
+    endpoint: '/api/generate-lyrics',
+  });
+
+  if (!securityCheck.allowed) {
+    return res.status(429).json({
+      error: securityCheck.pauseReason || 'Security AI Sentinel: Account paused due to excessive rapid requests.',
+      status: 'ACCOUNT_PAUSED',
+      pausedUntil: securityCheck.pausedUntil,
+      remainingSeconds: securityCheck.remainingSeconds,
+      pauseReason: securityCheck.pauseReason,
+      trustScore: securityCheck.trustScore,
+      incidentId: `sec_pause_${Date.now()}`,
+    });
+  }
+
   try {
     const genre = payload.customGenre && payload.customGenre.trim() ? payload.customGenre.trim() : payload.genre || 'Hip-Hop';
-    const vibe = payload.customVibe && payload.customVibe.trim() ? payload.customVibe.trim() : payload.vibe || 'Anthemic';
+    const vibe = payload.customVibe && payload.customVibe.trim() ? payload.customVibe.trim() : payload.vibe || 'Aggressive';
     const explicit = !!payload.explicit;
-    const mode = payload.mode || 'Standard';
+    const mode = payload.mode || 'full_song';
     const structure = payload.structure || 'Verse-Chorus-Verse-Chorus-Bridge-Outro';
+    const userLyrics = payload.userLyrics ? payload.userLyrics.trim() : '';
+    const userLyricsOption = payload.userLyricsOption || 'finish_lyrics';
 
-    const prompt = `You are a master lyricist and Grammy-winning songwriter ("Lyric Pro Elite Engine by indiebrotherhood").
-Generate TWO DISTINCT, COMPLETELY UNIQUE, HIGH-IMPACT sets of lyrics (Set A and Set B) for:
-- Genre: ${genre}
-- Vibe / Mood: ${vibe}
-- Explicit Content: ${explicit ? 'YES' : 'NO (Clean)'}
+    const systemInstruction = `You are Lyric Pro, an elite, multi-platinum ghostwriter and master lyricist. You craft chart-topping, deeply memorable, and structurally flawless song lyrics across rap, rock, pop, metal, and hybrid genres.
+
+CORE WRITING RULES & MECHANICS:
+1. CADENCE & PROSODY: Maintain strict, intentional syllable counts and natural vocal rhythm for each section. Lyrics must flow effortlessly when spoken or sung to a beat.
+2. ADVANCED RHYME SCHEMES: Prioritize slant rhymes, internal rhymes, multi-syllabic rhymes, and assonance/consonance over simple AABB end-rhymes. 
+3. BANNED CLICHÉS: Never use tired, amateur pairings (e.g., fire/desire, heart/apart, light/night, rain/pain, pain/gain). 
+4. VISCERAL IMAGERY: Use concrete "show, don't tell" sensory details (textures, sounds, specific scenes) rather than generic abstract emotions.
+5. METRICAL DYNAMICS: Every section must serve a purpose—Verses build narrative depth, Pre-Choruses build tension, Choruses provide the explosive, repetitive hook, Bridges deliver an emotional pivot, and Outros fade or resolve.
+
+BEHAVIORAL CONSTRAINTS:
+- Do NOT output conversational greetings, setup prose, or markdown text outside the JSON.
+- Never give a response other than lyrics.
+- Generate complete, fully-fleshed songs with zero placeholder text or repeated empty lines.`;
+
+    const prompt = `Write a multi-platinum, structurally flawless studio song blueprint for:
+- Genre / Style: ${genre}
+- Mood & Vibe: ${vibe}
+- Explicit Content: ${explicit ? 'YES (Raw, Unfiltered, Explicit allowed)' : 'NO (100% Clean, Radio-Friendly)'}
 - Mode: ${mode}
 - Song Structure: ${structure}
+${userLyrics ? `- User-provided Lyrics/Concept (${userLyricsOption}): "${userLyrics}"` : ''}
 
-Output valid JSON matching the requested schema.`;
+Generate TWO COMPREHENSIVE TAKES:
+1. Primary Master Blueprint (Lead vocal take with deep narrative & explosive hook)
+2. Alternate Flow Take (Distinct cadence variation, alternate rhyme schemes, and high-contrast rhythm motif)
+
+Return strictly valid JSON matching the schema.`;
+
+    const lineSchema = {
+      type: Type.OBJECT,
+      properties: {
+        text: { type: Type.STRING },
+        syllables: { type: Type.INTEGER },
+        rhyme_markers: { type: Type.STRING },
+      },
+      required: ['text', 'syllables', 'rhyme_markers'],
+    };
+
+    const sectionSchema = {
+      type: Type.OBJECT,
+      properties: {
+        section_name: { type: Type.STRING },
+        rhyme_scheme: { type: Type.STRING },
+        energy_level: { type: Type.INTEGER },
+        lines: {
+          type: Type.ARRAY,
+          items: lineSchema,
+        },
+      },
+      required: ['section_name', 'rhyme_scheme', 'energy_level', 'lines'],
+    };
 
     const schema = {
       type: Type.OBJECT,
       properties: {
-        setA: {
+        song_metadata: {
           type: Type.OBJECT,
           properties: {
             title: { type: Type.STRING },
-            genre: { type: Type.STRING },
-            vibe: { type: Type.STRING },
-            structure: { type: Type.STRING },
-            explicit: { type: Type.BOOLEAN },
-            content: { type: Type.STRING },
-            summaryNote: { type: Type.STRING }
+            genre_style: { type: Type.STRING },
+            target_bpm: { type: Type.INTEGER },
+            vocal_delivery_notes: { type: Type.STRING },
           },
-          required: ['title', 'genre', 'vibe', 'structure', 'explicit', 'content']
+          required: ['title', 'genre_style', 'target_bpm', 'vocal_delivery_notes'],
         },
-        setB: {
+        lyrics: {
+          type: Type.ARRAY,
+          items: sectionSchema,
+        },
+        hook_breakdown: {
+          type: Type.OBJECT,
+          properties: {
+            core_earworm: { type: Type.STRING },
+            rhythmic_motif: { type: Type.STRING },
+          },
+          required: ['core_earworm', 'rhythmic_motif'],
+        },
+        alternate_take: {
           type: Type.OBJECT,
           properties: {
             title: { type: Type.STRING },
-            genre: { type: Type.STRING },
-            vibe: { type: Type.STRING },
-            structure: { type: Type.STRING },
-            explicit: { type: Type.BOOLEAN },
-            content: { type: Type.STRING },
-            summaryNote: { type: Type.STRING }
+            genre_style: { type: Type.STRING },
+            target_bpm: { type: Type.INTEGER },
+            vocal_delivery_notes: { type: Type.STRING },
+            lyrics: {
+              type: Type.ARRAY,
+              items: sectionSchema,
+            },
+            hook_breakdown: {
+              type: Type.OBJECT,
+              properties: {
+                core_earworm: { type: Type.STRING },
+                rhythmic_motif: { type: Type.STRING },
+              },
+              required: ['core_earworm', 'rhythmic_motif'],
+            },
           },
-          required: ['title', 'genre', 'vibe', 'structure', 'explicit', 'content']
-        }
+          required: ['title', 'lyrics', 'hook_breakdown'],
+        },
       },
-      required: ['setA', 'setB']
+      required: ['song_metadata', 'lyrics', 'hook_breakdown'],
     };
 
     const result = await executeResilientAi({
       prompt,
+      systemInstruction,
       responseMimeType: 'application/json',
       responseSchema: schema,
-      temperature: 0.7,
+      temperature: 0.75,
     });
 
     if (result.data) {
+      const mainData = result.data;
+      const altData = mainData.alternate_take || {};
+
+      // Convert sections array into formatted string content
+      const formatSectionLines = (sections: any[]) => {
+        if (!Array.isArray(sections)) return '';
+        return sections
+          .map((sec) => {
+            const header = `[${(sec.section_name || 'SECTION').toUpperCase()}]`;
+            const lines = (sec.lines || []).map((l: any) => l.text || '').join('\n');
+            return `${header}\n${lines}`;
+          })
+          .join('\n\n');
+      };
+
+      const contentA = formatSectionLines(mainData.lyrics);
+      const contentB = altData.lyrics ? formatSectionLines(altData.lyrics) : contentA;
+
+      const setA = {
+        title: mainData.song_metadata?.title || 'Master Song Blueprint',
+        genre: mainData.song_metadata?.genre_style || genre,
+        vibe,
+        structure,
+        explicit,
+        content: contentA,
+        summaryNote: `${mainData.song_metadata?.vocal_delivery_notes || ''} | Target BPM: ${mainData.song_metadata?.target_bpm || 120}`,
+        song_metadata: mainData.song_metadata,
+        lyrics: mainData.lyrics,
+        hook_breakdown: mainData.hook_breakdown,
+      };
+
+      const setB = {
+        title: altData.title || `${setA.title} (Alternate Cadence Mix)`,
+        genre: altData.genre_style || genre,
+        vibe,
+        structure,
+        explicit,
+        content: contentB,
+        summaryNote: `${altData.vocal_delivery_notes || 'Alternative syncopated rhythm and modified vocal accents.'} | Target BPM: ${altData.target_bpm || mainData.song_metadata?.target_bpm || 120}`,
+        song_metadata: {
+          title: altData.title || `${setA.title} (Alternate Flow)`,
+          genre_style: altData.genre_style || genre,
+          target_bpm: altData.target_bpm || mainData.song_metadata?.target_bpm || 120,
+          vocal_delivery_notes: altData.vocal_delivery_notes || 'Syncopated staccato flow variation.',
+        },
+        lyrics: altData.lyrics || mainData.lyrics,
+        hook_breakdown: altData.hook_breakdown || mainData.hook_breakdown,
+      };
+
       return res.json({
-        setA: { ...result.data.setA, genre, vibe, structure, explicit },
-        setB: { ...result.data.setB, genre, vibe, structure, explicit },
+        setA,
+        setB,
+        rawBlueprint: mainData,
         isAiGenerated: true,
         timestamp: Date.now(),
         _telemetry: {
           modelUsed: result.modelUsed,
           fallbackTriggered: result.fallbackTriggered,
           latencyMs: result.totalDurationMs,
+          securityStatus: 'ACTIVE',
+          trustScore: securityCheck.trustScore,
         },
       });
     }
@@ -1173,6 +1358,19 @@ httpServer.on('upgrade', (request, socket, head) => {
 
 const clients = new Set<WebSocket>();
 
+function broadcastToAllWsClients(messageObject: any) {
+  const payload = JSON.stringify(messageObject);
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(payload);
+      } catch (err) {
+        // ignore individual client write errors
+      }
+    }
+  }
+}
+
 wss.on('connection', (ws) => {
   clients.add(ws);
 
@@ -1199,6 +1397,56 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clients.delete(ws);
   });
+});
+
+// -------------------------------------------------------------
+// 10B. MASTER ADMIN BROADCAST & ROSTER CONTROL APIS
+// -------------------------------------------------------------
+app.post('/api/admin/broadcast', (req: Request, res: Response) => {
+  const { title, message, senderName, senderEmail, priority, actionUrl, actionLabel } = req.body || {};
+  if (!title || !message) {
+    return res.status(400).json({ error: 'Title and message are required for broadcast.' });
+  }
+
+  const broadcastEvent = {
+    type: 'ADMIN_BROADCAST',
+    id: `bc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    title,
+    message,
+    senderName: senderName || 'Christopher Ray (Founder)',
+    senderEmail: senderEmail || 'xchristopherrayx@gmail.com',
+    priority: priority || 'high',
+    actionUrl: actionUrl || '#meeting-room',
+    actionLabel: actionLabel || 'Join Meeting Room',
+    timestamp: Date.now(),
+  };
+
+  broadcastToAllWsClients(broadcastEvent);
+  return res.json({ success: true, broadcast: broadcastEvent });
+});
+
+app.post('/api/admin/kick', (req: Request, res: Response) => {
+  const { target, reason } = req.body || {};
+  const kickEvent = {
+    type: 'KICK_USER',
+    target: (target || '').toLowerCase(),
+    reason: reason || 'Session terminated by Master Admin Christopher Ray',
+    timestamp: Date.now(),
+  };
+  broadcastToAllWsClients(kickEvent);
+  return res.json({ success: true, kickEvent });
+});
+
+app.post('/api/admin/blacklist', (req: Request, res: Response) => {
+  const { email, reason } = req.body || {};
+  const kickEvent = {
+    type: 'KICK_USER',
+    target: (email || '').toLowerCase(),
+    reason: reason || 'Account blacklisted by Master Admin',
+    timestamp: Date.now(),
+  };
+  broadcastToAllWsClients(kickEvent);
+  return res.json({ success: true });
 });
 
 // -------------------------------------------------------------

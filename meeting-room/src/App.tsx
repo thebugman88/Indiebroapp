@@ -40,21 +40,28 @@ import { HostDialog } from './components/HostDialog';
 import { MeetingMinutesModal } from './components/MeetingMinutesModal';
 import { HelpModal, TermsModal, PrivacyModal } from './components/LegalModals';
 import { Footer } from './components/Footer';
+import { ADMIN_EMAIL, getCurrentAuthUser } from '../../src/services/authService';
+import { addNotification } from '../../src/services/notificationService';
+import { kickOutUser, logUserActivity } from '../../src/services/adminService';
+import { AdminControlRoomModal } from '../../src/components/AdminControlRoomModal';
 
 export default function App() {
   const prefs = loadUserPrefs();
+  const currentUser = getCurrentAuthUser();
+  const isMasterAdmin = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() || currentUser.isAdmin === true;
 
   // URL room param override
   const urlParams = new URLSearchParams(window.location.search);
   const initialRoomId = urlParams.get('room') || prefs.roomId || 'general';
 
   const [roomId, setRoomId] = useState<string>(initialRoomId);
-  const [userName, setUserName] = useState<string>(prefs.name);
-  const [userRole, setUserRole] = useState<UserRole>(prefs.role);
+  const [userName, setUserName] = useState<string>(currentUser.displayName || prefs.name || (isMasterAdmin ? 'Christopher Ray' : 'Attendee'));
+  const [userRole, setUserRole] = useState<UserRole>(isMasterAdmin ? 'host' : prefs.role);
   const [userColor, setUserColor] = useState<string>(prefs.color || getRandomColor());
-  const [userId, setUserId] = useState<string>(() => `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+  const [userId, setUserId] = useState<string>(() => currentUser.id || `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
 
   const [connected, setConnected] = useState(false);
+  const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [roomState, setRoomState] = useState<MeetingRoomState>({
     roomId: initialRoomId,
     roomTitle: 'Assembly Meeting Room',
@@ -187,6 +194,14 @@ export default function App() {
               ...prev,
               activeMotion: msg.motion,
             }));
+            addNotification({
+              category: 'meeting',
+              type: 'info',
+              title: `🗳️ Voting Started: ${msg.motion.title}`,
+              message: `Motion proposed by ${msg.motion.proposedBy || 'Moderator'}. Cast your vote in the Assembly Room.`,
+              actionUrl: '#meeting-room',
+              actionLabel: 'Cast Vote',
+            });
             break;
 
           case 'VOTE_RECORDED':
@@ -208,6 +223,39 @@ export default function App() {
               activeMotion: null,
               motionHistory: [msg.motion, ...prev.motionHistory],
             }));
+            addNotification({
+              category: 'meeting',
+              type: 'success',
+              title: `📋 Motion Resolved: ${msg.motion.title}`,
+              message: `Result: ${msg.motion.status === 'passed' ? 'PASSED / APPROVED' : 'REJECTED'} (Ya: ${msg.motion.tally.ya}, Na: ${msg.motion.tally.na})`,
+              actionUrl: '#meeting-room',
+              actionLabel: 'View Results',
+            });
+            break;
+
+          case 'ADMIN_BROADCAST':
+            addNotification({
+              category: 'broadcast',
+              type: 'admin',
+              priority: msg.priority || 'high',
+              title: msg.title,
+              message: msg.message,
+              sender: msg.senderName,
+              actionUrl: msg.actionUrl,
+              actionLabel: msg.actionLabel,
+            });
+            break;
+
+          case 'KICK_USER':
+            if (
+              msg.target &&
+              (msg.target === userId.toLowerCase() ||
+                msg.target === userName.toLowerCase() ||
+                msg.target === (currentUser.email || '').toLowerCase())
+            ) {
+              window.dispatchEvent(new CustomEvent('ib_user_kicked', { detail: { reason: msg.reason } }));
+              if (wsRef.current) wsRef.current.close();
+            }
             break;
 
           case 'CHAT_MESSAGE':
@@ -390,8 +438,10 @@ export default function App() {
         attendeeCount={attendeeList.length}
         meetingStatus={roomState.meetingStatus}
         connected={connected}
+        isAdmin={isMasterAdmin}
         onOpenHostDialog={() => setIsHostDialogOpen(true)}
         onOpenMinutesModal={() => setIsMinutesModalOpen(true)}
+        onOpenAdminControlRoom={() => setIsAdminControlRoomOpen(true)}
         onChangeRoom={handleChangeRoom}
         onUpdateRole={handleUpdateRole}
       />
@@ -534,8 +584,18 @@ export default function App() {
                 userRole={userRole}
                 isVoteActive={!!roomState.activeMotion}
                 hasHandRaised={!!currentAttendee?.hasHandRaised}
+                isAdmin={isMasterAdmin}
                 onToggleHandRaise={handleToggleHandRaise}
                 onUpdateRole={handleUpdateRole}
+                onKickAttendee={(targetId, name) => {
+                  kickOutUser(targetId, `Kicked from room by Founder Christopher Ray`);
+                  logUserActivity({
+                    action: 'Attendee Kicked from Meeting',
+                    appLocation: 'Meeting Room',
+                    details: `Host Christopher Ray kicked attendee ${name} (${targetId})`,
+                    status: 'warning',
+                  });
+                }}
               />
             </div>
 
@@ -552,6 +612,17 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Founder Admin Control Room Modal (Exclusively for Christopher Ray) */}
+      <AdminControlRoomModal
+        isOpen={isAdminControlRoomOpen}
+        onClose={() => setIsAdminControlRoomOpen(false)}
+        currentUser={currentUser}
+        onNavigateTo={(app) => {
+          setIsAdminControlRoomOpen(false);
+          window.location.hash = app;
+        }}
+      />
 
       {/* Host / Moderator Dialog */}
       <HostDialog
