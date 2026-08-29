@@ -2,7 +2,8 @@
   "name": "IndieBrotherhood Suite",
   "description": "Unified creative and business intelligence operating system for independent music creators, producers, songwriters, and executives — featuring Judgement Zone, Quick Tools, Hit Analyzer, Hang Out, Lyric Pro Studio, Sonic IQ Lab, Semantic Lab, Artist Assistant, Meeting Room, and RoyaltyOps.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -24,8 +24,10 @@ interface NavbarProps {
   attendeeCount: number;
   meetingStatus: MeetingRoomState['meetingStatus'];
   connected: boolean;
+  isAdmin?: boolean;
   onOpenHostDialog: () => void;
   onOpenMinutesModal: () => void;
+  onOpenAdminControlRoom?: () => void;
   onChangeRoom: (newRoomId: string) => void;
   onUpdateRole: (newRole: UserRole) => void;
 }
@@ -38,8 +40,10 @@ export function Navbar({
   attendeeCount,
   meetingStatus,
   connected,
+  isAdmin,
   onOpenHostDialog,
   onOpenMinutesModal,
+  onOpenAdminControlRoom,
   onChangeRoom,
   onUpdateRole,
 }: NavbarProps) {
@@ -175,6 +179,20 @@ export function Navbar({
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">{copied ? 'Link Copied' : 'Share Room'}</span>
           </button>
+
+          {/* Master Founder Admin Control Room Trigger (Only visible to Christopher Ray) */}
+          {isAdmin && onOpenAdminControlRoom && (
+            <button
+              id="open-founder-admin-control-room-btn"
+              type="button"
+              onClick={onOpenAdminControlRoom}
+              className="px-3 py-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-zinc-950 text-xs font-black rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5 ring-2 ring-amber-400/50 cursor-pointer animate-pulse"
+              title="Open Master Founder Admin Control Room"
+            >
+              <Crown className="w-3.5 h-3.5 text-zinc-950" />
+              <span>Admin Room</span>
+            </button>
+          )}
 
           {/* Host Moderator Console Button */}
           {userRole === 'host' ? (

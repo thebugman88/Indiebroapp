@@ -32,10 +32,10 @@ export interface ResilientAiResult<T = any> {
 
 // Default multi-model fallback chain for indiebrotherhood
 export const DEFAULT_MODEL_CHAIN = [
+  'gemini-3.7-flash',
+  'gemini-3.1-pro-preview',
   'gemini-2.5-pro',
   'gemini-2.5-flash',
-  'gemini-1.5-pro',
-  'gemini-1.5-flash',
 ];
 
 /**

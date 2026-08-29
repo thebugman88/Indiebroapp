@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Copy, Check, Download, Volume2, VolumeX, Bookmark, Sparkles, Music, FileText } from 'lucide-react';
-import { LyricSet } from '../types';
+import { Copy, Check, Download, Volume2, VolumeX, Bookmark, Sparkles, Music, Activity, Disc, Zap, Flame, Radio } from 'lucide-react';
+import { LyricSet, LyricSection } from '../types';
 
 interface LyricOutputProps {
   setA: LyricSet | null;
@@ -24,6 +24,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
   const [isPlayingA, setIsPlayingA] = useState(false);
   const [isPlayingB, setIsPlayingB] = useState(false);
   const [activeTabMobile, setActiveTabMobile] = useState<'A' | 'B'>('A');
+  const [viewMode, setViewMode] = useState<'prosody' | 'clean'>('prosody');
 
   const handleCopy = (text: string, isSetA: boolean) => {
     if (!text) return;
@@ -80,6 +81,66 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
     }
   };
 
+  const renderSectionView = (sections?: LyricSection[], rawContent?: string, isA = true) => {
+    if (!sections || sections.length === 0 || viewMode === 'clean') {
+      return (
+        <div className="font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[520px] overflow-y-auto custom-scrollbar p-3 bg-zinc-950/80 rounded-xl border border-zinc-900 shadow-inner">
+          {rawContent}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
+        {sections.map((sec, idx) => {
+          const accentColor = isA ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-purple-400 border-purple-500/30 bg-purple-500/10';
+          return (
+            <div key={idx} className="bg-zinc-950/85 border border-zinc-800/90 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded border uppercase font-mono ${accentColor}`}>
+                    [{sec.section_name}]
+                  </span>
+                  {sec.rhyme_scheme && (
+                    <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                      {sec.rhyme_scheme}
+                    </span>
+                  )}
+                </div>
+                {sec.energy_level && (
+                  <div className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono">
+                    <Flame className="w-3 h-3 text-orange-400" />
+                    <span>Energy: {sec.energy_level}/10</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                {sec.lines.map((line, lIdx) => (
+                  <div key={lIdx} className="flex items-baseline justify-between gap-2 hover:bg-zinc-900/50 p-1 rounded transition">
+                    <span className="font-mono text-xs text-zinc-200 leading-snug">
+                      {line.text}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {line.rhyme_markers && (
+                        <span className="text-[9px] font-mono text-zinc-500 bg-zinc-900/90 px-1.5 py-0.5 rounded border border-zinc-800">
+                          {line.rhyme_markers}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold font-mono text-amber-300 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                        {line.syllables} syl
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (isGenerating) {
     return (
       <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-8 sm:p-12 text-center space-y-4 shadow-xl">
@@ -90,10 +151,10 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
         <div>
           <h3 className="text-base font-bold text-white flex items-center justify-center gap-2">
             <Sparkles className="w-5 h-5 text-amber-400 animate-bounce" />
-            Synthesizing 2 Elite Lyric Sets...
+            Synthesizing 2 Elite Lyric Blueprints...
           </h3>
           <p className="text-xs text-zinc-400 mt-1">
-            Engineered with genre-tailored rhyming schemes and dual cadence variations.
+            Engineered by Lyric Pro Ghostwriter with strict syllable metrics & dual cadence takes.
           </p>
         </div>
       </div>
@@ -109,7 +170,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
         <div>
           <h3 className="text-sm font-bold text-zinc-300">No Lyrics Generated Yet</h3>
           <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
-            Select your Genre, Vibe, and Mode on the left, then click <span className="text-amber-400 font-semibold">"Generate 2 Lyric Sets"</span> to craft dual options.
+            Select your Genre, Vibe, and Structure on the left, then click <span className="text-amber-400 font-semibold">"Generate 2 Lyric Sets"</span> to craft dual options.
           </p>
         </div>
       </div>
@@ -125,31 +186,53 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
           <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
           <div>
             <div className="text-xs font-bold text-white flex items-center gap-2">
-              Dual Output Ready (Set A & Set B)
+              Dual Studio Output Ready (Set A & Set B)
               {isAiGenerated && (
                 <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-mono">
-                  GEMINI AI POWERED
+                  GEMINI 3.7 ELITE GHOSTWRITER
                 </span>
               )}
             </div>
             <div className="text-[11px] text-zinc-400">
-              Two completely distinct lyric variations generated simultaneously.
+              Two completely distinct lyric variations with vocal delivery and hook motifs.
             </div>
           </div>
         </div>
 
-        {/* SAVE TO FAVORITES */}
-        <button
-          onClick={onSaveToFavorites}
-          className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
-            isSaved
-              ? 'bg-amber-400 text-zinc-950 font-bold'
-              : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
-          }`}
-        >
-          <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-zinc-950' : ''}`} />
-          <span>{isSaved ? 'Saved to Vault' : 'Save Both Sets'}</span>
-        </button>
+        {/* CONTROLS: PROSODY TOGGLE & SAVE */}
+        <div className="flex items-center gap-2">
+          <div className="flex bg-zinc-950 border border-zinc-800 p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode('prosody')}
+              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition flex items-center gap-1 ${
+                viewMode === 'prosody' ? 'bg-amber-400 text-zinc-950' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Activity className="w-3 h-3" />
+              <span>Prosody Mode</span>
+            </button>
+            <button
+              onClick={() => setViewMode('clean')}
+              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition ${
+                viewMode === 'clean' ? 'bg-amber-400 text-zinc-950' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <span>Clean Text</span>
+            </button>
+          </div>
+
+          <button
+            onClick={onSaveToFavorites}
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
+              isSaved
+                ? 'bg-amber-400 text-zinc-950 font-bold'
+                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
+            }`}
+          >
+            <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-zinc-950' : ''}`} />
+            <span>{isSaved ? 'Saved to Vault' : 'Save Both Sets'}</span>
+          </button>
+        </div>
       </div>
 
       {/* MOBILE TAB TOGGLE */}
@@ -160,7 +243,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
             activeTabMobile === 'A' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400'
           }`}
         >
-          Set A (Option 1)
+          Set A (Primary Master)
         </button>
         <button
           onClick={() => setActiveTabMobile('B')}
@@ -168,7 +251,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
             activeTabMobile === 'B' ? 'bg-purple-500 text-white' : 'text-zinc-400'
           }`}
         >
-          Set B (Option 2)
+          Set B (Alternate Flow)
         </button>
       </div>
 
@@ -218,16 +301,42 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
               </div>
             </div>
 
-            {setA.summaryNote && (
-              <p className="text-[11px] text-amber-300/90 italic mb-3 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
-                "{setA.summaryNote}"
-              </p>
+            {/* STUDIO METRICS HEADER */}
+            {setA.song_metadata && (
+              <div className="mb-3 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-amber-400 font-bold flex items-center gap-1">
+                    <Disc className="w-3.5 h-3.5" />
+                    {setA.song_metadata.genre_style}
+                  </span>
+                  <span className="text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                    BPM: {setA.song_metadata.target_bpm}
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-400 italic">
+                  🎙️ {setA.song_metadata.vocal_delivery_notes}
+                </p>
+              </div>
             )}
 
-            {/* LYRICS TEXT CONTENT */}
-            <div className="font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[520px] overflow-y-auto custom-scrollbar p-3 bg-zinc-950/80 rounded-xl border border-zinc-900 shadow-inner">
-              {setA.content}
-            </div>
+            {/* HOOK EARWORM BREAKDOWN */}
+            {setA.hook_breakdown && (
+              <div className="mb-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1">
+                <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  Hook Motif & Earworm
+                </div>
+                <div className="text-xs font-semibold text-white">
+                  "{setA.hook_breakdown.core_earworm}"
+                </div>
+                <div className="text-[10px] text-zinc-400">
+                  {setA.hook_breakdown.rhythmic_motif}
+                </div>
+              </div>
+            )}
+
+            {/* LYRICS CONTENT (METRICAL OR CLEAN) */}
+            {renderSectionView(setA.lyrics, setA.content, true)}
           </div>
         </div>
 
@@ -274,16 +383,42 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
               </div>
             </div>
 
-            {setB.summaryNote && (
-              <p className="text-[11px] text-purple-300/90 italic mb-3 bg-purple-500/10 p-2.5 rounded-xl border border-purple-500/20">
-                "{setB.summaryNote}"
-              </p>
+            {/* STUDIO METRICS HEADER */}
+            {setB.song_metadata && (
+              <div className="mb-3 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-purple-400 font-bold flex items-center gap-1">
+                    <Disc className="w-3.5 h-3.5" />
+                    {setB.song_metadata.genre_style}
+                  </span>
+                  <span className="text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                    BPM: {setB.song_metadata.target_bpm}
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-400 italic">
+                  🎙️ {setB.song_metadata.vocal_delivery_notes}
+                </p>
+              </div>
             )}
 
-            {/* LYRICS TEXT CONTENT */}
-            <div className="font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[520px] overflow-y-auto custom-scrollbar p-3 bg-zinc-950/80 rounded-xl border border-zinc-900 shadow-inner">
-              {setB.content}
-            </div>
+            {/* HOOK EARWORM BREAKDOWN */}
+            {setB.hook_breakdown && (
+              <div className="mb-3 p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-1">
+                <div className="text-[10px] font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-purple-400" />
+                  Alternate Flow Cadence Motif
+                </div>
+                <div className="text-xs font-semibold text-white">
+                  "{setB.hook_breakdown.core_earworm}"
+                </div>
+                <div className="text-[10px] text-zinc-400">
+                  {setB.hook_breakdown.rhythmic_motif}
+                </div>
+              </div>
+            )}
+
+            {/* LYRICS CONTENT (METRICAL OR CLEAN) */}
+            {renderSectionView(setB.lyrics, setB.content, false)}
           </div>
         </div>
 

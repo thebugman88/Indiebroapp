@@ -125,5 +125,18 @@ export type WSServerMessage =
   | { type: 'MOTION_CLOSED'; motion: Motion }
   | { type: 'CHAT_MESSAGE'; message: ChatMessage }
   | { type: 'REACTION'; reaction: ReactionEvent }
+  | {
+      type: 'ADMIN_BROADCAST';
+      id: string;
+      title: string;
+      message: string;
+      senderName: string;
+      senderEmail: string;
+      priority: 'normal' | 'high' | 'urgent';
+      actionUrl?: string;
+      actionLabel?: string;
+      timestamp: number;
+    }
+  | { type: 'KICK_USER'; target: string; reason: string; timestamp: number }
   | { type: 'ERROR'; message: string }
   | { type: 'PONG' };

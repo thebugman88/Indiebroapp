@@ -41,6 +41,9 @@ import { LandingPage } from './components/LandingPage';
 import { AuthModal } from './components/AuthModal';
 import { ArtistProfilePage } from './components/ArtistProfilePage';
 import { DirectMessagesModal } from './components/DirectMessagesModal';
+import { NotificationCenter } from './components/NotificationCenter';
+import { NotificationToastContainer } from './components/NotificationToastContainer';
+import { AdminControlRoomModal } from './components/AdminControlRoomModal';
 import { grantUserXP } from './services/gamification';
 import {
   getCurrentAuthUser,
@@ -246,15 +249,35 @@ const WORKFLOWS = [
   }
 ];
 
+export function resolveSuiteApp(rawInput: string): SuiteAppId | null {
+  if (!rawInput) return null;
+  const clean = rawInput.replace(/^#\/?/, '').trim().toLowerCase();
+
+  if (['landing', 'pricing', 'manifesto', 'why-us', 'home'].includes(clean)) return 'landing';
+  if (['hub', 'dashboard', 'overview', 'master-hub'].includes(clean)) return 'hub';
+  if (['artist-profile', 'artist', 'profile', 'catalog', 'artist-os', 'artist-environment'].includes(clean)) return 'artist-profile';
+  if (['hang-out', 'hangout', 'hangout-app', 'cypher', 'rap-battle'].includes(clean) || clean.startsWith('hang-out') || clean.startsWith('hangout')) return 'hang-out';
+  if (['quick-tools', 'quicktools', 'tools', 'bpm', 'pitch', 'rhymes', 'metadata', 'splits', 'gain', 'smartlink'].includes(clean) || clean.startsWith('quick-tools') || clean.startsWith('quicktools')) return 'quick-tools';
+  if (['judgement-zone', 'judgementzone', 'judgement', 'jury', 'judge'].includes(clean) || clean.startsWith('judgement-zone') || clean.startsWith('judgementzone')) return 'judgement-zone';
+  if (['hit-analyzer', 'hitanalyzer', 'analyzer', 'hit'].includes(clean) || clean.startsWith('hit-analyzer') || clean.startsWith('hitanalyzer')) return 'hit-analyzer';
+  if (['lyric-pro', 'lyricpro', 'lyrics', 'lyric-pro-studio'].includes(clean) || clean.startsWith('lyric-pro') || clean.startsWith('lyricpro')) return 'lyric-pro';
+  if (['sonic-iq', 'soniciq', 'quiz', 'trivia'].includes(clean) || clean.startsWith('sonic-iq') || clean.startsWith('soniciq')) return 'sonic-iq';
+  if (['semantic-lab', 'semanticlab', 'semantic'].includes(clean) || clean.startsWith('semantic-lab') || clean.startsWith('semanticlab')) return 'semantic-lab';
+  if (['artist-assistant', 'artistassistant', 'assistant'].includes(clean) || clean.startsWith('artist-assistant') || clean.startsWith('artistassistant')) return 'artist-assistant';
+  if (['meeting-room', 'meetingroom', 'assembly', 'meeting'].includes(clean) || clean.startsWith('meeting-room') || clean.startsWith('meetingroom')) return 'meeting-room';
+  if (['royaltyops', 'royalty-ops', 'royalty', 'isrc'].includes(clean) || clean.startsWith('royaltyops') || clean.startsWith('royalty-ops')) return 'royaltyops';
+
+  const exact = APPS.find((a) => a.id.toLowerCase() === clean);
+  if (exact) return exact.id;
+
+  return null;
+}
+
 function SuiteApp() {
   const [activeApp, setActiveApp] = useState<SuiteAppId>(() => {
     try {
-      const hash = window.location.hash.replace('#', '');
-      if (hash === 'hub') return 'hub';
-      if (hash === 'artist-profile') return 'artist-profile';
-      if (hash === 'landing' || hash === 'pricing' || hash === 'manifesto') return 'landing';
-      const found = APPS.find((a) => a.id === hash);
-      if (found) return found.id;
+      const resolved = resolveSuiteApp(window.location.hash);
+      if (resolved) return resolved;
     } catch {
       // ignore
     }
@@ -264,7 +287,11 @@ function SuiteApp() {
   const [currentUser, setCurrentUser] = useState<RegisteredUser>(getCurrentAuthUser);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
+  const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [unreadDms, setUnreadDms] = useState<number>(0);
+
+  const isMasterAdmin =
+    currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() || currentUser.isAdmin === true;
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -296,36 +323,33 @@ function SuiteApp() {
     };
   }, [currentUser.id]);
 
-  // Sync Hash
-  const navigateTo = (appId: SuiteAppId) => {
-    setActiveApp(appId);
-    window.location.hash = appId === 'landing' ? 'landing' : appId === 'hub' ? 'hub' : appId;
+  // Sync Hash & Instant Scroll Reset for Perfect Traction
+  const navigateTo = (appId: SuiteAppId | string) => {
+    const resolved = resolveSuiteApp(appId) || (appId as SuiteAppId) || 'hub';
+    setActiveApp(resolved);
+    window.location.hash = resolved === 'landing' ? 'landing' : resolved === 'hub' ? 'hub' : resolved;
     setIsMenuOpen(false);
     setIsPaletteOpen(false);
     setSearchQuery('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Instant scroll to top to prevent ghost height/scroll lag
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
   };
+
+  // Ensure scroll traction resets instantly whenever activeApp changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
+  }, [activeApp]);
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash === 'hub') {
-        setActiveApp('hub');
-        return;
-      }
-      if (hash === 'artist-profile') {
-        setActiveApp('artist-profile');
-        return;
-      }
-      if (hash === 'landing' || hash === 'pricing' || hash === 'manifesto' || !hash) {
-        setActiveApp('landing');
-        return;
-      }
-      const found = APPS.find((a) => a.id === hash);
-      if (found) {
-        setActiveApp(found.id);
-      } else {
-        setActiveApp('landing');
+      const hash = window.location.hash;
+      const resolved = resolveSuiteApp(hash);
+      if (resolved) {
+        setActiveApp(resolved);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -412,10 +436,10 @@ function SuiteApp() {
       <header className="sticky top-0 z-50 bg-[#0a0d14]/95 backdrop-blur-xl border-b border-zinc-800/80">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-3">
           {/* Logo & Suite Brand */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <button
               onClick={() => navigateTo('landing')}
-              className="flex items-center gap-2.5 hover:opacity-90 transition group text-left cursor-pointer"
+              className="flex items-center gap-2 hover:opacity-90 transition group text-left cursor-pointer"
               title="View Manifesto & Pricing"
             >
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-600 p-[1px] shadow-lg shadow-amber-500/20 flex-shrink-0">
@@ -425,8 +449,8 @@ function SuiteApp() {
               </div>
               <div>
                 <div className="flex items-center gap-1.5 leading-none">
-                  <span className="font-extrabold tracking-tight text-white text-sm">INDIEBROTHERHOOD</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
+                  <span className="font-extrabold tracking-tight text-white text-xs sm:text-sm">INDIEBROTHERHOOD</span>
+                  <span className="text-[9px] sm:text-[10px] font-mono px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
                     OS
                   </span>
                 </div>
@@ -435,72 +459,15 @@ function SuiteApp() {
             </button>
           </div>
 
-          {/* Quick Horizontal App Strip (Desktop) */}
-          <nav className="hidden lg:flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800 text-xs font-medium max-w-2xl overflow-x-auto">
-            <button
-              onClick={() => navigateTo('landing')}
-              className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
-                activeApp === 'landing'
-                  ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Why Us & Pricing</span>
-            </button>
-
-            <button
-              onClick={() => navigateTo('hub')}
-              className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
-                activeApp === 'hub'
-                  ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Master Hub</span>
-            </button>
-
-            <button
-              onClick={() => navigateTo('artist-profile')}
-              className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
-                activeApp === 'artist-profile'
-                  ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-zinc-950 font-bold shadow-sm'
-                  : 'text-amber-400/90 hover:text-amber-300 hover:bg-zinc-800/60'
-              }`}
-              title="Artist Environment, Real-World Search & Release Song Catalog"
-            >
-              <Music className="w-3.5 h-3.5" />
-              <span>Artist Catalog & OS</span>
-            </button>
-
-            {APPS.slice(0, 3).map((app) => {
-              const Icon = app.icon;
-              const isSelected = activeApp === app.id;
-              return (
-                <button
-                  key={app.id}
-                  onClick={() => navigateTo(app.id)}
-                  className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
-                    isSelected
-                      ? 'bg-zinc-100 text-zinc-950 font-bold shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-                  }`}
-                  title={`${app.name} (Alt+${app.shortcut})`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{app.shortName}</span>
-                </button>
-              );
-            })}
-          </nav>
-
           {/* Suite Right Controls: Command Search, Universal Profile Badge & App Menu */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Live Universal Notification Center */}
+            <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
+
             {/* Direct Messages Trigger */}
             <button
               onClick={() => setIsDmModalOpen(true)}
-              className="relative p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-amber-400 transition"
+              className="relative p-1.5 sm:p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-amber-400 transition cursor-pointer"
               title="Artist Direct Messages & Audio Voice Notes"
             >
               <MessageSquare className="w-4 h-4" />
@@ -513,12 +480,12 @@ function SuiteApp() {
 
             <button
               onClick={() => setIsPaletteOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-2 transition"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-2 transition cursor-pointer"
               title="Command Palette (Cmd + K)"
             >
               <Search className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline font-sans">Search...</span>
-              <kbd className="hidden lg:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+              <span className="hidden xl:inline font-sans">Search...</span>
+              <kbd className="hidden xl:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
                 ⌘K
               </kbd>
             </button>
@@ -528,20 +495,34 @@ function SuiteApp() {
               <ProfileBadge />
             </div>
 
-            {/* Login / Admin Switcher Button */}
+            {/* Founder Christopher Ray Exclusive Admin Control Room Button */}
+            {isMasterAdmin && (
+              <button
+                type="button"
+                id="suite-master-admin-control-room-btn"
+                onClick={() => setIsAdminControlRoomOpen(true)}
+                className="hidden md:flex px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-black border border-amber-300 shadow-md shadow-amber-500/20 text-xs items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95"
+                title="Founder Admin Control Room: Real User Logs, Live Kick/Whitelist/Blacklist & Universal Announcements"
+              >
+                <Crown className="w-4 h-4 text-zinc-950 fill-zinc-950" />
+                <span className="font-extrabold tracking-tight">Admin Room</span>
+              </button>
+            )}
+
+            {/* Login / Profile Switcher Button */}
             <button
               onClick={() => setIsAuthModalOpen(true)}
-              className={`p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold ${
+              className={`p-1.5 sm:p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
                 currentUser.isAdmin
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-amber-500/40'
               }`}
-              title={currentUser.isAdmin ? 'Master Admin Active (Unlimited)' : 'Sign In / Recover Account'}
+              title={currentUser.isAdmin ? 'Master Admin Active (Unlimited Free Access)' : 'Sign In / Recover Account'}
             >
               {currentUser.isAdmin ? (
                 <>
                   <Crown className="w-4 h-4 text-amber-400" />
-                  <span className="hidden xl:inline text-[11px]">Master Admin</span>
+                  <span className="hidden xl:inline text-[11px]">Christopher Ray</span>
                 </>
               ) : (
                 <span className="text-[11px] px-1">Login</span>
@@ -551,7 +532,7 @@ function SuiteApp() {
             {/* App Switcher Dropdown Trigger */}
             <button
               onClick={() => setIsMenuOpen((prev) => !prev)}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium flex items-center gap-1.5 sm:gap-2 text-zinc-200 shadow-sm transition cursor-pointer"
+              className="px-2 sm:px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium flex items-center gap-1 sm:gap-1.5 text-zinc-200 shadow-sm transition cursor-pointer"
             >
               <div className="flex items-center gap-1.5">
                 {currentMeta ? (
@@ -569,6 +550,68 @@ function SuiteApp() {
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
             </button>
           </div>
+        </div>
+
+        {/* Dedicated Horizontal Scrolling Studio Navigation Ribbon */}
+        <div className="border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur px-3 sm:px-6 py-1.5 overflow-x-auto scrollbar-none flex items-center gap-1.5 text-xs font-medium">
+          <button
+            onClick={() => navigateTo('landing')}
+            className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
+              activeApp === 'landing'
+                ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Why Us & Pricing</span>
+          </button>
+
+          <button
+            onClick={() => navigateTo('hub')}
+            className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
+              activeApp === 'hub'
+                ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span>Master Hub</span>
+          </button>
+
+          <button
+            onClick={() => navigateTo('artist-profile')}
+            className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
+              activeApp === 'artist-profile'
+                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-zinc-950 font-bold shadow-sm'
+                : 'text-amber-400/90 hover:text-amber-300 hover:bg-zinc-900'
+            }`}
+            title="Artist Environment & Catalog"
+          >
+            <Music className="w-3.5 h-3.5" />
+            <span>Artist Catalog & OS</span>
+          </button>
+
+          <div className="h-4 w-px bg-zinc-800 mx-1 flex-shrink-0" />
+
+          {APPS.map((app) => {
+            const Icon = app.icon;
+            const isSelected = activeApp === app.id;
+            return (
+              <button
+                key={app.id}
+                onClick={() => navigateTo(app.id)}
+                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
+                  isSelected
+                    ? 'bg-zinc-100 text-zinc-950 font-bold shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                }`}
+                title={`${app.name} (Alt+${app.shortcut})`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{app.shortName}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Dropdown Menu of All 10 Applications */}
@@ -1015,6 +1058,16 @@ function SuiteApp() {
       {/* GLOBAL TOAST & MODAL OVERLAYS */}
       <AchievementToast />
       <GamificationModal />
+      <NotificationToastContainer onNavigateTo={(appId) => navigateTo(appId as SuiteAppId)} />
+
+      {/* Founder Christopher Ray Admin Control Room Modal */}
+      <AdminControlRoomModal
+        isOpen={isAdminControlRoomOpen}
+        onClose={() => setIsAdminControlRoomOpen(false)}
+        currentUser={currentUser}
+        onNavigateTo={(appId) => navigateTo(appId as SuiteAppId)}
+      />
+
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}

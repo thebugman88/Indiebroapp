@@ -239,7 +239,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
       releaseDate: newReleaseDate,
       trackTimeMillis: 195000,
       previewUrl: '',
-      artworkUrl: verifiedArtist?.artworkUrl || currentUser.avatarUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+      artworkUrl: verifiedArtist?.artworkUrl || currentUser.avatarUrl || '',
       primaryGenreName: newGenre,
       priceUsd: 'Unreleased',
       isrc: `${editIsrc}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -285,11 +285,17 @@ export const ArtistProfilePage: React.FC<Props> = ({
               {/* Avatar with dynamic Aura glow */}
               <div className="relative group">
                 <div className={`h-24 w-24 md:h-28 md:w-28 rounded-3xl overflow-hidden ${currentAuraConfig.glowClass} transition-all duration-300`}>
-                  <img
-                    src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80'}
-                    alt={currentUser.displayName}
-                    className="h-full w-full object-cover"
-                  />
+                  {currentUser.avatarUrl ? (
+                    <img
+                      src={currentUser.avatarUrl}
+                      alt={currentUser.displayName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className={`h-full w-full bg-gradient-to-tr ${currentUser.avatarBg || 'from-amber-500 to-rose-600'} flex items-center justify-center text-3xl font-black text-white select-none`}>
+                      {currentUser.avatarSeed || currentUser.displayName?.slice(0, 2).toUpperCase() || 'IB'}
+                    </div>
+                  )}
                 </div>
                 {currentUser.isAdmin && (
                   <div className="absolute -top-2.5 -right-2.5 rounded-full bg-amber-400 p-1.5 shadow-lg border-2 border-slate-950 text-slate-950 font-black">
@@ -486,11 +492,17 @@ export const ArtistProfilePage: React.FC<Props> = ({
                       className="rounded-2xl bg-slate-950 p-3.5 border border-slate-800 hover:border-amber-500/50 transition flex items-center justify-between gap-3 group"
                     >
                       <div className="flex items-center gap-3 overflow-hidden">
-                        <img
-                          src={artist.artworkUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&q=80'}
-                          alt={artist.artistName}
-                          className="h-12 w-12 rounded-xl object-cover border border-slate-800"
-                        />
+                        {artist.artworkUrl ? (
+                          <img
+                            src={artist.artworkUrl}
+                            alt={artist.artistName}
+                            className="h-12 w-12 rounded-xl object-cover border border-slate-800"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-bold text-xs">
+                            <Music className="h-5 w-5" />
+                          </div>
+                        )}
                         <div className="overflow-hidden">
                           <p className="text-xs font-bold text-white truncate group-hover:text-amber-300 transition">
                             {artist.artistName}
@@ -771,7 +783,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
                   type="text"
                   value={editAvatarUrl}
                   onChange={(e) => setEditAvatarUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/... or any hosted picture"
+                  placeholder="https://... direct image link or leave blank for dynamic initials"
                   className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
                 />
               </div>
