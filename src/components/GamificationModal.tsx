@@ -23,7 +23,9 @@ import {
   Activity,
   Terminal,
   AlertTriangle,
-  Server
+  Server,
+  Bell,
+  MessageSquare
 } from 'lucide-react';
 import { useGamification } from '../context/GamificationContext';
 import {
@@ -33,6 +35,11 @@ import {
   getInitials
 } from '../services/gamification';
 import { AchievementGallery } from './AchievementGallery';
+import { NotificationFeedList } from './NotificationCenter';
+import { DirectMessagesContent } from './DirectMessagesModal';
+import { getCurrentAuthUser, RegisteredUser } from '../services/authService';
+import { getUnreadNotificationCount } from '../services/notificationService';
+import { getUnreadDmCount } from '../services/dmService';
 
 export const GamificationModal: React.FC = () => {
   const {
@@ -48,13 +55,37 @@ export const GamificationModal: React.FC = () => {
     cancelPro
   } = useGamification();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'billing' | 'badges' | 'history' | 'sentinel' | 'customize'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'notifications' | 'messages' | 'billing' | 'badges' | 'history' | 'sentinel' | 'customize'>('overview');
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState(profile.displayName);
   const [tempHandle, setTempHandle] = useState(profile.artistHandle || '@creator');
   const [customAvatarUrl, setCustomAvatarUrl] = useState(profile.avatarUrl || '');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutMsg, setCheckoutMsg] = useState<string | null>(null);
+
+  const [currentUser, setCurrentUser] = useState<RegisteredUser>(getCurrentAuthUser);
+  const [unreadNotifications, setUnreadNotifications] = useState<number>(getUnreadNotificationCount);
+  const [unreadDms, setUnreadDms] = useState<number>(() => getUnreadDmCount(getCurrentAuthUser().id));
+
+  // Synchronize unread notifications and DMs
+  useEffect(() => {
+    const updateCounters = () => {
+      const auth = getCurrentAuthUser();
+      setUnreadNotifications(getUnreadNotificationCount());
+      setUnreadDms(getUnreadDmCount(auth.id));
+      setCurrentUser(auth);
+    };
+
+    window.addEventListener('ib_notifications_changed', updateCounters);
+    window.addEventListener('ib_dm_updated', updateCounters);
+    window.addEventListener('ib_auth_changed', updateCounters);
+
+    return () => {
+      window.removeEventListener('ib_notifications_changed', updateCounters);
+      window.removeEventListener('ib_dm_updated', updateCounters);
+      window.removeEventListener('ib_auth_changed', updateCounters);
+    };
+  }, []);
 
   // Sentinel & Resiliency Live Telemetry State
   const [sentinelStats, setSentinelStats] = useState<any>(null);
@@ -281,7 +312,7 @@ export const GamificationModal: React.FC = () => {
         </div>
 
         {/* 3. Navigation Tabs */}
-        <div className="flex items-center border-b border-zinc-800 bg-zinc-950 px-4 sm:px-6 overflow-x-auto text-xs font-medium">
+        <div className="flex items-center border-b border-zinc-800 bg-zinc-950 px-4 sm:px-6 overflow-x-auto text-xs font-medium scrollbar-none">
           <button
             onClick={() => setActiveTab('overview')}
             className={`py-3 px-3.5 border-b-2 font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
@@ -291,7 +322,41 @@ export const GamificationModal: React.FC = () => {
             }`}
           >
             <Shield className="w-4 h-4" />
-            <span>Overview & Level Perks</span>
+            <span>Overview</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`py-3 px-3.5 border-b-2 font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer relative ${
+              activeTab === 'notifications'
+                ? 'border-amber-500 text-amber-400'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Bell className="w-4 h-4 text-amber-400" />
+            <span>Notifications</span>
+            {unreadNotifications > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-amber-500 text-slate-950 animate-pulse">
+                {unreadNotifications}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('messages')}
+            className={`py-3 px-3.5 border-b-2 font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer relative ${
+              activeTab === 'messages'
+                ? 'border-amber-500 text-amber-400'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 text-emerald-400" />
+            <span>Direct Messages</span>
+            {unreadDms > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-emerald-500 text-slate-950 animate-pulse">
+                {unreadDms}
+              </span>
+            )}
           </button>
 
           <button
@@ -327,7 +392,7 @@ export const GamificationModal: React.FC = () => {
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>XP Activity Logs</span>
+            <span>XP Logs</span>
           </button>
 
           <button
@@ -339,7 +404,7 @@ export const GamificationModal: React.FC = () => {
             }`}
           >
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Sentinel & Resiliency</span>
+            <span>Sentinel</span>
           </button>
 
           <button
@@ -351,12 +416,52 @@ export const GamificationModal: React.FC = () => {
             }`}
           >
             <User className="w-4 h-4" />
-            <span>Avatar & Profile Flair</span>
+            <span>Avatar Flair</span>
           </button>
         </div>
 
         {/* 4. Tab Content Area */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
+          {/* TAB: NOTIFICATIONS */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-amber-400" />
+                    <span>Real-Time Notifications & Studio Alerts</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Live updates on collaboration requests, achievements, and mastering exports.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+                <NotificationFeedList />
+              </div>
+            </div>
+          )}
+
+          {/* TAB: DIRECT MESSAGES */}
+          {activeTab === 'messages' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-emerald-400" />
+                    <span>Direct Artist Messaging & Voice Notes</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Live stems coordination, voice notes, and collaboration chats with fellow producers.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 min-h-[480px]">
+                <DirectMessagesContent currentUser={currentUser} />
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: OVERVIEW & PERKS */}
           {activeTab === 'overview' && (
             <div className="space-y-6">

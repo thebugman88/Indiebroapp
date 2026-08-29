@@ -13,17 +13,23 @@ import { SmartLinkGenerator } from './components/SmartLinkGenerator';
 import { BottomLookupDock } from './components/BottomLookupDock';
 
 export default function App() {
-  const [activeTool, setActiveTool] = useState<ActiveTool>(() => {
+  const parseToolFromHash = (): ActiveTool => {
     try {
-      const hash = window.location.hash.replace('#', '') as ActiveTool;
-      if (['dashboard', 'lyrics', 'bpm', 'pitch', 'rhymes', 'metadata', 'splits', 'gain', 'smartlink'].includes(hash)) {
-        return hash;
+      const raw = window.location.hash.replace(/^#\/?/, '');
+      if (raw.startsWith('quick-tools/') || raw.startsWith('quicktools/')) {
+        const sub = raw.split('/')[1] as ActiveTool;
+        if (['dashboard', 'lyrics', 'bpm', 'pitch', 'rhymes', 'metadata', 'splits', 'gain', 'smartlink'].includes(sub)) {
+          return sub;
+        }
       }
-    } catch {
-      // ignore
-    }
+      if (['lyrics', 'bpm', 'pitch', 'rhymes', 'metadata', 'splits', 'gain', 'smartlink'].includes(raw)) {
+        return raw as ActiveTool;
+      }
+    } catch {}
     return 'dashboard';
-  });
+  };
+
+  const [activeTool, setActiveTool] = useState<ActiveTool>(parseToolFromHash);
 
   const [isAutoSaveOn, setIsAutoSaveOn] = useState<boolean>(() => {
     try {
@@ -39,18 +45,14 @@ export default function App() {
   // Keep hash updated for browser back/forward and direct links
   const navigateTo = useCallback((tool: ActiveTool) => {
     setActiveTool(tool);
-    window.location.hash = tool === 'dashboard' ? '' : tool;
+    window.location.hash = tool === 'dashboard' ? 'quick-tools' : `quick-tools/${tool}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '') as ActiveTool;
-      if (['dashboard', 'lyrics', 'bpm', 'pitch', 'rhymes', 'metadata', 'splits', 'gain', 'smartlink'].includes(hash)) {
-        setActiveTool(hash);
-      } else {
-        setActiveTool('dashboard');
-      }
+      const parsed = parseToolFromHash();
+      setActiveTool(parsed);
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);

@@ -137,36 +137,18 @@ export function getNotifications(): AppNotification[] {
     console.error('Error loading notifications:', e);
   }
 
-  // Initial starter system notifications
-  const initial: AppNotification[] = [
-    {
-      id: 'notif_init_1',
-      title: 'Welcome to indiebrotherhood OS',
-      message: 'Master Admin privileges and 10 Studio engines are active. Live notifications and meeting rooms are connected.',
-      category: 'system',
-      type: 'success',
-      timestamp: Date.now() - 3600000,
-      read: false,
-      sender: 'System Admin',
-      priority: 'normal',
-    },
-    {
-      id: 'notif_init_2',
-      title: 'Assembly Meeting Room Ready',
-      message: 'Join the live meeting room for board voting, motions, and collective quorum.',
-      category: 'meeting',
-      type: 'info',
-      timestamp: Date.now() - 1800000,
-      read: false,
-      sender: 'Christopher Ray (Founder)',
-      actionUrl: '#meeting-room',
-      actionLabel: 'Join Meeting',
-      priority: 'high',
-    },
-  ];
+  // Clean real-time initial notifications if needed (only essential system welcome or empty)
+  const initial: AppNotification[] = [];
 
   try {
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(initial));
+    // If legacy dummy notification exists, remove it
+    const legacyRaw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (legacyRaw && legacyRaw.includes('notif_init_2')) {
+      const list = JSON.parse(legacyRaw);
+      const filtered = Array.isArray(list) ? list.filter((n: any) => n.id !== 'notif_init_2' && n.title !== 'Assembly Meeting Room Ready') : [];
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(filtered));
+      return filtered;
+    }
   } catch {}
 
   return initial;

@@ -1346,6 +1346,79 @@ app.post('/api/gemini/ai-bot-rap', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// 9B. RESILIENT ARTIST ASSISTANT & MUSIC CAREER ADVISOR API
+// -------------------------------------------------------------
+app.post('/api/ai/chat', async (req: Request, res: Response) => {
+  try {
+    const { message, history = [], artistProfile = {}, songCatalog = [], enableSearch } = req.body || {};
+
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    const artistName = artistProfile.artistName || 'Independent Creator';
+    const genre = artistProfile.genre || 'Independent / Contemporary';
+    const pro = artistProfile.pro || 'ASCAP / BMI';
+    const publisher = artistProfile.publisher || 'Self-Published';
+    const catalogCount = Array.isArray(songCatalog) ? songCatalog.length : 0;
+
+    const catalogSummary = Array.isArray(songCatalog) && songCatalog.length > 0
+      ? songCatalog.slice(0, 10).map((s: any) => `- "${s.title || s.trackName}" (${s.genre || s.primaryGenreName || 'Indie'}, ISRC: ${s.isrc || 'Pending'}, Splits: ${s.splits ? JSON.stringify(s.splits) : '100% Artist'})`).join('\n')
+      : 'No registered catalog tracks yet.';
+
+    const systemInstruction = `You are the Gemini Music Career Assistant & Legal Advisor, built exclusively for indiebrotherhood.
+You serve as an elite artist manager, sync licensing director, entertainment attorney, and streaming strategist.
+
+CURRENT ARTIST DOSSIER:
+- Artist Name: ${artistName}
+- Primary Genre: ${genre}
+- PRO Affiliation: ${pro}
+- Publishing Entity: ${publisher}
+- Active Catalog Size: ${catalogCount} tracks
+- Catalog Excerpt:
+${catalogSummary}
+
+GUIDELINES:
+1. Provide actionable, high-level music industry advice (split sheets, copyright, The MLC mechanical royalties, SoundExchange, Spotify editorial pitching, sync licensing, DSP distribution, and release strategy).
+2. Format answers with clear Markdown headings, bullet points, and high-impact emphasis.
+3. Be direct, authoritative, and artist-first. Protect the creator's masters, publishing, and royalties at all times.`;
+
+    const conversationParts: any[] = [];
+    if (Array.isArray(history)) {
+      for (const item of history.slice(-8)) {
+        const text = item.parts?.[0]?.text || item.content || '';
+        if (text) {
+          conversationParts.push({ text: `[${item.role === 'model' ? 'ASSISTANT' : 'ARTIST'}]: ${text}` });
+        }
+      }
+    }
+    conversationParts.push({ text: `[ARTIST QUESTION]: ${message}` });
+
+    const result = await executeResilientAi({
+      parts: conversationParts,
+      systemInstruction,
+      temperature: 0.6,
+    });
+
+    return res.json({
+      success: true,
+      reply: result.rawText.trim(),
+      _telemetry: {
+        modelUsed: result.modelUsed,
+        fallbackTriggered: result.fallbackTriggered,
+        latencyMs: result.totalDurationMs,
+      },
+    });
+  } catch (error: any) {
+    console.warn('[ARTIST ASSISTANT KEYLESS FALLBACK]', error?.message || error);
+    return res.json({
+      success: true,
+      reply: `### 🎵 Music Strategy Analysis for ${req.body?.artistProfile?.artistName || 'Independent Artist'}\n\nHere are the critical next steps for your music career & catalog:\n\n1. **Mechanical & Digital Royalties**:\n   - Ensure all your released tracks are registered with **The MLC (Mechanical Licensing Collective)** for interactive streaming mechanicals.\n   - Claim your Sound Recording copyright shares with **SoundExchange** for digital performance royalties.\n\n2. **Split Sheets & Registration**:\n   - Never release a collaborative song without a signed split sheet confirming Master and Composition splits.\n   - Ensure your ISRC codes are embedded in your distribution masters.\n\n3. **Sync Licensing & Pitching**:\n   - Prepare clean instrumental and acapella stems for music supervisors.\n   - Highlight 100% one-stop master and publishing ownership for fast licensing clearance.`,
+    });
+  }
+});
+
+// -------------------------------------------------------------
 // 10. WEBSOCKET MULTIPLEXER (HANG OUT & MEETING ROOM)
 // -------------------------------------------------------------
 const wss = new WebSocketServer({ noServer: true });

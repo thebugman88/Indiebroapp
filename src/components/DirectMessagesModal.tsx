@@ -27,17 +27,12 @@ import {
 } from '../services/dmService';
 import { RegisteredUser } from '../services/authService';
 
-interface Props {
-  isOpen: boolean;
-  onClose: () => void;
+interface DirectMessagesContentProps {
   currentUser: RegisteredUser;
+  onClose?: () => void;
 }
 
-export const DirectMessagesModal: React.FC<Props> = ({
-  isOpen,
-  onClose,
-  currentUser,
-}) => {
+export const DirectMessagesContent: React.FC<DirectMessagesContentProps> = ({ currentUser, onClose }) => {
   const [contacts, setContacts] = useState<DmContact[]>(INITIAL_CONTACTS);
   const [selectedContact, setSelectedContact] = useState<DmContact>(INITIAL_CONTACTS[0]);
   const [messages, setMessages] = useState<DmMessage[]>(loadDmMessages);
@@ -60,11 +55,11 @@ export const DirectMessagesModal: React.FC<Props> = ({
 
   // Mark active chat as read
   useEffect(() => {
-    if (isOpen && selectedContact) {
+    if (selectedContact) {
       markConversationAsRead(selectedContact.id, currentUser.id);
       setMessages(loadDmMessages());
     }
-  }, [isOpen, selectedContact, currentUser.id]);
+  }, [selectedContact, currentUser.id]);
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -82,8 +77,6 @@ export const DirectMessagesModal: React.FC<Props> = ({
       }
     };
   }, []);
-
-  if (!isOpen) return null;
 
   // Filter messages for current pair
   const currentChatMessages = messages.filter(
@@ -251,260 +244,282 @@ export const DirectMessagesModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl h-[650px] rounded-3xl border border-amber-500/30 bg-slate-950 shadow-2xl overflow-hidden flex flex-col md:flex-row">
-        {/* LEFT COLUMN: CONTACTS LIST */}
-        <div className="w-full md:w-80 border-r border-slate-800/80 bg-slate-900/60 flex flex-col shrink-0">
-          {/* Header */}
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                <MessageSquare className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-white">Direct Messages</h3>
-                <span className="text-[10px] text-slate-400">Online Indie Artists</span>
-              </div>
+    <div className="w-full h-full min-h-[480px] max-h-[650px] rounded-3xl border border-amber-500/30 bg-slate-950 shadow-2xl overflow-hidden flex flex-col md:flex-row">
+      {/* LEFT COLUMN: CONTACTS LIST */}
+      <div className="w-full md:w-80 border-r border-slate-800/80 bg-slate-900/60 flex flex-col shrink-0">
+        {/* Header */}
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+              <MessageSquare className="h-4 w-4" />
             </div>
-          </div>
-
-          {/* Contacts List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-            {contacts.map((contact) => {
-              const isSelected = selectedContact.id === contact.id;
-              return (
-                <button
-                  key={contact.id}
-                  onClick={() => setSelectedContact(contact)}
-                  className={`w-full p-3 rounded-2xl text-left transition flex items-center gap-3 ${
-                    isSelected
-                      ? 'bg-slate-800 border border-amber-500/30 text-white'
-                      : 'hover:bg-slate-900/80 text-slate-300'
-                  }`}
-                >
-                  <div className="relative shrink-0">
-                    <img
-                      src={contact.avatarUrl}
-                      alt={contact.name}
-                      className="h-10 w-10 rounded-xl object-cover border border-slate-700"
-                    />
-                    {contact.isOnline && (
-                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-slate-950" />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white truncate">{contact.name}</span>
-                      <span className="text-[9px] text-slate-500">Live</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 truncate">{contact.role}</p>
-                    <p className="text-[10px] text-amber-400/90 truncate mt-0.5">{contact.lastMessageSnippet}</p>
-                  </div>
-                </button>
-              );
-            })}
+            <div>
+              <h3 className="text-sm font-black text-white">Direct Messages</h3>
+              <span className="text-[10px] text-slate-400">Online Indie Artists</span>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: ACTIVE CHAT CONVERSATION */}
-        <div className="flex-1 flex flex-col bg-slate-950">
-          {/* Chat Header */}
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src={selectedContact.avatarUrl}
-                alt={selectedContact.name}
-                className="h-10 w-10 rounded-xl object-cover border border-slate-800"
-              />
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-xs font-bold text-white">{selectedContact.name}</h4>
-                  <span className="text-[10px] text-slate-400">(@{selectedContact.handle})</span>
+        {/* Contacts List */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+          {contacts.map((contact) => {
+            const isSelected = selectedContact.id === contact.id;
+            return (
+              <button
+                key={contact.id}
+                onClick={() => setSelectedContact(contact)}
+                className={`w-full p-3 rounded-2xl text-left transition flex items-center gap-3 cursor-pointer ${
+                  isSelected
+                    ? 'bg-slate-800 border border-amber-500/30 text-white'
+                    : 'hover:bg-slate-900/80 text-slate-300'
+                }`}
+              >
+                <div className="relative shrink-0">
+                  <img
+                    src={contact.avatarUrl}
+                    alt={contact.name}
+                    className="h-10 w-10 rounded-xl object-cover border border-slate-700"
+                  />
+                  {contact.isOnline && (
+                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-slate-950" />
+                  )}
                 </div>
-                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
-                  <Circle className="h-2 w-2 fill-current" />
-                  <span>Online in Hang Out • {selectedContact.primaryGenre}</span>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white truncate">{contact.name}</span>
+                    <span className="text-[9px] text-slate-500">Live</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">{contact.role}</p>
+                  <p className="text-[10px] text-amber-400/90 truncate mt-0.5">{contact.lastMessageSnippet}</p>
                 </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* RIGHT COLUMN: ACTIVE CHAT CONVERSATION */}
+      <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+        {/* Chat Header */}
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src={selectedContact.avatarUrl}
+              alt={selectedContact.name}
+              className="h-10 w-10 rounded-xl object-cover border border-slate-800"
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-white">{selectedContact.name}</h4>
+                <span className="text-[10px] text-slate-400">(@{selectedContact.handle})</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                <Circle className="h-2 w-2 fill-current" />
+                <span>Online in Hang Out • {selectedContact.primaryGenre}</span>
               </div>
             </div>
+          </div>
 
+          {onClose && (
             <button
               onClick={onClose}
-              className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-900 transition"
+              className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-900 transition cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
-          </div>
+          )}
+        </div>
 
-          {/* Messages Feed */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
-            {currentChatMessages.map((msg) => {
-              const isMe = msg.senderId === currentUser.id;
-              const isAudioPlaying = playingMsgId === msg.id;
+        {/* Messages Feed */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+          {currentChatMessages.map((msg) => {
+            const isMe = msg.senderId === currentUser.id;
+            const isAudioPlaying = playingMsgId === msg.id;
 
-              return (
+            return (
+              <div
+                key={msg.id}
+                className={`flex items-end gap-2.5 ${isMe ? 'justify-end' : 'justify-start'}`}
+              >
+                {!isMe && (
+                  <img
+                    src={msg.senderAvatar}
+                    alt={msg.senderName}
+                    className="h-7 w-7 rounded-lg object-cover border border-slate-800 mb-1"
+                  />
+                )}
+
                 <div
-                  key={msg.id}
-                  className={`flex items-end gap-2.5 ${isMe ? 'justify-end' : 'justify-start'}`}
+                  className={`max-w-[75%] rounded-2xl p-3.5 text-xs ${
+                    isMe
+                      ? 'bg-amber-500 text-slate-950 rounded-br-none shadow-md font-medium'
+                      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none'
+                  }`}
                 >
-                  {!isMe && (
-                    <img
-                      src={msg.senderAvatar}
-                      alt={msg.senderName}
-                      className="h-7 w-7 rounded-lg object-cover border border-slate-800 mb-1"
-                    />
-                  )}
+                  {/* AUDIO MESSAGE CARD */}
+                  {msg.type === 'audio' ? (
+                    <div className="flex items-center gap-3 py-1">
+                      <button
+                        onClick={() => handleTogglePlayAudio(msg)}
+                        className={`h-9 w-9 rounded-full flex items-center justify-center transition shadow cursor-pointer ${
+                          isAudioPlaying
+                            ? isMe
+                              ? 'bg-slate-950 text-amber-400 animate-pulse'
+                              : 'bg-amber-400 text-slate-950 animate-pulse'
+                            : isMe
+                            ? 'bg-slate-950 text-white hover:bg-slate-900'
+                            : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                        }`}
+                      >
+                        {isAudioPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+                      </button>
 
-                  <div
-                    className={`max-w-[75%] rounded-2xl p-3.5 text-xs ${
-                      isMe
-                        ? 'bg-amber-500 text-slate-950 rounded-br-none shadow-md font-medium'
-                        : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none'
-                    }`}
-                  >
-                    {/* AUDIO MESSAGE CARD */}
-                    {msg.type === 'audio' ? (
-                      <div className="flex items-center gap-3 py-1">
-                        <button
-                          onClick={() => handleTogglePlayAudio(msg)}
-                          className={`h-9 w-9 rounded-full flex items-center justify-center transition shadow ${
-                            isAudioPlaying
-                              ? isMe
-                                ? 'bg-slate-950 text-amber-400 animate-pulse'
-                                : 'bg-amber-400 text-slate-950 animate-pulse'
-                              : isMe
-                              ? 'bg-slate-950 text-white hover:bg-slate-900'
-                              : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
-                          }`}
-                        >
-                          {isAudioPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
-                        </button>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between text-[10px] font-bold">
+                          <span className="flex items-center gap-1">
+                            <Volume2 className="h-3.5 w-3.5" />
+                            Voice Memo
+                          </span>
+                          <span>{msg.audioDurationSeconds || 12}s</span>
+                        </div>
 
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between text-[10px] font-bold">
-                            <span className="flex items-center gap-1">
-                              <Volume2 className="h-3.5 w-3.5" />
-                              Voice Memo
-                            </span>
-                            <span>{msg.audioDurationSeconds || 12}s</span>
-                          </div>
-
-                          {/* Sound wave visualizer bars */}
-                          <div className="flex items-center gap-0.5 mt-1.5 h-4">
-                            {[40, 70, 90, 60, 100, 50, 80, 45, 95, 70, 30, 60, 85, 40].map((h, i) => (
-                              <div
-                                key={i}
-                                className={`w-1 rounded-full ${
-                                  isMe ? 'bg-slate-950/70' : 'bg-amber-400'
-                                }`}
-                                style={{ height: `${h}%` }}
-                              />
-                            ))}
-                          </div>
+                        {/* Sound wave visualizer bars */}
+                        <div className="flex items-center gap-0.5 mt-1.5 h-4">
+                          {[40, 70, 90, 60, 100, 50, 80, 45, 95, 70, 30, 60, 85, 40].map((h, i) => (
+                            <div
+                              key={i}
+                              className={`w-1 rounded-full ${
+                                isMe ? 'bg-slate-950/70' : 'bg-amber-400'
+                              }`}
+                              style={{ height: `${h}%` }}
+                            />
+                          ))}
                         </div>
                       </div>
-                    ) : (
-                      /* TEXT MESSAGE */
-                      <p className="leading-relaxed">{msg.content}</p>
-                    )}
-
-                    {/* Timestamp & Read Receipts */}
-                    <div
-                      className={`text-[9px] mt-1.5 flex items-center justify-end gap-1 ${
-                        isMe ? 'text-slate-900/80' : 'text-slate-500'
-                      }`}
-                    >
-                      <span>
-                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      {isMe && <CheckCheck className="h-3 w-3" />}
                     </div>
+                  ) : (
+                    /* TEXT MESSAGE */
+                    <p className="leading-relaxed">{msg.content}</p>
+                  )}
+
+                  {/* Timestamp & Read Receipts */}
+                  <div
+                    className={`text-[9px] mt-1.5 flex items-center justify-end gap-1 ${
+                      isMe ? 'text-slate-900/80' : 'text-slate-500'
+                    }`}
+                  >
+                    <span>
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {isMe && <CheckCheck className="h-3 w-3" />}
                   </div>
                 </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* AUDIO RECORDING ACTIVE BAR */}
-          {isRecording && (
-            <div className="px-4 py-3 bg-rose-950/80 border-t border-rose-500/40 flex items-center justify-between animate-pulse">
-              <div className="flex items-center gap-3">
-                <div className="h-3 w-3 rounded-full bg-rose-500 animate-ping" />
-                <span className="text-xs font-bold text-rose-300">
-                  Recording Voice Note... ({recordingSeconds}s)
-                </span>
               </div>
+            );
+          })}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* AUDIO RECORDING ACTIVE BAR */}
+        {isRecording && (
+          <div className="px-4 py-3 bg-rose-950/80 border-t border-rose-500/40 flex items-center justify-between animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="h-3 w-3 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-xs font-bold text-rose-300">
+                Recording Voice Note... ({recordingSeconds}s)
+              </span>
+            </div>
+            <button
+              onClick={stopRecordingVoiceNote}
+              className="rounded-xl bg-rose-500 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-rose-600 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+              Stop & Review
+            </button>
+          </div>
+        )}
+
+        {/* AUDIO READY TO SEND BAR */}
+        {!isRecording && recordedAudioUrl && (
+          <div className="px-4 py-3 bg-amber-950/60 border-t border-amber-500/40 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-amber-300 font-bold">
+              <Volume2 className="h-4 w-4" />
+              Voice Note Ready ({recordingSeconds || 6}s)
+            </div>
+            <div className="flex items-center gap-2">
               <button
-                onClick={stopRecordingVoiceNote}
-                className="rounded-xl bg-rose-500 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-rose-600 transition flex items-center gap-1.5"
+                onClick={() => {
+                  setRecordedAudioUrl(null);
+                  setRecordingSeconds(0);
+                }}
+                className="px-2.5 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
               >
-                <Square className="h-3.5 w-3.5 fill-current" />
-                Stop & Review
+                Discard
+              </button>
+              <button
+                onClick={handleSendVoiceNote}
+                className="rounded-xl bg-amber-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition cursor-pointer"
+              >
+                Send Voice Note
               </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* AUDIO READY TO SEND BAR */}
-          {!isRecording && recordedAudioUrl && (
-            <div className="px-4 py-3 bg-amber-950/60 border-t border-amber-500/40 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-amber-300 font-bold">
-                <Volume2 className="h-4 w-4" />
-                Voice Note Ready ({recordingSeconds || 6}s)
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setRecordedAudioUrl(null);
-                    setRecordingSeconds(0);
-                  }}
-                  className="px-2.5 py-1 text-xs text-slate-400 hover:text-white"
-                >
-                  Discard
-                </button>
-                <button
-                  onClick={handleSendVoiceNote}
-                  className="rounded-xl bg-amber-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition"
-                >
-                  Send Voice Note
-                </button>
-              </div>
-            </div>
-          )}
+        {/* MESSAGE INPUT BAR */}
+        <form onSubmit={handleSendText} className="p-3.5 border-t border-slate-800 bg-slate-900/80 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={isRecording ? stopRecordingVoiceNote : startRecordingVoiceNote}
+            className={`p-2.5 rounded-xl transition cursor-pointer ${
+              isRecording
+                ? 'bg-rose-500 text-white animate-pulse'
+                : 'bg-slate-800 text-slate-300 hover:bg-amber-500 hover:text-slate-950'
+            }`}
+            title="Record Voice Note / Audio DM"
+          >
+            <Mic className="h-4 w-4" />
+          </button>
 
-          {/* MESSAGE INPUT BAR */}
-          <form onSubmit={handleSendText} className="p-3.5 border-t border-slate-800 bg-slate-900/80 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={isRecording ? stopRecordingVoiceNote : startRecordingVoiceNote}
-              className={`p-2.5 rounded-xl transition ${
-                isRecording
-                  ? 'bg-rose-500 text-white animate-pulse'
-                  : 'bg-slate-800 text-slate-300 hover:bg-amber-500 hover:text-slate-950'
-              }`}
-              title="Record Voice Note / Audio DM"
-            >
-              <Mic className="h-4 w-4" />
-            </button>
+          <input
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder={`Message ${selectedContact.name} (Text or Mic)...`}
+            className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+          />
 
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={`Message ${selectedContact.name} (Text or Mic)...`}
-              className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
-            />
+          <button
+            type="submit"
+            disabled={!inputText.trim()}
+            className="p-2.5 rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-50 transition cursor-pointer"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
 
-            <button
-              type="submit"
-              disabled={!inputText.trim()}
-              className="p-2.5 rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-50 transition"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </form>
-        </div>
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  currentUser: RegisteredUser;
+}
+
+export const DirectMessagesModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  currentUser,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="relative w-full max-w-4xl h-[650px] max-h-[90vh]">
+        <DirectMessagesContent currentUser={currentUser} onClose={onClose} />
       </div>
     </div>
   );

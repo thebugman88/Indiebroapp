@@ -15,16 +15,16 @@ import { Footer } from './components/Footer';
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     try {
-      const masterAuth = localStorage.getItem('indie_current_auth_user');
+      const masterAuth = localStorage.getItem('ib_auth_current_user_v2') || localStorage.getItem('indie_current_auth_user');
       if (masterAuth) {
         const u = JSON.parse(masterAuth);
         return {
           id: u.id || 'user_' + Math.random().toString(36).substring(2, 9),
           nickname: u.displayName || 'Indie Artist',
-          role: u.role === 'admin' ? 'Master Admin' : 'Artist',
+          role: u.role === 'admin' || u.isAdmin ? 'Master Admin' : 'Artist',
           primaryGenre: (u.artistEnvironment?.genres?.[0] || 'Hip-Hop') as GenreType,
-          avatarUrl: u.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          joinedAt: Date.now(),
+          avatarUrl: u.avatarUrl || '',
+          joinedAt: u.createdAt || Date.now(),
         };
       }
       const saved = localStorage.getItem('hangout_artist_profile');
@@ -42,10 +42,10 @@ export default function App() {
         setCurrentUser({
           id: u.id,
           nickname: u.displayName,
-          role: u.role === 'admin' ? 'Master Admin' : 'Artist',
+          role: u.role === 'admin' || u.isAdmin ? 'Master Admin' : 'Artist',
           primaryGenre: (u.artistEnvironment?.genres?.[0] || 'Hip-Hop') as GenreType,
-          avatarUrl: u.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          joinedAt: Date.now(),
+          avatarUrl: u.avatarUrl || '',
+          joinedAt: u.createdAt || Date.now(),
         });
       }
     };

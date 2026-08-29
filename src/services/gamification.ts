@@ -507,11 +507,165 @@ export function loadProfileState(): UserProfileState {
       parsed.badges = [...(parsed.badges || []), ...missing];
     }
 
+    // Dynamically evaluate real user activity state from storage
+    syncRealActivityCounters(parsed);
+
     return parsed;
   } catch (err) {
     console.error('Error loading gamification profile:', err);
     return getInitialState();
   }
+}
+
+/**
+ * Dynamically evaluates real user activity counters across all 10 studios in real-time
+ */
+export function syncRealActivityCounters(profile: UserProfileState): boolean {
+  if (typeof window === 'undefined') return false;
+  let modified = false;
+
+  try {
+    // 1. Lyric Sets count
+    let lyricCount = 0;
+    try {
+      const pRaw = localStorage.getItem('lyric_pro_projects');
+      if (pRaw) {
+        const arr = JSON.parse(pRaw);
+        if (Array.isArray(arr)) lyricCount += arr.length;
+      }
+      const sRaw = localStorage.getItem('indie_lyric_scratchpad');
+      if (sRaw && sRaw.trim().length > 20) lyricCount += 1;
+      const catRaw = localStorage.getItem('ib_artist_verified_catalog_v2');
+      if (catRaw) {
+        const cat = JSON.parse(catRaw);
+        if (Array.isArray(cat)) {
+          lyricCount += cat.filter((t: any) => t.isLyricOptimized || t.lyrics).length;
+        }
+      }
+    } catch {}
+
+    // 2. Documents & Split Sheets processed
+    let docsCount = 0;
+    try {
+      const rRaw = localStorage.getItem('royalty_extractor_history');
+      if (rRaw) {
+        const arr = JSON.parse(rRaw);
+        if (Array.isArray(arr)) docsCount += arr.length;
+      }
+      const sRaw = localStorage.getItem('indie_split_sheets');
+      if (sRaw) {
+        const arr = JSON.parse(sRaw);
+        if (Array.isArray(arr)) docsCount += arr.length;
+      }
+      const catRaw = localStorage.getItem('ib_artist_verified_catalog_v2');
+      if (catRaw) {
+        const cat = JSON.parse(catRaw);
+        if (Array.isArray(cat)) {
+          docsCount += cat.filter((t: any) => t.isrc || t.writers?.length).length;
+        }
+      }
+    } catch {}
+
+    // 3. Tracks Analyzed
+    let tracksCount = 0;
+    try {
+      const hRaw = localStorage.getItem('hit_analyzer_history');
+      if (hRaw) {
+        const arr = JSON.parse(hRaw);
+        if (Array.isArray(arr)) tracksCount += arr.length;
+      }
+      const catRaw = localStorage.getItem('ib_artist_verified_catalog_v2');
+      if (catRaw) {
+        const cat = JSON.parse(catRaw);
+        if (Array.isArray(cat)) {
+          tracksCount += cat.filter((t: any) => t.isAuditedInHitAnalyzer).length;
+        }
+      }
+    } catch {}
+
+    // 4. Battles Completed
+    let battleCount = 0;
+    try {
+      const bRaw = localStorage.getItem('hangout_battles_history');
+      if (bRaw) {
+        const arr = JSON.parse(bRaw);
+        if (Array.isArray(arr)) battleCount += arr.length;
+      }
+    } catch {}
+
+    // 5. Consensus Reviews
+    let reviewCount = 0;
+    try {
+      const revRaw = localStorage.getItem('judgement_zone_user_reviews');
+      if (revRaw) {
+        const arr = JSON.parse(revRaw);
+        if (Array.isArray(arr)) reviewCount += arr.length;
+      }
+    } catch {}
+
+    // 6. Trivia Rounds
+    let triviaCount = 0;
+    try {
+      const qRaw = localStorage.getItem('soniciq_quiz_history');
+      if (qRaw) {
+        const arr = JSON.parse(qRaw);
+        if (Array.isArray(arr)) triviaCount += arr.length;
+      }
+    } catch {}
+
+    // 7. Motions Passed
+    let motionCount = 0;
+    try {
+      const mRaw = localStorage.getItem('meeting_room_minutes_history');
+      if (mRaw) {
+        const arr = JSON.parse(mRaw);
+        if (Array.isArray(arr)) motionCount += arr.length;
+      }
+    } catch {}
+
+    // 8. Semantic Scans
+    let scanCount = 0;
+    try {
+      const scRaw = localStorage.getItem('semantic_lab_history');
+      if (scRaw) {
+        const arr = JSON.parse(scRaw);
+        if (Array.isArray(arr)) scanCount += arr.length;
+      }
+    } catch {}
+
+    // Map counts to badges
+    const countsMap: Record<string, number> = {
+      'lyricist-supreme': lyricCount,
+      'audit-master': docsCount,
+      'hitmaker': tracksCount,
+      'battle-tested': battleCount,
+      'juror-supreme': reviewCount,
+      'sonic-genius': triviaCount,
+      'parliamentarian': motionCount,
+      'cadence-maestro': scanCount,
+      'streak-champion': profile.currentStreak,
+    };
+
+    profile.badges.forEach((b) => {
+      if (countsMap[b.id] !== undefined) {
+        const liveCount = countsMap[b.id];
+        const newProg = Math.min(b.maxProgress, Math.max(b.progress, liveCount));
+        if (newProg !== b.progress) {
+          b.progress = newProg;
+          modified = true;
+        }
+        if (b.progress >= b.maxProgress && !b.unlockedAt) {
+          b.unlockedAt = Date.now();
+          profile.totalXp += b.xpReward;
+          modified = true;
+        }
+      }
+    });
+  } catch (e) {
+    console.error('Error evaluating real activity counters:', e);
+  }
+
+  return modified;
 }
 
 export function saveProfileState(state: UserProfileState): void {

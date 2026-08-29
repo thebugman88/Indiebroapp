@@ -81,7 +81,7 @@ export const DEFAULT_MASTER_ADMIN: RegisteredUser = {
   passkey: 'MASTER-IB-2026',
   securityQuestion: 'What is the supreme music creation suite?',
   securityAnswer: 'indiebrotherhood',
-  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
+  avatarUrl: '',
   avatarSeed: 'CR',
   avatarBg: 'from-amber-400 via-rose-500 to-purple-600',
   bio: 'Founder & Master Architect of indiebrotherhood ecosystem. Unlimited authority & full studio privileges enabled.',
