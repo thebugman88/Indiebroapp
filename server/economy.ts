@@ -187,7 +187,9 @@ export const usageMiddleware: express.RequestHandler = async (
   res,
   next,
 ) => {
-  const path = req.originalUrl.split("?")[0],
+  // Express routes are case-insensitive and accept a trailing slash. Apply the
+  // same identity to pricing, quotas, and replay records for every route alias.
+  const path = req.originalUrl.split("?")[0].replace(/\/+$/, "").toLowerCase(),
     action = AI_ACTIONS[path];
   if (req.method !== "POST" || !action) return next();
   if (res.locals.identity?.email_verified !== true) {

@@ -55,3 +55,16 @@ Artist Assistant uses one schema-v2 browser snapshot with owner UID and creation
 The old unowned localStorage keys and IndexedDB mirror remain untouched; no account silently receives their contents. New snapshots use localStorage, not the old best-effort IndexedDB mirror, which was never the primary read source. This remains browser-only, not encrypted or cross-device storage. Metadata exports omit original uploaded files; import/restore and legacy ownership recovery remain pending. Other tools still need isolation. Rollback must preserve both old and v2 data without re-enabling shared reads.
 
 Validation: 25 unit/security tests including six storage-service regression tests, root typecheck, Artist Assistant typecheck/build with secret scan, root build and production smoke pass. Two-account browser staging and cloud/provider checks remain pending; Firebase emulator tests were not rerun for this frontend-only change.
+
+## Re-audit follow-up — charging and cancellation (2026-08-30)
+
+Re-audit baseline: `6b2e0d1`. This batch fixes the first two of five findings; it does not close the re-audit.
+
+- AI usage middleware canonicalizes case and trailing slashes to match Express routing. Verification, Coin consent, request IDs, reservation keys and daily quotas use the same action path for accepted URL variants.
+- Cancellation retrieves every account-mapped subscription from Stripe instead of skipping records whose cached status is not `active`. Ownership is checked for all returned subscriptions before mutations. Active/trialing subscriptions are scheduled to end at period end; past-due, unpaid, incomplete and paused subscriptions are canceled immediately without prorations or a final invoice. Already-ended subscriptions are safe to retry. Missing mappings, ownership mismatches, provider errors and unconfirmed provider responses never return cancellation success.
+- The cancellation control remains available after Pro access lapses. Confirmation text explains unpaid cancellation and does not promise refunds or debt forgiveness. Subscription state continues to arrive through signed webhooks; pending webhook delivery can delay the wallet display.
+- Stripe behavior reference: [Cancellation and outstanding invoices](https://docs.stripe.com/billing/subscriptions/cancel). Staging must exercise actual Stripe lifecycle states, webhook delivery, retries and paid-through access. A checkout whose subscription mapping has not arrived returns a support/retry error rather than claiming cancellation.
+
+New local regressions exercise every priced/free AI route with canonical, trailing-slash, uppercase and combined variants. Cancellation HTTP tests cover all eight current Stripe statuses, no subscription record, wrong ownership, unverified identities, provider outage and missing provider confirmation. Provider and subscription lookup doubles are isolated from live services.
+
+Still open from this re-audit: Judgment Zone identity/signature exposure, RoyaltyOps/main-catalog browser account isolation, and permanent Sentinel quarantine/restored historical blocks. In particular, an already-quarantined account can still be blocked before reaching cancellation until the Sentinel fix lands. Do not treat this batch as launch approval.

@@ -259,14 +259,14 @@ export function PlanAndCoins({ compact = false }: { compact?: boolean }) {
               ))}
             </details>
           )}
-          {wallet?.tier === "pro" && (
+          {wallet && (
             <button
               disabled={busy}
               className="underline"
               onClick={() => {
                 if (
                   window.confirm(
-                    "Cancel future renewal? Pro remains active through the paid period. Existing files and permanent storage extensions stay.",
+                    "Cancel your Pro subscription? Active paid access continues through its paid period. Unpaid subscriptions are canceled immediately. Existing files and permanent storage extensions stay. This does not refund or forgive existing charges.",
                   )
                 )
                   void action("/api/stripe/cancel");

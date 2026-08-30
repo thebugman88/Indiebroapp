@@ -68,7 +68,16 @@ export function getCheckoutUrls(origin: string) {
   };
 }
 
-export function createBillingRouter(getStripe: () => Stripe | null) {
+async function subscriptionIdsFor(uid: string): Promise<string[]> {
+  const docs = await economyDb().collection("billingSubscriptions")
+    .where("uid", "==", uid).get();
+  return docs.docs.map(doc => doc.id);
+}
+
+export function createBillingRouter(
+  getStripe: () => Stripe | null,
+  loadSubscriptionIds: (uid: string) => Promise<string[]> = subscriptionIdsFor,
+) {
   const router = express.Router();
   router.get("/quote/:product", requireVerifiedEmail, async (req, res) => {
     const productId = req.params.product as ProductId,
@@ -314,23 +323,38 @@ export function createBillingRouter(getStripe: () => Stripe | null) {
       return;
     }
     try {
-      const docs = await economyDb()
-        .collection("billingSubscriptions")
-        .where("uid", "==", res.locals.identity.uid)
-        .get();
-      for (const doc of docs.docs) {
-        if (doc.data().status !== "active") continue;
-        const sub = await stripe.subscriptions.retrieve(doc.id);
-        if (sub.metadata.firebaseUid !== res.locals.identity.uid)
+      const uid = res.locals.identity.uid;
+      const ids = await loadSubscriptionIds(uid);
+      if (!ids.length) {
+        res.status(409).json({ error: "No subscription record was found. Cancellation cannot be confirmed; contact support if you have a subscription." });
+        return;
+      }
+      // Local webhook state can be stale. Retrieve every mapped subscription,
+      // and verify every owner before performing any cancellation.
+      const subscriptions = await Promise.all(ids.map(id => stripe.subscriptions.retrieve(id)));
+      for (const sub of subscriptions) {
+        if (sub.metadata.firebaseUid !== uid)
           throw new Error("Ownership mismatch");
-        await stripe.subscriptions.update(doc.id, {
-          cancel_at_period_end: true,
-        });
+      }
+      for (const sub of subscriptions) {
+        if (sub.status === "canceled" || sub.status === "incomplete_expired") continue;
+        if (sub.status === "active" || sub.status === "trialing") {
+          const updated = await stripe.subscriptions.update(sub.id, { cancel_at_period_end: true });
+          if (!updated.cancel_at_period_end && updated.status !== "canceled")
+            throw new Error("Stripe did not confirm scheduled cancellation.");
+        } else if (["past_due", "unpaid", "incomplete", "paused"].includes(sub.status)) {
+          // Stop dunning for subscriptions without active paid access. Do not
+          // generate prorations, a final invoice, or a refund as a side effect.
+          const canceled = await stripe.subscriptions.cancel(sub.id, { prorate: false, invoice_now: false });
+          if (canceled.status !== "canceled") throw new Error("Stripe did not confirm cancellation.");
+        } else {
+          throw new Error("Unsupported subscription status.");
+        }
       }
       res.json({
         success: true,
         message:
-          "Future renewal canceled. Access continues through the paid period.",
+          "Stripe confirmed cancellation or scheduled cancellation for your recorded subscriptions. Active paid access continues through its paid period; unpaid subscriptions are canceled immediately. This does not refund or forgive existing charges.",
       });
     } catch {
       res.status(503).json({
