@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../src/services/authService';
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { AudioInputSection } from './components/AudioInputSection';
@@ -104,7 +105,7 @@ export default function App() {
     }, 900);
 
     try {
-      const response = await fetch('/api/analyze', {
+      const response = await authenticatedFetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

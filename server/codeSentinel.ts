@@ -269,7 +269,8 @@ export function autoRepairPayload(body: any, endpoint: string): { repaired: any;
  */
 export function codeSentinelMiddleware(req: Request, res: Response, next: NextFunction) {
   totalRequestsInspected++;
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const rateKey = res.locals.identity?.uid || clientIp;
   const userAgent = req.headers['user-agent'] || 'unknown';
   const endpoint = req.originalUrl || req.url;
 
@@ -285,16 +286,16 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
     });
   }
 
-  // 2. Rate-Limiting & Burst Protection (120 req / 60s per IP)
+  // 2. Rate-Limiting & Burst Protection (120 req / 60s per verified UID, or IP for public routes)
   const now = Date.now();
-  const windowData = ipRequestWindows.get(clientIp) || { count: 0, windowStart: now };
+  const windowData = ipRequestWindows.get(rateKey) || { count: 0, windowStart: now };
   if (now - windowData.windowStart > 60000) {
     windowData.count = 1;
     windowData.windowStart = now;
   } else {
     windowData.count++;
   }
-  ipRequestWindows.set(clientIp, windowData);
+  ipRequestWindows.set(rateKey, windowData);
 
   if (windowData.count > 120) {
     const incident = recordSecurityIncident({

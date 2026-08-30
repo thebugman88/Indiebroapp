@@ -1,7 +1,8 @@
+import { requireAuth, requireAdmin } from './server/auth';
+import { createBillingRouter, createStripeWebhook } from './server/billing';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createHttpServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import { Type } from '@google/genai';
 import Stripe from 'stripe';
@@ -13,14 +14,7 @@ import {
   DEFAULT_MODEL_CHAIN,
   getGeminiClient,
 } from './server/aiResilience';
-import {
-  logBeforePaymentInitialization,
-  logDuringStripeExecution,
-  logAfterFulfillmentSucceeded,
-  logTransactionFailure,
-  getTransactionAuditRecords,
-  generateV4UUID,
-} from './server/transactionAudit';
+import { getTransactionAuditRecords } from './server/transactionAudit';
 import {
   codeSentinelMiddleware,
   getSecurityStats,
@@ -37,7 +31,7 @@ import { generateAlgorithmicLyrics } from './lyric-pro-studio/src/data/lyricTemp
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 // -------------------------------------------------------------
 // 1. STRIPE WEBHOOK RAW BUFFER HANDLER (MUST PRECEDE JSON PARSER)
@@ -50,81 +44,12 @@ const getStripeClient = (): Stripe | null => {
     return null;
   }
   if (!stripeClient) {
-    stripeClient = new Stripe(secretKey, {
-      apiVersion: '2025-02-24.acacia' as any,
-    });
+    stripeClient = new Stripe(secretKey);
   }
   return stripeClient;
 };
 
-// Raw parser for Stripe webhooks
-app.post(
-  '/api/stripe/webhook',
-  express.raw({ type: 'application/json' }),
-  async (req: Request, res: Response) => {
-    const sig = req.headers['stripe-signature'] as string;
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    const stripe = getStripeClient();
-
-    let event: Stripe.Event;
-
-    try {
-      if (stripe && webhookSecret && sig) {
-        // Verify genuine Stripe webhook signature
-        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-      } else {
-        // Fallback for direct simulation or development payload
-        const parsed = typeof req.body === 'string' ? JSON.parse(req.body) : JSON.parse(req.body.toString('utf-8'));
-        event = parsed as Stripe.Event;
-      }
-    } catch (err: any) {
-      console.error(`[STRIPE WEBHOOK ERROR] Signature verification failed: ${err.message}`);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    console.log(`[STRIPE WEBHOOK EVENT] Ingesting event: ${event.type} (ID: ${event.id})`);
-
-    // Handle fulfillment events idempotently (STAGE 3 AUDIT)
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const fulfillment = logAfterFulfillmentSucceeded({
-          stripeSessionId: session.id,
-          stripeCustomerId: typeof session.customer === 'string' ? session.customer : session.customer?.id,
-          stripeSubscriptionId: typeof session.subscription === 'string' ? session.subscription : (session.subscription as any)?.id,
-          userEmail: session.customer_details?.email || session.customer_email || undefined,
-          userId: session.client_reference_id || undefined,
-          tier: 'pro',
-          amountPaid: session.amount_total ? session.amount_total / 100 : 4.99,
-          metadata: {
-            source: 'stripe_webhook',
-            eventId: event.id,
-            ...session.metadata,
-          },
-        });
-
-        if (fulfillment.alreadyFulfilled) {
-          console.log(`[STRIPE WEBHOOK IDEMPOTENT] Session ${session.id} was already fulfilled once. Skipping duplicate.`);
-        }
-        break;
-      }
-      case 'payment_intent.succeeded': {
-        const intent = event.data.object as Stripe.PaymentIntent;
-        console.log(`[STRIPE WEBHOOK] PaymentIntent succeeded: ${intent.id} ($${(intent.amount / 100).toFixed(2)})`);
-        break;
-      }
-      case 'customer.subscription.deleted': {
-        const sub = event.data.object as Stripe.Subscription;
-        console.log(`[STRIPE WEBHOOK] Subscription terminated for customer ${sub.customer}`);
-        break;
-      }
-      default:
-        console.log(`[STRIPE WEBHOOK] Unhandled event type: ${event.type}`);
-    }
-
-    return res.json({ received: true, eventId: event.id, type: event.type });
-  }
-);
+app.post('/api/stripe/webhook', ...createStripeWebhook(getStripeClient));
 
 // -------------------------------------------------------------
 // 2. GLOBAL PARSERS & CODE SENTINEL MONITORING MIDDLEWARE
@@ -132,8 +57,19 @@ app.post(
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Public metadata is explicitly allowlisted; every other API requires verified identity.
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' && ['/health', '/stripe/config'].includes(req.path)) return next();
+  return requireAuth(req, res, next);
+});
+app.use(['/api/admin', '/api/audit', '/api/resilience'], requireAdmin);
+app.use('/api/security', (req, res, next) => {
+  if (req.method === 'GET' && req.path === '/account-status') return next();
+  return requireAdmin(req, res, next);
+});
 // Attach AI Code Sentinel & Threat Detection Observer
 app.use('/api', codeSentinelMiddleware);
+app.use('/api/stripe', createBillingRouter(getStripeClient));
 
 const httpServer = createHttpServer(app);
 
@@ -204,7 +140,7 @@ app.get('/api/security/guidelines', (_req, res) => {
 
 app.get('/api/security/account-status', (req, res) => {
   const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
-  const accountKey = (req.query.accountId as string) || (req.query.userEmail as string) || clientIp;
+  const accountKey = res.locals.identity.uid;
   const status = getAccountSecurityStatus(accountKey);
   res.json({
     success: true,
@@ -256,7 +192,7 @@ app.post('/api/security/remediate', (req, res) => {
 // -------------------------------------------------------------
 app.get('/api/stripe/config', (_req, res) => {
   const publishableKey = process.env.VITE_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY || '';
-  const isConfigured = !!process.env.STRIPE_SECRET_KEY;
+  const isConfigured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET && process.env.STRIPE_PRICE_ID_PRO && process.env.FIREBASE_PROJECT_ID && process.env.APP_PUBLIC_URL);
   res.json({
     publishableKey,
     isConfigured,
@@ -273,220 +209,6 @@ app.get('/api/audit/transactions', (_req, res) => {
     count: records.length,
     records,
   });
-});
-
-app.post('/api/stripe/create-checkout-session', async (req: Request, res: Response) => {
-  let transactionId = '';
-  try {
-    const { userEmail, userId, returnUrl, clientCustomKey } = req.body;
-    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
-
-    // ---------------------------------------------------------
-    // STAGE 1: BEFORE PAYMENT INITIALIZATION AUDIT LOGGING
-    // ---------------------------------------------------------
-    const initAudit = logBeforePaymentInitialization({
-      userId: userId || 'indiebrotherhood_artist',
-      userEmail: userEmail || undefined,
-      tier: 'pro',
-      amountUsd: 4.99,
-      clientIp,
-      idempotencyKey: clientCustomKey || generateV4UUID(),
-      metadata: {
-        package: 'Artist Pro Powerhouse',
-        returnUrl,
-      },
-    });
-
-    transactionId = initAudit.transactionId;
-
-    if (initAudit.isDuplicate) {
-      return res.status(409).json({
-        error: 'Duplicate transaction prevented by Idempotency Sentinel.',
-        idempotencyKey: initAudit.idempotencyKey,
-      });
-    }
-
-    const stripe = getStripeClient();
-    const host = req.get('host') || 'localhost:3000';
-    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-    const defaultOrigin = `${protocol}://${host}`;
-    const baseReturnUrl = returnUrl || defaultOrigin;
-
-    // If Stripe secret is not configured in sandbox, fulfill via simulated preview flow
-    if (!stripe) {
-      const simSessionId = `sim_session_${Date.now()}_${initAudit.idempotencyKey.slice(0, 8)}`;
-      
-      // Stage 2 & 3 logging for simulation
-      logDuringStripeExecution(transactionId, simSessionId, `${baseReturnUrl}?payment=success&session_id=${simSessionId}`);
-      logAfterFulfillmentSucceeded({
-        stripeSessionId: simSessionId,
-        userId,
-        userEmail,
-        tier: 'pro',
-        amountPaid: 4.99,
-        metadata: { isSimulated: true, idempotencyKey: initAudit.idempotencyKey },
-      });
-
-      return res.json({
-        success: true,
-        isSimulated: true,
-        transactionId,
-        idempotencyKey: initAudit.idempotencyKey,
-        sessionId: simSessionId,
-        subscription: {
-          status: 'active',
-          tier: 'pro',
-          planName: 'Artist Pro Powerhouse',
-          amount: 4.99,
-          currency: 'usd',
-          interval: 'month',
-          currentPeriodEnd: Date.now() + 30 * 24 * 60 * 60 * 1000,
-        },
-        message: 'Activated in instant preview mode. Connect STRIPE_SECRET_KEY in settings for live processing.',
-      });
-    }
-
-    const priceId = process.env.STRIPE_PRICE_ID_PRO;
-    const lineItems = priceId
-      ? [{ price: priceId, quantity: 1 }]
-      : [
-          {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: 'indiebrotherhood Artist Pro Powerhouse',
-                description: 'Unlimited 10-Judge Blind Panels, Gemini 2.5 Pro Hit Telemetry, OCR Split Sheets, 2.5x XP Boost.',
-                images: ['https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=400&q=80'],
-              },
-              unit_amount: 499, // $4.99 USD
-              recurring: {
-                interval: 'month' as const,
-              },
-            },
-            quantity: 1,
-          },
-        ];
-
-    // ---------------------------------------------------------
-    // STAGE 2: DURING STRIPE EXECUTION (IDEMPOTENCY-KEY INJECTED)
-    // ---------------------------------------------------------
-    const session = await stripe.checkout.sessions.create(
-      {
-        payment_method_types: ['card'],
-        mode: 'subscription',
-        line_items: lineItems,
-        customer_email: userEmail && userEmail.includes('@') ? userEmail : undefined,
-        client_reference_id: userId || `ib_user_${Date.now()}`,
-        metadata: {
-          platform: 'indiebrotherhood',
-          plan: 'Artist Pro Powerhouse',
-          price: '4.99',
-          transactionId,
-          idempotencyKey: initAudit.idempotencyKey,
-        },
-        success_url: `${baseReturnUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseReturnUrl}?payment=cancelled`,
-      },
-      {
-        // Enforce strict Idempotency-Key header on Stripe API call
-        idempotencyKey: initAudit.idempotencyKey,
-      }
-    );
-
-    logDuringStripeExecution(transactionId, session.id, session.url || undefined);
-
-    return res.json({
-      success: true,
-      isSimulated: false,
-      transactionId,
-      idempotencyKey: initAudit.idempotencyKey,
-      sessionId: session.id,
-      url: session.url,
-    });
-  } catch (error: any) {
-    console.error('[STRIPE CHECKOUT ERROR]', error);
-    if (transactionId) {
-      logTransactionFailure(transactionId, error.message || 'Checkout failed');
-    }
-    return res.status(500).json({
-      error: error.message || 'Failed to create Stripe checkout session.',
-    });
-  }
-});
-
-app.post('/api/stripe/verify-session', async (req: Request, res: Response) => {
-  try {
-    const { sessionId } = req.body;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Session ID is required.' });
-    }
-
-    if (sessionId.startsWith('sim_session_')) {
-      // Stage 3 fulfillment audit for preview
-      logAfterFulfillmentSucceeded({
-        stripeSessionId: sessionId,
-        tier: 'pro',
-        amountPaid: 4.99,
-        metadata: { isSimulated: true },
-      });
-
-      return res.json({
-        valid: true,
-        isSimulated: true,
-        status: 'active',
-        tier: 'pro',
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-      });
-    }
-
-    const stripe = getStripeClient();
-    if (!stripe) {
-      return res.json({
-        valid: true,
-        isSimulated: true,
-        status: 'active',
-        tier: 'pro',
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-      });
-    }
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ['subscription', 'customer'],
-    });
-
-    const isPaid = session.payment_status === 'paid' || session.status === 'complete';
-    const sub = session.subscription as any;
-
-    if (isPaid) {
-      // ---------------------------------------------------------
-      // STAGE 3: AFTER FULFILLMENT AUDIT LOGGING (IDEMPOTENT)
-      // ---------------------------------------------------------
-      logAfterFulfillmentSucceeded({
-        stripeSessionId: session.id,
-        stripeCustomerId: typeof session.customer === 'string' ? session.customer : session.customer?.id,
-        stripeSubscriptionId: sub?.id,
-        userEmail: session.customer_details?.email || session.customer_email || undefined,
-        userId: session.client_reference_id || undefined,
-        tier: 'pro',
-        amountPaid: session.amount_total ? session.amount_total / 100 : 4.99,
-        metadata: {
-          paymentStatus: session.payment_status,
-          verifiedVia: 'verify-session-endpoint',
-        },
-      });
-    }
-
-    return res.json({
-      valid: isPaid,
-      status: isPaid ? 'active' : 'pending',
-      tier: isPaid ? 'pro' : 'free',
-      customerId: typeof session.customer === 'string' ? session.customer : session.customer?.id,
-      expiresAt: sub?.current_period_end ? sub.current_period_end * 1000 : Date.now() + 30 * 24 * 60 * 60 * 1000,
-    });
-  } catch (error: any) {
-    console.error('[STRIPE VERIFY ERROR]', error);
-    return res.status(500).json({ error: error.message || 'Failed to verify checkout session.' });
-  }
 });
 
 // -------------------------------------------------------------
@@ -948,12 +670,12 @@ Output a comprehensive hit potential breakdown in JSON format.
 app.post('/api/generate-lyrics', async (req: Request, res: Response) => {
   const payload = req.body || {};
   const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
-  const accountId = payload.userId || payload.accountId || payload.userEmail || clientIp;
+  const accountId = res.locals.identity.uid;
 
   // 1. Security AI Sentinel: Bot & Excessive Request Check
   const securityCheck = recordAccountRequest({
     accountId,
-    userEmail: payload.userEmail,
+    userEmail: res.locals.identity.email,
     clientIp,
     endpoint: '/api/generate-lyrics',
   });
@@ -1421,110 +1143,24 @@ GUIDELINES:
 // -------------------------------------------------------------
 // 10. WEBSOCKET MULTIPLEXER (HANG OUT & MEETING ROOM)
 // -------------------------------------------------------------
-const wss = new WebSocketServer({ noServer: true });
-
-httpServer.on('upgrade', (request, socket, head) => {
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit('connection', ws, request);
-  });
-});
-
-const clients = new Set<WebSocket>();
-
-function broadcastToAllWsClients(messageObject: any) {
-  const payload = JSON.stringify(messageObject);
-  for (const client of clients) {
-    if (client.readyState === WebSocket.OPEN) {
-      try {
-        client.send(payload);
-      } catch (err) {
-        // ignore individual client write errors
-      }
-    }
-  }
-}
-
-wss.on('connection', (ws) => {
-  clients.add(ws);
-
-  ws.on('message', (raw) => {
-    try {
-      const data = JSON.parse(raw.toString());
-      if (data.type === 'PING') {
-        ws.send(JSON.stringify({ type: 'PONG' }));
-        return;
-      }
-
-      // Broadcast message to all active clients for real-time room syncing
-      const payload = raw.toString();
-      for (const client of clients) {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(payload);
-        }
-      }
-    } catch (err) {
-      // ignore
-    }
-  });
-
-  ws.on('close', () => {
-    clients.delete(ws);
-  });
+httpServer.on('upgrade', (_request, socket) => {
+  socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
 });
 
 // -------------------------------------------------------------
 // 10B. MASTER ADMIN BROADCAST & ROSTER CONTROL APIS
 // -------------------------------------------------------------
-app.post('/api/admin/broadcast', (req: Request, res: Response) => {
-  const { title, message, senderName, senderEmail, priority, actionUrl, actionLabel } = req.body || {};
-  if (!title || !message) {
-    return res.status(400).json({ error: 'Title and message are required for broadcast.' });
-  }
-
-  const broadcastEvent = {
-    type: 'ADMIN_BROADCAST',
-    id: `bc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    title,
-    message,
-    senderName: senderName || 'Christopher Ray (Founder)',
-    senderEmail: senderEmail || 'xchristopherrayx@gmail.com',
-    priority: priority || 'high',
-    actionUrl: actionUrl || '#meeting-room',
-    actionLabel: actionLabel || 'Join Meeting Room',
-    timestamp: Date.now(),
-  };
-
-  broadcastToAllWsClients(broadcastEvent);
-  return res.json({ success: true, broadcast: broadcastEvent });
-});
-
-app.post('/api/admin/kick', (req: Request, res: Response) => {
-  const { target, reason } = req.body || {};
-  const kickEvent = {
-    type: 'KICK_USER',
-    target: (target || '').toLowerCase(),
-    reason: reason || 'Session terminated by Master Admin Christopher Ray',
-    timestamp: Date.now(),
-  };
-  broadcastToAllWsClients(kickEvent);
-  return res.json({ success: true, kickEvent });
-});
-
-app.post('/api/admin/blacklist', (req: Request, res: Response) => {
-  const { email, reason } = req.body || {};
-  const kickEvent = {
-    type: 'KICK_USER',
-    target: (email || '').toLowerCase(),
-    reason: reason || 'Account blacklisted by Master Admin',
-    timestamp: Date.now(),
-  };
-  broadcastToAllWsClients(kickEvent);
-  return res.json({ success: true });
+app.post('/api/admin/broadcast', (_req, res) => { res.status(503).json({ error: 'Realtime broadcasting is unavailable during the security upgrade.' }); });
+app.post(['/api/admin/kick', '/api/admin/blacklist'], (_req, res) => {
+  res.status(503).json({ error: 'Server moderation is unavailable during the security upgrade. No user was removed.' });
 });
 
 // -------------------------------------------------------------
 // 11. VITE & STATIC ASSET SERVING
 // -------------------------------------------------------------
+app.use('/api', (_req, res) => { res.status(404).json({ error: 'API endpoint not found.' }); });
+app.get(['/server.cjs', '/server.cjs.map'], (_req, res) => { res.sendStatus(404); });
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -1533,7 +1169,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), 'dist/client');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -1541,7 +1177,8 @@ async function startServer() {
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`indiebrotherhood unified suite running on http://0.0.0.0:${PORT}`);
+    const address = httpServer.address();
+    console.log(`indiebrotherhood unified suite running on http://0.0.0.0:${typeof address === 'object' ? address?.port : PORT}`);
   });
 }
 

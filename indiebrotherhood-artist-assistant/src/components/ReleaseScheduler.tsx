@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../src/services/authService';
 import React, { useState } from "react";
 import {
   Calendar,
@@ -109,7 +110,7 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
 
     try {
       // Call server strategy endpoint
-      const res = await fetch("/api/ai/strategy-plan", {
+      const res = await authenticatedFetch("/api/ai/strategy-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

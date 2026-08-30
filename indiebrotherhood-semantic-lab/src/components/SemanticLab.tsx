@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../src/services/authService';
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import {
@@ -143,7 +144,7 @@ export const SemanticLab: React.FC = () => {
     playHudClick('synthesize');
 
     try {
-      const response = await fetch('/api/synthesize', {
+      const response = await authenticatedFetch('/api/synthesize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../src/services/authService';
 import React, { useState } from 'react';
 import { Quiz, QuizType, DifficultyLevel } from '../types';
 import { Sparkles, Music, Mic, X, Loader2, AlertCircle, Radio } from 'lucide-react';
@@ -51,7 +52,7 @@ export const AiQuizGeneratorModal: React.FC<AiQuizGeneratorModalProps> = ({
         );
         onQuizGenerated(realQuiz as Quiz);
       } else {
-        const response = await fetch('/api/quiz/generate', {
+        const response = await authenticatedFetch('/api/quiz/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
