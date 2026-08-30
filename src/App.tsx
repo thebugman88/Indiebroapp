@@ -1,3 +1,4 @@
+import { PurchaseDialog } from './components/PurchaseDialog';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import {
   Gavel,
@@ -517,7 +518,7 @@ function SuiteApp() {
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-amber-500/40'
               }`}
-              title={currentUser.isAdmin ? 'Master Admin Active (Unlimited Free Access)' : 'Sign In / Recover Account'}
+              title={currentUser.isAdmin ? 'Verified administrator' : 'Sign In / Recover Account'}
             >
               {currentUser.isAdmin ? (
                 <>
@@ -1058,6 +1059,7 @@ function SuiteApp() {
       {/* GLOBAL TOAST & MODAL OVERLAYS */}
       <AchievementToast />
       <GamificationModal />
+      <PurchaseDialog />
       <NotificationToastContainer onNavigateTo={(appId) => navigateTo(appId as SuiteAppId)} />
 
       {/* Founder Christopher Ray Admin Control Room Modal */}

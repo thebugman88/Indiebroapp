@@ -28,10 +28,11 @@ test('production server blocks audit exploits without configured credentials', {
       body: JSON.stringify({ sessionId: 'sim_session_invented', isAdmin: true, userId: 'admin_christopher_ray' }) });
     assert.equal(response.status, 401, route);
   }
-  for (const route of ['/api/audit/transactions', '/api/security/logs', '/api/stripe/subscription']) {
+  for (const route of ['/api/audit/transactions', '/api/security/logs', '/api/stripe/subscription', '/api/economy/wallet', '/api/economy/history', '/api/stripe/orders']) {
     assert.equal((await fetch(base + route)).status, 401, route);
   }
   assert.equal((await fetch(base + '/api/health')).status, 200);
+  const terms=await fetch(base+'/api/legal/terms');assert.equal(terms.status,200);assert.match(await terms.text(),/AI can make mistakes/);
   assert.equal((await fetch(base + '/')).status, 200);
   for (const route of ['/server.cjs', '/server.cjs.map']) assert.equal((await fetch(base + route)).status, 404, route);
   assert.equal((await fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 503);

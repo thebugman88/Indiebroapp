@@ -1,3 +1,4 @@
+import { AI_ACTIONS, ECONOMY_VERSION } from '../../shared/economy';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, onIdTokenChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, sendEmailVerification, updateProfile, signOut, type User } from 'firebase/auth';
@@ -196,6 +197,13 @@ export async function authenticatedFetch(input: string, init: RequestInit = {}) 
   const target = new URL(input, window.location.origin);
   if (target.origin !== window.location.origin) throw new Error('Authenticated requests must use the suite backend.');
   const headers = new Headers(init.headers);
+  const action = AI_ACTIONS[target.pathname];
+  if ((init.method || 'GET').toUpperCase() === 'POST' && action) {
+    if (action.cost > 0 && !window.confirm(`${action.name} costs ${action.cost} Brotherhood Coins. Included Coins are spent first. Failed cloud requests restore their Coins. Continue?`)) throw new Error('AI request canceled. No Coins spent.');
+    headers.set('x-request-id', crypto.randomUUID());
+    headers.set('x-economy-version', ECONOMY_VERSION);
+    headers.set('x-coin-consent', String(action.cost));
+  }
   headers.set('Authorization', `Bearer ${await client.currentUser.getIdToken()}`);
   return fetch(target, { ...init, headers });
 }

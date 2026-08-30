@@ -1,3 +1,4 @@
+import { PlanAndCoins } from './PlanAndCoins';
 import React, { useState } from 'react';
 import {
   Sparkles,
@@ -35,12 +36,8 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   const [activeFeatureTab, setActiveFeatureTab] = useState<number>(0);
-  const [proModalOpen, setProModalOpen] = useState(false);
-  const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
-  const [checkoutFeedback, setCheckoutFeedback] = useState<string | null>(null);
-  const { awardXP, startStripeCheckout, profile } = useGamification();
+  const { awardXP } = useGamification();
 
   const handleStartFree = () => {
     awardXP({
@@ -49,25 +46,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
       sourceApp: 'Hub Welcome'
     });
     onLaunchApp('hub');
-  };
-
-  const handleStartProCheckout = async () => {
-    setIsProcessingCheckout(true);
-    setCheckoutFeedback(null);
-    try {
-      const res = await startStripeCheckout();
-      if (res.isSimulated) {
-        setCheckoutFeedback('Artist Pro Powerhouse activated!');
-        setTimeout(() => {
-          setProModalOpen(false);
-          onLaunchApp('hub');
-        }, 1200);
-      }
-    } catch (err: any) {
-      setCheckoutFeedback(err.message || 'Checkout failed. Please try again.');
-    } finally {
-      setIsProcessingCheckout(false);
-    }
   };
 
   const handleSelectFeatureApp = (appId: SuiteAppId) => {
@@ -522,144 +500,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
         </div>
       </section>
 
-      {/* 6. TRANSPARENT PRICING TIERS: FREE VS $4.99 */}
-      <section id="pricing" className="py-16 sm:py-24 px-4 sm:px-6 bg-[#080b12] border-b border-zinc-800/80">
-        <div className="max-w-5xl mx-auto space-y-12">
-          <div className="text-center space-y-3">
-            <span className="text-xs font-mono uppercase tracking-widest font-bold text-amber-400">
-              Clear & Honest Pricing
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-extrabold text-white">
-              Start Free. Power Up for Less Than a Cup of Coffee.
-            </h2>
-            <p className="text-zinc-400 max-w-xl mx-auto text-xs sm:text-sm">
-              No hidden fees, no credit card required to start, and zero rev-shares taken from your master recordings.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch max-w-4xl mx-auto">
-            {/* TIER 1: FREE FOREVER TIER */}
-            <div className="p-7 sm:p-8 rounded-3xl bg-zinc-900/50 border border-zinc-800 flex flex-col justify-between shadow-xl space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">
-                    Starter Creator
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
-                    NO CREDIT CARD
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl sm:text-5xl font-black text-white">$0</span>
-                    <span className="text-zinc-400 text-xs font-mono">/ forever</span>
-                  </div>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    Essential tools for bedroom producers, writers, and artists starting their catalog.
-                  </p>
-                </div>
-
-                <div className="space-y-3 pt-4 border-t border-zinc-800 text-xs text-zinc-300">
-                  <div className="flex items-center gap-2.5">
-                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>Access to All 10 Studio Interfaces</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>Judgement Zone 3 Blind Song Submissions / mo</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>Quick Tools: BPM Tap, Pitch & Rhyme Engine</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>Standard Lyric Pro Studio Drafts & Scratchpad</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>Daily Quests, Creator Streaks & Universal XP</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={handleStartFree}
-                className="w-full py-3.5 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Launch Free Studio</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* TIER 2: ARTIST PRO TIER ($4.99) */}
-            <div className="p-7 sm:p-8 rounded-3xl bg-gradient-to-b from-[#14120c] via-[#0d0e14] to-[#0d101a] border-2 border-amber-500/80 flex flex-col justify-between shadow-2xl shadow-amber-500/10 space-y-6 relative">
-              {/* Popular Badge */}
-              <div className="absolute -top-3.5 right-6 px-3.5 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 font-mono font-extrabold text-[11px] rounded-full shadow-lg flex items-center gap-1">
-                <Crown className="w-3.5 h-3.5 fill-zinc-950" />
-                <span>MOST POPULAR • BEST VALUE</span>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-amber-400">
-                    Artist Pro Powerhouse
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold">
-                    UNLIMITED EVERYTHING
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl sm:text-5xl font-black text-amber-400">$4.99</span>
-                    <span className="text-zinc-400 text-xs font-mono">/ month</span>
-                  </div>
-                  <p className="text-xs text-zinc-300 mt-1">
-                    Everything an independent artist or producer needs to write, analyze, and monetize like a major label.
-                  </p>
-                </div>
-
-                <div className="space-y-3 pt-4 border-t border-zinc-800 text-xs text-zinc-200">
-                  <div className="flex items-center gap-2.5 font-semibold text-white">
-                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span>Unlimited 10-Judge Blind Review Submissions</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 font-semibold text-white">
-                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span>Gemini 2.5 Pro Multimodal Hit & Skip-Rate Telemetry</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 font-semibold text-white">
-                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span>Instant OCR Split Sheets & ISRC PRO Metadata Packager</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span>Advanced Phonetic Multi-Syllable Rhyme Matrix</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span>High-Fidelity Live Audio Cypher & Meeting Governance</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span>2.5x XP Boost, Diamond Juror Badge & Priority Sync Pitch</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setProModalOpen(true)}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-zinc-950 font-black text-xs shadow-lg shadow-amber-500/20 hover:opacity-95 hover:scale-[1.01] transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Crown className="w-4 h-4" />
-                <span>Upgrade to Artist Pro ($4.99)</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <section id="pricing" className="py-16 px-6 bg-zinc-950"><div className="max-w-4xl mx-auto"><PlanAndCoins compact /></div></section>
 
       {/* 7. FINAL CALL TO ACTION */}
       <section className="py-20 px-4 sm:px-6 text-center relative overflow-hidden">
@@ -692,72 +533,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
         </div>
       </section>
 
-      {/* PRO CHECKOUT / ACTIVATION MODAL */}
-      {proModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-[#0e121d] border border-amber-500/50 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-                  <Crown className="w-4 h-4" />
-                </div>
-                <h3 className="text-base font-extrabold text-white">Artist Pro Powerhouse ($4.99)</h3>
-              </div>
-              <button
-                onClick={() => setProModalOpen(false)}
-                className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              Unlock unlimited 10-Judge Blind Panels, Gemini 2.5 Pro Multimodal Hit Telemetry, OCR Split Sheets, and
-              2.5x XP Boost across all 10 tools.
-            </p>
-
-            <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-2 text-xs">
-              <div className="flex justify-between text-zinc-300">
-                <span>Monthly Pro Pass</span>
-                <span className="font-mono font-bold text-white">$4.99</span>
-              </div>
-              <div className="flex justify-between text-zinc-400 text-[11px]">
-                <span>10 Synced Studios</span>
-                <span className="text-emerald-400 font-bold">Included</span>
-              </div>
-              <div className="flex justify-between text-zinc-400 text-[11px]">
-                <span>Cancel Anytime</span>
-                <span className="text-emerald-400 font-bold">100% Risk-Free</span>
-              </div>
-            </div>
-
-            {checkoutFeedback && (
-              <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>{checkoutFeedback}</span>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <button
-                onClick={handleStartProCheckout}
-                disabled={isProcessingCheckout}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-zinc-950 font-black text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                <Crown className="w-4 h-4" />
-                <span>{isProcessingCheckout ? 'Opening Stripe Checkout...' : 'Upgrade with Stripe ($4.99/mo)'}</span>
-              </button>
-
-              <button
-                onClick={() => setProModalOpen(false)}
-                className="w-full py-2 text-zinc-400 hover:text-zinc-200 text-xs font-semibold cursor-pointer"
-              >
-                Back to Free Experience
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

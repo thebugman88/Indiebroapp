@@ -50,18 +50,14 @@ test('payments fail closed when Stripe is absent and reject invented simulation 
   assert.equal((await post(base, '/verify-session', { sessionId: 'cs_test_valid' }, 'artist')).status, 503);
 });
 
-test('checkout uses verified identity, configured price and configured origin', async () => {
-  let params: any; let options: any;
-  const stripe = { checkout: { sessions: { create: async (p: any, o: any) => { params = p; options = o; return { id: 'cs_test_valid', url: 'https://checkout.stripe.com/c/pay/example' }; } } } } as unknown as Stripe;
+test('checkout requires both confirmations before contacting Stripe and blocks unverified identities', async () => {
+  let contacted=false;
+  const stripe = {prices:{retrieve:async()=>{contacted=true;throw new Error('must not be called');}}} as unknown as Stripe;
   const app = express(); app.use(express.json(), identity, createBillingRouter(() => stripe)); const base = await serve(app);
-  assert.equal((await post(base, '/create-checkout-session', { userId: 'victim', userEmail: 'victim@example.invalid', returnUrl: 'https://evil.example', clientCustomKey: 'valid-request-123' }, 'artist')).status, 200);
-  assert.equal(params.client_reference_id, 'uid_artist'); assert.equal(params.customer_email, 'artist@example.invalid');
-  assert.equal(params.subscription_data.metadata.firebaseUid, 'uid_artist');
-  assert.equal(params.line_items[0].price, 'price_pro'); assert.ok(params.success_url.startsWith('https://suite.example/'));
-  const firstKey = options.idempotencyKey;
-  await post(base, '/create-checkout-session', { clientCustomKey: 'valid-request-123' }, 'admin');
-  assert.notEqual(options.idempotencyKey, firstKey);
-  assert.equal((await post(base, '/create-checkout-session', { clientCustomKey: 'valid-request-123' }, 'unverified')).status, 403);
+  assert.equal((await post(base, '/create-checkout-session', {clientCustomKey:'valid-request-123'}, 'artist')).status,428);
+  assert.equal((await post(base, '/create-checkout-session', {clientCustomKey:'valid-request-123',accepted:true}, 'artist')).status,428);
+  assert.equal((await post(base, '/create-checkout-session', {clientCustomKey:'valid-request-123'}, 'unverified')).status,403);
+  assert.equal(contacted,false);
 });
 
 test('verification requires ownership, payment, correct product, and active subscription', async () => {

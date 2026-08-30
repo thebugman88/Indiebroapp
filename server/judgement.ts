@@ -1,3 +1,11 @@
+import {
+  reserveStorage,
+  finishStorage,
+  awardReviewCoins,
+  keyFor,
+  awardProfileCoins,
+  withWallet,
+} from "./economy";
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { getFirestore } from "firebase-admin/firestore";
@@ -214,14 +222,13 @@ judgementRouter.patch("/profile", async (req, res) => {
       }
       return next;
     });
+    await awardProfileCoins(res.locals.identity.uid).catch(() => {});
     res.json(result);
   } catch {
-    res
-      .status(400)
-      .json({
-        error:
-          "Profile changes were not saved. Check your preferences and connection.",
-      });
+    res.status(400).json({
+      error:
+        "Profile changes were not saved. Check your preferences and connection.",
+    });
   }
 });
 judgementRouter.post("/skip", async (_req, res) => {
@@ -233,11 +240,9 @@ judgementRouter.post("/skip", async (_req, res) => {
       }),
     );
   } catch {
-    res
-      .status(409)
-      .json({
-        error: "Skip was not confirmed. Check your quota and connection.",
-      });
+    res.status(409).json({
+      error: "Skip was not confirmed. Check your quota and connection.",
+    });
   }
 });
 judgementRouter.get("/tracks", async (_req, res) => {
@@ -297,33 +302,57 @@ judgementRouter.post("/tracks", async (req, res) => {
   }
   const path = `judgement/${data.ownerId}/${data.id}`;
   try {
+    await accountLegacyUploads(data.ownerId);
+    await reserveStorage(data.ownerId, data.id, audio.bytes.length);
     await bucket()
       .file(path)
       .save(audio.bytes, { resumable: false, contentType: audio.mimeType });
     data.audioPath = path;
+    data.audioBytes = audio.bytes.length;
     const visible = await publicTrack(data);
     await db().runTransaction(async (t) => {
       const ref = profiles().doc(data.ownerId);
       const doc = await t.get(ref);
+      const storageRef = db().doc(
+        `storageReservations/${keyFor(data.ownerId, data.id)}`,
+      );
+      const storage = await t.get(storageRef);
+      const walletRef = db().doc(`wallets/${data.ownerId}`);
+      const wallet = await t.get(walletRef);
+      if (storage.data()?.status !== "reserved" || !wallet.exists)
+        throw new Error("Upload reservation missing.");
       const p = doc.exists
         ? (doc.data() as UserJudgeProfile)
         : freshJudge(data.ownerId);
       if (!p.termsAccepted) throw new Error("Accept terms first.");
-      if (p.submittedTrackIds.length >= 100)
+      if (p.submittedTrackIds.length >= 1000)
         throw new Error("Track limit reached.");
+      t.update(walletRef, {
+        storageReserved: wallet.data()!.storageReserved - audio.bytes.length,
+        storageBytes: wallet.data()!.storageBytes + audio.bytes.length,
+      });
+      t.update(storageRef, { status: "stored", updatedAt: Date.now() });
       t.create(tracks().doc(data.id), data);
       t.set(ref, {
         ...p,
         submittedTrackIds: [data.id, ...p.submittedTrackIds],
       });
     });
+
     res.status(201).json(visible);
   } catch {
-    res
-      .status(503)
-      .json({
-        error: "Upload was not confirmed. Check your dossier before retrying.",
-      });
+    try {
+      const saved = await tracks().doc(data.id).get();
+      if (!saved.exists) {
+        await bucket().file(path).delete({ ignoreNotFound: true });
+        await finishStorage(data.ownerId, data.id, false);
+      }
+    } catch {
+      /* Retain reservation until recovery can verify storage. */
+    }
+    res.status(503).json({
+      error: "Upload was not confirmed. Check your dossier before retrying.",
+    });
   }
 });
 judgementRouter.post("/tracks/:id/listen", async (req, res) => {
@@ -369,21 +398,137 @@ judgementRouter.post("/tracks/:id/reviews", async (req, res) => {
       t.set(pr, result.profile);
       return result;
     });
+    await awardReviewCoins(uid).catch(() => {});
     res.status(201).json({ ...result, track: await publicTrack(result.track) });
   } catch (e: any) {
+    res.status(409).json({
+      error: [
+        "You cannot review this track.",
+        "Review already submitted or track closed.",
+        "Accept the terms and check your daily quota.",
+        "Start listening and wait for the minimum review time.",
+        "Scores must be between 1 and 10.",
+        "Add at least 15 characters of feedback.",
+      ].includes(e.message)
+        ? e.message
+        : "Review was not confirmed. Reload before retrying.",
+    });
+  }
+});
+
+// Interrupted uploads retain their quota reservation until the object can be checked/deleted.
+export async function recoverUploads() {
+  if (!process.env.FIREBASE_STORAGE_BUCKET) return;
+  const pending = await db()
+    .collection("storageReservations")
+    .where("status", "in", ["reserved", "recovering"])
+    .where("expiresAt", "<=", Date.now())
+    .orderBy("expiresAt", "asc")
+    .limit(50)
+    .get();
+  for (const doc of pending.docs) {
+    const r = doc.data();
+    if (!r.uploadId) continue;
+    const claimed = await db().runTransaction(async (t) => {
+      const current = await t.get(doc.ref);
+      const track = await t.get(tracks().doc(r.uploadId));
+      if (
+        !["reserved", "recovering"].includes(current.data()!.status) ||
+        track.exists
+      )
+        return false;
+      t.update(doc.ref, { status: "recovering" });
+      return true;
+    });
+    if (!claimed) continue;
+    await bucket()
+      .file(`judgement/${r.uid}/${r.uploadId}`)
+      .delete({ ignoreNotFound: true });
+    await withWallet(r.uid, async (w, t) => {
+      const current = await t.get(doc.ref);
+      if (current.data()?.status !== "recovering") return;
+      w.storageReserved = Math.max(0, w.storageReserved - r.bytes);
+      t.update(doc.ref, { status: "released", updatedAt: Date.now() });
+    });
+  }
+}
+judgementRouter.get("/my-uploads", async (_req, res) => {
+  try {
+    const docs = await tracks()
+      .where("ownerId", "==", res.locals.identity.uid)
+      .limit(1000)
+      .get();
+    res.json(
+      docs.docs.map((d) => ({
+        id: d.id,
+        title: d.data().title,
+        bytes: d.data().audioBytes || 0,
+      })),
+    );
+  } catch {
+    res.sendStatus(503);
+  }
+});
+judgementRouter.delete("/tracks/:id", async (req, res) => {
+  const uid = res.locals.identity.uid;
+  try {
+    const id = safeId(req.params.id),
+      ref = tracks().doc(id),
+      doc = await ref.get();
+    if (!doc.exists) {
+      res.json({ success: true });
+      return;
+    }
+    if (doc.data()!.ownerId !== uid) {
+      res.sendStatus(404);
+      return;
+    }
+    await bucket().file(doc.data()!.audioPath).delete({ ignoreNotFound: true });
+    await withWallet(uid, async (w, t) => {
+      const current = await t.get(ref);
+      const profileRef = profiles().doc(uid),
+        profile = await t.get(profileRef);
+      if (!current.exists) return;
+      if (current.data()!.ownerId !== uid) throw new Error();
+      w.storageBytes = Math.max(
+        0,
+        w.storageBytes - (current.data()!.audioBytes || 0),
+      );
+      t.delete(ref);
+      if (profile.exists)
+        t.update(profileRef, {
+          submittedTrackIds: (profile.data()!.submittedTrackIds || []).filter(
+            (x: string) => x !== id,
+          ),
+        });
+    });
+    res.json({ success: true });
+  } catch {
     res
-      .status(409)
+      .status(503)
       .json({
-        error: [
-          "You cannot review this track.",
-          "Review already submitted or track closed.",
-          "Accept the terms and check your daily quota.",
-          "Start listening and wait for the minimum review time.",
-          "Scores must be between 1 and 10.",
-          "Add at least 15 characters of feedback.",
-        ].includes(e.message)
-          ? e.message
-          : "Review was not confirmed. Reload before retrying.",
+        error: "Deletion was not confirmed. Retry to finish releasing storage.",
       });
   }
 });
+
+async function accountLegacyUploads(uid: string) {
+  const existing = await tracks().where("ownerId", "==", uid).get();
+  for (const doc of existing.docs) {
+    const track = doc.data();
+    if (Number.isSafeInteger(track.audioBytes) && track.audioBytes >= 0)
+      continue;
+    if (!track.audioPath) continue;
+    const [metadata] = await bucket().file(track.audioPath).getMetadata();
+    const bytes = Number(metadata.size);
+    if (!Number.isSafeInteger(bytes) || bytes < 0)
+      throw new Error("Existing storage accounting is unavailable.");
+    await withWallet(uid, async (w, t) => {
+      const current = await t.get(doc.ref);
+      if (!current.exists || Number.isSafeInteger(current.data()!.audioBytes))
+        return;
+      w.storageBytes += bytes;
+      t.update(doc.ref, { audioBytes: bytes });
+    });
+  }
+}

@@ -1,3 +1,25 @@
+import {
+  walletSnapshot,
+  refreshWallet,
+  reserveUsage,
+  settleUsage,
+  reserveStorage,
+  finishStorage,
+  economyRouter,
+  usageMiddleware,
+  keyFor,
+  awardReviewCoins,
+  awardProfileCoins,
+} from "../server/economy";
+import {
+  initializePayment,
+  bindCheckout,
+  fulfillCheckout,
+  recordPaymentException,
+  reconcilePayments,
+} from "../server/payments";
+import { createBillingRouter } from "../server/billing";
+import { TERMS_VERSION, ECONOMY_VERSION } from "../shared/economy";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -141,6 +163,17 @@ before(async () => {
   app.get("/admin", requireAdmin, (_req, res) => res.json({ ok: true }));
   app.use("/judgement", judgementRouter);
   app.use("/dm", createMessagingRouter());
+  app.use("/api/economy", economyRouter);
+  app.use(
+    "/billing",
+    createBillingRouter(() => fakeStripe),
+  );
+  app.use(usageMiddleware);
+  app.post("/api/generate-lyrics", (req, res) => {
+    providerCalls++;
+    if (req.body.fail) res.status(502).json({ error: "provider failed" });
+    else res.json({ text: "Verified test output" });
+  });
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", r));
   base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -158,6 +191,12 @@ after(async () => {
 
 test("repository rule file denies all direct browser access, including forged admin claims", async () => {
   const paths = [
+    "wallets/browser-forgery",
+    "coinLedger/browser-forgery",
+    "paymentOrders/browser-forgery",
+    "usageJobs/browser-forgery",
+    "storageReservations/browser-forgery",
+    "coinRewards/browser-forgery",
     "tracks/legacy",
     "userProfiles/alice",
     "judgeTracksV2/track",
@@ -336,5 +375,408 @@ test("real Firestore transactions deduplicate billing events and resist stale re
   assert.equal(
     (await db.doc("billingSubscriptions/sub_local").get()).data()!.status,
     "canceled",
+  );
+});
+
+let providerCalls = 0;
+let checkoutParams: any, checkoutOptions: any;
+const fakeStripe = {
+  prices: {
+    retrieve: async (id: string) => ({
+      id,
+      active: true,
+      currency: "usd",
+      unit_amount: id === "price_pro" ? 499 : 99,
+      recurring:
+        id === "price_pro" ? { interval: "month", interval_count: 1 } : null,
+    }),
+  },
+  checkout: {
+    sessions: {
+      create: async (p: any, o: any) => {
+        checkoutParams = p;
+        checkoutOptions = o;
+        return {
+          id: "cs_test_" + o.idempotencyKey,
+          url: "https://checkout.stripe.com/c/pay/test",
+        };
+      },
+      listLineItems: async () => ({
+        data: [{ quantity: 1, price: { id: "price_coins100" } }],
+      }),
+    },
+  },
+} as unknown as Stripe;
+
+test("wallet reservations prevent concurrent overspending and duplicate charges; failures refund exactly once", async () => {
+  const uid = "wallet-concurrency";
+  await db
+    .doc(`wallets/${uid}`)
+    .set({ ...refreshWallet(undefined, false), monthly: 10, purchased: 0 });
+  const results = await Promise.allSettled([
+    reserveUsage(uid, "request-first", "/api/generate-lyrics"),
+    reserveUsage(uid, "request-second", "/api/generate-lyrics"),
+  ]);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  const job = (
+    results.find((r) => r.status === "fulfilled") as PromiseFulfilledResult<any>
+  ).value;
+  assert.equal((await walletSnapshot(uid)).total, 0);
+  const id =
+    job.id === keyFor(uid, "request-first")
+      ? "request-first"
+      : "request-second";
+  assert.equal(
+    (await reserveUsage(uid, id, "/api/generate-lyrics")).replayed,
+    true,
+  );
+  await Promise.all([
+    settleUsage(job.id, uid, false),
+    settleUsage(job.id, uid, false),
+  ]);
+  assert.equal((await walletSnapshot(uid)).total, 10);
+});
+test("AI requests require price consent and bind idempotency to input; delivered results remain owner-only", async () => {
+  const body = { lyrics: "original words" },
+    id = "ai-consent-request";
+  const call = (payload: any, consent = true) =>
+    fetch(base + "/api/generate-lyrics", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        "Content-Type": "application/json",
+        "x-request-id": id,
+        ...(consent
+          ? { "x-economy-version": ECONOMY_VERSION, "x-coin-consent": "10" }
+          : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+  const before = (await walletSnapshot("bob")).total;
+  assert.equal((await call(body, false)).status, 428);
+  assert.equal((await call(body)).status, 200);
+  assert.equal((await call(body)).status, 200);
+  assert.equal(providerCalls, 1);
+  assert.equal((await call({ lyrics: "changed" })).status, 409);
+  assert.equal((await walletSnapshot("bob")).total, before - 10);
+  assert.equal(
+    (await request("/api/economy/jobs/" + keyFor("bob", id), "alice")).status,
+    404,
+  );
+  assert.equal(
+    (
+      await (
+        await request("/api/economy/jobs/" + keyFor("bob", id), "bob")
+      ).json()
+    ).response.text,
+    "Verified test output",
+  );
+  const r = await fetch(base + "/api/generate-lyrics", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${tokens.bob}`,
+      "Content-Type": "application/json",
+      "x-request-id": "failure-request-id",
+      "x-economy-version": ECONOMY_VERSION,
+      "x-coin-consent": "10",
+    },
+    body: JSON.stringify({ fail: true }),
+  });
+  assert.equal(r.status, 502);
+  assert.equal((await walletSnapshot("bob")).total, before - 10);
+});
+test("storage buys once per request, survives downgrade and upload reservations cannot exceed quota", async () => {
+  await db
+    .doc("wallets/carol")
+    .set({ ...refreshWallet(undefined, false), monthly: 1000 });
+  const body = {
+    pack: "gb10",
+    requestId: "storage-request-123",
+    termsVersion: TERMS_VERSION,
+    confirmed: true,
+  };
+  assert.equal(
+    (await request("/api/economy/storage", "carol", "POST", body)).status,
+    200,
+  );
+  assert.equal(
+    (await request("/api/economy/storage", "carol", "POST", body)).status,
+    200,
+  );
+  let w = await walletSnapshot("carol");
+  assert.equal(w.total, 300);
+  assert.equal(w.storageLimitBytes, 11e9);
+  await reserveStorage("carol", "upload-one", 10e9);
+  await assert.rejects(reserveStorage("carol", "upload-two", 2e9));
+  await finishStorage("carol", "upload-one", false);
+  await finishStorage("carol", "upload-one", false);
+  w = await walletSnapshot("carol");
+  assert.equal(w.storageReserved, 0);
+  assert.equal(w.storageBytes, 0);
+  assert.equal(w.extraStorageBytes, 10e9);
+  await assert.rejects(reserveStorage("carol", "bad-upload", -1));
+});
+test("profile and validated review rewards are deduplicated and monthly capped", async () => {
+  const uid = "reward-artist";
+  await db.doc(`judgeProfilesV2/${uid}`).set({
+    ...freshJudge(uid),
+    name: "Artist",
+    termsAccepted: true,
+    tasteProfile: { preferredGenres: ["rap"] },
+    auditsCompletedTotal: 5,
+  });
+  assert.equal(await awardProfileCoins(uid), 5);
+  assert.equal(await awardProfileCoins(uid), 0);
+  assert.equal(await awardReviewCoins(uid), 5);
+  assert.equal(await awardReviewCoins(uid), 0);
+  for (let n = 2; n <= 12; n++) {
+    await db
+      .doc(`judgeProfilesV2/${uid}`)
+      .update({ auditsCompletedTotal: n * 5 });
+    await awardReviewCoins(uid);
+  }
+  const w = await walletSnapshot(uid);
+  assert.equal(w.earned, 50);
+  assert.equal(w.total, 200);
+});
+async function paidOrder(uid: string, key: string) {
+  const order = await initializePayment(uid, key, "coins100", 100);
+  await db
+    .doc(`paymentOrders/${order.id}`)
+    .update({ priceId: "price_coins100" });
+  const session = {
+    id: "cs_test_" + key,
+    client_reference_id: uid,
+    metadata: { orderId: order.id, firebaseUid: uid },
+    currency: "usd",
+    amount_subtotal: 99,
+    payment_status: "paid",
+    status: "complete",
+    mode: "payment",
+    consent: { terms_of_service: "accepted" },
+    payment_intent: "pi_" + key,
+    url: "https://checkout.stripe.com/c/pay/test",
+  } as unknown as Stripe.Checkout.Session;
+  await bindCheckout(order.id, session);
+  return { order, session };
+}
+test("verified payments fulfill exactly once; forged ownership, price and amount cannot mint Coins", async () => {
+  const uid = "paid-artist";
+  const { order, session } = await paidOrder(uid, "paidrequest");
+  await assert.rejects(
+    fulfillCheckout(fakeStripe, { ...session, client_reference_id: "victim" }),
+  );
+  await assert.rejects(
+    fulfillCheckout(fakeStripe, { ...session, amount_subtotal: 1 }),
+  );
+  const wrongStripe = {
+    checkout: {
+      sessions: {
+        listLineItems: async () => ({
+          data: [{ quantity: 1, price: { id: "wrong_price" } }],
+        }),
+      },
+    },
+  } as unknown as Stripe;
+  await assert.rejects(fulfillCheckout(wrongStripe, session));
+  assert.equal((await walletSnapshot(uid)).purchased, 0);
+  await Promise.all([
+    fulfillCheckout(fakeStripe, session),
+    fulfillCheckout(fakeStripe, session),
+  ]);
+  assert.equal((await walletSnapshot(uid)).purchased, 100);
+  assert.equal(
+    (await db.doc(`paymentOrders/${order.id}`).get()).data()!.status,
+    "fulfilled",
+  );
+  const stages = await db.collection(`paymentOrders/${order.id}/events`).get();
+  assert.equal(stages.size, 4);
+  const charge = {
+    id: "ch_paid",
+    payment_intent: session.payment_intent,
+    amount: 99,
+    amount_refunded: 99,
+  } as Stripe.Charge;
+  await recordPaymentException(charge, "refunded");
+  await recordPaymentException(charge, "refunded");
+  await fulfillCheckout(fakeStripe, session);
+  assert.equal((await walletSnapshot(uid)).purchased, 0);
+  assert.equal(
+    (await db.doc(`paymentOrders/${order.id}`).get()).data()!.status,
+    "refunded",
+  );
+});
+test("out-of-order refund before delivery never mints Coins or takes unrelated purchases", async () => {
+  const uid = "early-refund";
+  await db
+    .doc(`wallets/${uid}`)
+    .set({ ...refreshWallet(undefined, false), purchased: 250 });
+  const { order, session } = await paidOrder(uid, "earlyrefund");
+  await recordPaymentException(
+    {
+      id: "ch_early",
+      payment_intent: session.payment_intent,
+      amount: 99,
+      amount_refunded: 99,
+    } as Stripe.Charge,
+    "refunded",
+  );
+  await fulfillCheckout(fakeStripe, session);
+  assert.equal((await walletSnapshot(uid)).purchased, 250);
+  assert.equal(
+    (await db.doc(`paymentOrders/${order.id}`).get()).data()!.status,
+    "refunded",
+  );
+});
+test("checkout uses verified identity, exact configured prices, accepted terms and stable per-user idempotency", async () => {
+  process.env.STRIPE_PRICE_ID_COINS100 = "price_coins100";
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_emulator_only";
+  process.env.APP_PUBLIC_URL = "https://suite.example";
+  const body = {
+    productId: "coins100",
+    clientCustomKey: "checkout-request-123",
+    termsVersion: TERMS_VERSION,
+    accepted: true,
+    finalConfirmed: true,
+    expectedCoins: 100,
+    userId: "victim",
+    userEmail: "victim@example.test",
+    returnUrl: "https://evil.example",
+    cents: 1,
+  };
+  assert.equal(
+    (await request("/billing/create-checkout-session", "alice", "POST", body))
+      .status,
+    200,
+  );
+  assert.equal(checkoutParams.client_reference_id, "alice");
+  assert.equal(checkoutParams.customer_email, "alice@example.test");
+  assert.equal(checkoutParams.line_items[0].price, "price_coins100");
+  assert.equal(checkoutParams.consent_collection.terms_of_service, "required");
+  assert.ok(checkoutParams.success_url.startsWith("https://suite.example/"));
+  const options = checkoutOptions;
+  assert.equal(
+    (await request("/billing/create-checkout-session", "bob", "POST", body))
+      .status,
+    200,
+  );
+  assert.notEqual(checkoutOptions.idempotencyKey, options.idempotencyKey);
+  assert.equal(
+    (
+      await request(
+        "/billing/create-checkout-session",
+        "unverified",
+        "POST",
+        body,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request("/billing/create-checkout-session", "alice", "POST", {
+        ...body,
+        clientCustomKey: "forged-coins-request",
+        expectedCoins: 999999,
+      })
+    ).status,
+    502,
+  );
+  const [a, b] = await Promise.all([
+    initializePayment("pro-mutex", "mutex-request-one", "pro", 0),
+    initializePayment("pro-mutex", "mutex-request-two", "pro", 0),
+  ]);
+  assert.equal(a.id, b.id);
+});
+
+test("monitor recovers a lost checkout binding and an expired cross-month AI reservation", async () => {
+  const uid = "monitor-artist";
+  const order = await initializePayment(
+    uid,
+    "monitor-checkout",
+    "coins100",
+    100,
+  );
+  await db
+    .doc(`paymentOrders/${order.id}`)
+    .update({ priceId: "price_coins100" });
+  const session = {
+    id: "cs_test_monitor",
+    metadata: { orderId: order.id, firebaseUid: uid },
+    client_reference_id: uid,
+    mode: "payment",
+    payment_status: "paid",
+    status: "complete",
+    currency: "usd",
+    amount_subtotal: 99,
+    payment_intent: "pi_monitor",
+    consent: { terms_of_service: "accepted" },
+    url: null,
+  } as unknown as Stripe.Checkout.Session;
+  const job = await reserveUsage(uid, "monitor-ai-job", "/api/generate-lyrics");
+  await db
+    .doc(`usageJobs/${job.id}`)
+    .update({ expiresAt: Date.now() - 1, "debit.month": "2000-01" });
+  const stripe = {
+    checkout: {
+      sessions: {
+        list: async () => ({ data: [session], has_more: false }),
+        retrieve: async () => {
+          throw new Error("Unrelated pending order");
+        },
+        listLineItems: async () => ({
+          data: [{ quantity: 1, price: { id: "price_coins100" } }],
+        }),
+      },
+    },
+  } as unknown as Stripe;
+  await reconcilePayments(stripe);
+  const w = await walletSnapshot(uid);
+  assert.equal(w.monthly, 140);
+  assert.equal(w.purchased, 110);
+  assert.equal(
+    (await db.doc(`paymentOrders/${order.id}`).get()).data()!.status,
+    "fulfilled",
+  );
+  assert.equal(
+    (await db.doc(`usageJobs/${job.id}`).get()).data()!.status,
+    "credited",
+  );
+});
+test("Pro purchase bonuses come from live server entitlements, and expired entitlements lose the bonus", async () => {
+  const uid = "bonus-artist";
+  await db
+    .doc("billingSubscriptions/sub_bonus")
+    .set({
+      uid,
+      status: "active",
+      items: [
+        {
+          priceId: process.env.STRIPE_PRICE_ID_PRO,
+          expiresAt: Date.now() + 3600000,
+        },
+      ],
+    });
+  const one = await initializePayment(uid, "bonus-small-pack", "coins100", 125);
+  const two = await initializePayment(uid, "bonus-large-pack", "coins250", 315);
+  assert.equal(one.coins, 125);
+  assert.equal(two.coins, 315);
+  assert.equal((await walletSnapshot(uid)).monthly, 1500);
+  await assert.rejects(
+    initializePayment(uid, "forged-bonus-pack", "coins250", 999),
+  );
+  await db
+    .doc("billingSubscriptions/sub_bonus")
+    .update({
+      items: [
+        { priceId: process.env.STRIPE_PRICE_ID_PRO, expiresAt: Date.now() - 1 },
+      ],
+    });
+  await assert.rejects(
+    initializePayment(uid, "expired-bonus-pack", "coins250", 315),
+  );
+  assert.equal(
+    (await initializePayment(uid, "free-large-pack", "coins250", 250)).coins,
+    250,
   );
 });

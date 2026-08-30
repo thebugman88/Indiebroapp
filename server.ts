@@ -1,3 +1,6 @@
+import { economyRouter, usageMiddleware, economyDb } from './server/economy';
+import { startPaymentMonitor } from './server/payments';
+import { PURCHASE_POLICY } from './shared/economy';
 import { judgementRouter } from './server/judgement';
 import { attachRealtime } from './server/realtime';
 import { createMessagingRouter } from './server/messaging';
@@ -20,7 +23,6 @@ import {
   DEFAULT_MODEL_CHAIN,
   getGeminiClient,
 } from './server/aiResilience';
-import { getTransactionAuditRecords } from './server/transactionAudit';
 import {
   codeSentinelMiddleware,
   getSecurityStats,
@@ -64,7 +66,7 @@ app.post('/api/stripe/webhook', ...createStripeWebhook(getStripeClient));
 
 // Public metadata is explicitly allowlisted; every other API requires verified identity.
 app.use('/api', (req, res, next) => {
-  if (req.method === 'GET' && ['/health', '/stripe/config'].includes(req.path)) return next();
+  if (req.method === 'GET' && ['/health', '/stripe/config', '/legal/terms'].includes(req.path)) return next();
   return requireAuth(req, res, next);
 });
 app.use(['/api/admin', '/api/audit', '/api/resilience'], requireAdmin);
@@ -77,6 +79,9 @@ app.use(express.json({ limit: '22mb' }));
 // Attach AI Code Sentinel & Threat Detection Observer
 app.use('/api', codeSentinelMiddleware);
 app.use('/api/stripe', createBillingRouter(getStripeClient));
+app.use(usageMiddleware);
+app.get('/api/legal/terms',(_req,res)=>res.type('text/plain').send('IndieBrotherhood — Purchase Terms and AI Disclosure\n\n'+PURCHASE_POLICY));
+app.use('/api/economy',economyRouter);
 app.use(semanticRouter);
 app.use(extraAiRouter);
 app.use('/api/dm', createMessagingRouter());
@@ -213,13 +218,11 @@ app.get('/api/stripe/config', (_req, res) => {
   });
 });
 
-app.get('/api/audit/transactions', (_req, res) => {
-  const records = getTransactionAuditRecords();
-  res.json({
-    success: true,
-    count: records.length,
-    records,
-  });
+app.get('/api/audit/transactions', async (_req, res) => {
+  try { const docs = await economyDb().collection('paymentOrders').orderBy('updatedAt','desc').limit(50).get();
+    const records=docs.docs.map(d=>({transactionId:d.id,idempotencyKey:d.id,status:d.data().status,stage:d.data().status,amountUsd:d.data().cents/100,needsReview:!!d.data().needsReview}));
+    res.json({success:true,count:records.length,records});
+  } catch { res.status(503).json({error:'Durable payment records unavailable.'}); }
 });
 
 // -------------------------------------------------------------
@@ -931,6 +934,8 @@ GUIDELINES:
 // 10. WEBSOCKET MULTIPLEXER (HANG OUT & MEETING ROOM)
 // -------------------------------------------------------------
 const realtime = attachRealtime(httpServer);
+const stopPaymentMonitor=startPaymentMonitor(getStripeClient);
+httpServer.on('close',stopPaymentMonitor);
 
 // -------------------------------------------------------------
 // 10B. MASTER ADMIN BROADCAST & ROSTER CONTROL APIS

@@ -1,3 +1,4 @@
+import { requestPurchase } from '../components/PurchaseDialog';
 import { authenticatedFetch } from '../services/authService';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
@@ -174,27 +175,9 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setProfile(updated);
   }, []);
 
-  const cancelPro = useCallback(() => {
-    const updated = cancelProSubscription();
-    setProfile(updated);
-  }, []);
+  const cancelPro = useCallback(() => { void authenticatedFetch('/api/stripe/cancel', { method: 'POST' }).then(async r => { const data = await r.json(); window.alert(data.message || data.error || 'Cancellation not confirmed.'); }).catch(() => window.alert('Cancellation not confirmed. Please retry.')); }, []);
 
-  const startStripeCheckout = useCallback(async (_returnUrl?: string) => {
-    try {
-      const res = await authenticatedFetch('/api/stripe/create-checkout-session', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientCustomKey: crypto.randomUUID() })
-      });
-      const data = await res.json();
-      if (!res.ok || typeof data.url !== 'string') return { success: false, error: data.error || 'Checkout is unavailable.' };
-      const url = new URL(data.url);
-      if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com') return { success: false, error: 'Unexpected checkout destination.' };
-      window.location.assign(url.href);
-      return { success: true, url: url.href };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Checkout failed. No subscription was activated.' };
-    }
-  }, []);
+  const startStripeCheckout = useCallback(async (_returnUrl?: string) => { requestPurchase('pro'); return { success: true }; }, []);
 
   const verifyCheckoutSession = useCallback(async (sessionId: string) => {
     try {

@@ -20,6 +20,19 @@ app.post("/api/ai/ocr-parse", async (req, res) => {
       documentType = "general",
     } = req.body;
 
+    if (
+      imageBase64 &&
+      !["image/png", "image/jpeg", "image/webp"].includes(mimeType)
+    ) {
+      res
+        .status(400)
+        .json({
+          error:
+            "Enhanced OCR accepts one PNG, JPEG or WebP page per request (5 BC). Convert multi-page documents to individual images first.",
+        });
+      return;
+    }
+
     if (!imageBase64 && !rawText) {
       return res
         .status(400)

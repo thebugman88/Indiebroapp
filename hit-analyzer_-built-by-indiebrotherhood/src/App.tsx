@@ -1,3 +1,4 @@
+import { decodeAudioBuffer } from '../../src/services/webAudioEngine';
 import { authenticatedFetch } from '../../src/services/authService';
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
@@ -12,6 +13,19 @@ import { AnalysisResult } from './types';
 import { Flame, Radio, Loader2, Sparkles, ArrowUpRight } from 'lucide-react';
 
 export default function App() {
+  const [basic, setBasic] = useState<string | null>(null);
+  const [basicBusy, setBasicBusy] = useState(false);
+  async function analyzeBasic() {
+    if (!audioData) { setErrorMessage('Upload audio for free local measurements.'); return; }
+    setBasicBusy(true); setErrorMessage(null);
+    try {
+      const buffer = await decodeAudioBuffer(audioData);
+      let peak=0, squares=0, count=0;
+      for(let c=0;c<buffer.numberOfChannels;c++){const samples=buffer.getChannelData(c);for(let i=0;i<samples.length;i++){peak=Math.max(peak,Math.abs(samples[i]));squares+=samples[i]*samples[i];count++;}}
+      const db=(v:number)=>v>0?(20*Math.log10(v)).toFixed(1):'−∞';
+      setBasic(`Duration ${buffer.duration.toFixed(1)} s · ${buffer.sampleRate} Hz · ${buffer.numberOfChannels} channels · Sample peak ${db(peak)} dBFS · RMS ${db(Math.sqrt(squares/Math.max(1,count)))} dBFS`);
+    } catch { setErrorMessage('This audio could not be decoded locally. Try a supported audio file.'); } finally { setBasicBusy(false); }
+  }
   // Audio state
   const [selectedAudioName, setSelectedAudioName] = useState<string>('');
   const [artistName, setArtistName] = useState<string>('');
@@ -54,6 +68,7 @@ export default function App() {
     setSelectedAudioName(data.audioName);
     setArtistName(data.artistName);
     setAudioData(data.audioData);
+    setBasic(null);
     setAudioUrl(data.audioUrl);
     setInputMethod(data.inputMethod);
     setMimeType(data.mimeType);
@@ -204,6 +219,11 @@ export default function App() {
           {/* Copyright Guard Bar */}
           <CopyrightGuardBar onOpenTerms={() => handleOpenHelp('tos')} />
 
+          <section className="rounded-2xl border border-slate-700 p-4 space-y-3">
+            <button disabled={basicBusy} onClick={analyzeBasic} className="rounded-xl bg-emerald-600 text-white font-bold p-3">{basicBusy ? 'Measuring…' : 'Basic local audio analysis · Free'}</button>
+            <p className="text-xs text-slate-400">Measured in your browser. No upload, Coins, hit prediction, or copyright claim.</p>
+            {basic && <p className="text-sm text-emerald-200">{basic}</p>}
+          </section>
           {/* ANALYZE BUTTON */}
           <div className="text-center pt-2">
             <button
@@ -224,7 +244,7 @@ export default function App() {
               ) : (
                 <>
                   <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
-                  <span>Analyze Hit Potential</span>
+                  <span>Full AI Analysis · 25 BC</span>
                   <ArrowUpRight className="w-5 h-5" />
                 </>
               )}

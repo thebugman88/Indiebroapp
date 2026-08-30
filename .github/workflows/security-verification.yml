@@ -2,7 +2,7 @@ name: Security verification
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, fix/security-foundation]
   push:
     branches: [main]
   workflow_dispatch:
