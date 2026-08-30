@@ -30,9 +30,9 @@ The first commit addressed only the security foundation. This checklist tracks t
 
 ## Validation
 
-Local result: TypeScript check and production build passed; 11 security tests and 1 production smoke test passed. Vite still reports existing large-chunk warnings.
+Local result: TypeScript check and production build passed; 11 security tests, 7 Firebase emulator integration tests and 1 production smoke test passed. Vite still reports existing large-chunk warnings.
 
-Run `npm run lint`, `npm run test:security`, `npm run build`, then `npm run test:production` from the root. Security tests exercise actual HTTP and WebSocket servers with injected identities/provider/storage doubles, plus pure review validation. They do not prove deployed IAM, Firestore rules or transaction behavior, actual Stripe fulfillment, microphone behavior, or live Gemini output quality.
+Run `npm run lint`, `npm run test:security`, `npm run build`, then `npm run test:production` from the root. Security tests exercise actual HTTP and WebSocket servers with injected identities/provider/storage doubles, plus pure review validation. The additional `npm run test:firebase` exercises the repository rules and real Auth/Firestore emulator behavior, including competing writes. These checks do not prove deployed IAM/rules/indexes, production transaction behavior, actual Stripe fulfillment, microphone behavior, or live Gemini output quality.
 
 ## Remaining operational gates
 

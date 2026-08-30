@@ -5,3 +5,8 @@ logs/
 .env.*
 !.env.example
 coverage/
+
+# Local Firebase emulator output
+.firebase/
+*-debug.log
+*-debug.*.log
