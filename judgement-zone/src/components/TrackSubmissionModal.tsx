@@ -19,7 +19,7 @@ import { ArtistTrack, TrackGenre } from '../types';
 import { audioEngine } from '../utils/audioEngine';
 
 interface TrackSubmissionModalProps {
-  onTrackSubmitted: (newTrack: ArtistTrack) => void;
+  onTrackSubmitted: (newTrack: ArtistTrack, file: File) => Promise<ArtistTrack>;
   onNavigateToDossier: () => void;
 }
 
@@ -46,15 +46,15 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
   const [genre, setGenre] = useState<TrackGenre>('Hip-Hop / BoomBap');
   const [subGenre, setSubGenre] = useState('');
   const [mood, setMood] = useState('Energetic & Gritty');
-  const [bpm, setBpm] = useState<number | undefined>(120);
-  const [keySignature, setKeySignature] = useState('C Minor');
+  const [bpm, setBpm] = useState<number | undefined>(undefined);
+  const [keySignature, setKeySignature] = useState('');
   const [lyricsText, setLyricsText] = useState('');
   const [coverArtUrl, setCoverArtUrl] = useState('');
 
   // Audio Upload & Duration State
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
-  const [durationSeconds, setDurationSeconds] = useState<number>(75);
+  const [durationSeconds, setDurationSeconds] = useState<number>(0);
   const [audioPreviewPlaying, setAudioPreviewPlaying] = useState(false);
 
   // Legal & Warranty Certification
@@ -80,6 +80,7 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
     }
 
     const objectUrl = URL.createObjectURL(file);
+    setDurationSeconds(0);
     setAudioFile(file);
     setAudioBlobUrl(objectUrl);
     setErrorMsg(null);
@@ -113,7 +114,7 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !artistName.trim()) {
       setErrorMsg('Track title and artist/stage name are required.');
@@ -130,10 +131,11 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
       return;
     }
 
+    if(!audioFile||!durationSeconds){setErrorMsg('Select a playable audio file and wait for its duration to load.');return;}
     setIsSubmitting(true);
     setErrorMsg(null);
 
-    setTimeout(() => {
+    try {
       const trackId = `track-user-${Date.now()}`;
       const defaultCover =
         coverArtUrl ||
@@ -157,9 +159,9 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
         genre,
         subGenre: subGenre.trim() || 'Indie Original',
         mood: mood.trim(),
-        bpm: bpm || 120,
-        keySignature: keySignature.trim() || 'C Minor',
-        durationSeconds: durationSeconds || 75,
+        ...(bpm ? {bpm} : {}),
+        keySignature: keySignature.trim(),
+        durationSeconds,
         lyricsText: lyricsText.trim(),
         coverArt: defaultCover,
         audioBlobUrl: audioBlobUrl || undefined,
@@ -173,8 +175,8 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
         aggregatedScores
       };
 
-      onTrackSubmitted(newTrack);
-      setSubmittedTrackData(newTrack);
+      const saved=await onTrackSubmitted(newTrack,audioFile);
+      setSubmittedTrackData(saved);
       setIsSuccess(true);
       setIsSubmitting(false);
 
@@ -184,7 +186,7 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
         spread: 80,
         origin: { y: 0.5 }
       });
-    }, 800);
+    } catch(e:any){setErrorMsg(e.message);} finally {setIsSubmitting(false);}
   };
 
   if (isSuccess && submittedTrackData) {

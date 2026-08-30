@@ -42,105 +42,13 @@ export const SemanticLab: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ALL' | 'FLOW_MATRIX' | 'HIT_PREDICTOR'>('ALL');
   const [synthesisCount, setSynthesisCount] = useState<number>(0);
 
-  // Initial auto-seed or pre-synthesis state on mount
-  useEffect(() => {
-    // Results must come from an explicit AI request, not a seeded demo response.
-    return;
-    // Initial seeded synthesis state for instant gratification
-    const initialSeed: SynthesisResult = {
-      synthesizedText: `Stepping out the shadows with that raw frequency locked\nDigital adrenaline, zero-lag never stopped\nWriting in the matrix where the algorithms bleed\nSonic independence is the only law we need`,
-      peakProbability: 98.2,
-      sonicSaturation: 'MEDIUM',
-      eraCompatibility: 'OPTIMAL',
-      metrics: {
-        catchiness: 94,
-        emotionalResonance: 91,
-        replayability: 96,
-        earwormFactor: 95,
-        marketVelocity: 92,
-        hookLineHighlight: 'Sonic independence is the only law we need',
-        sonicNotes: [
-          'Harmonically tuned to Neo-Cyber 2026 frequency spectrum.',
-          'Clean vocal dynamics with sub-harmonic sidechain compression.',
-          'Cadence lock centered at 140 BPM with 0.4ms pocket variance.',
-        ],
-      },
-      flowMatrix: {
-        schemeType: 'AABB',
-        recommendedBpm: 140,
-        bpmFitLabel: '140 BPM (Double-Time Kinetic Bounce)',
-        pocketDriftMs: 0.4,
-        cadenceDescription: 'High-velocity 16th pocket delivery with rhyming anchors on downbeats 2 & 4.',
-        bars: [
-          {
-            barNumber: 1,
-            originalText: 'Stepping out the shadows with the frequency locked',
-            refactoredText: 'Stepping out the shadows with that raw frequency locked',
-            schemeTag: 'A',
-            syllableCount: 14,
-            cadenceSpeedBpm: 140,
-            stressPattern: '· — · — — · — ·',
-            rhymingTokens: ['locked', 'frequency'],
-          },
-          {
-            barNumber: 2,
-            originalText: 'Digital adrenaline, the system never stopped',
-            refactoredText: 'Digital adrenaline, zero-lag never stopped',
-            schemeTag: 'A',
-            syllableCount: 13,
-            cadenceSpeedBpm: 140,
-            stressPattern: '— · — · — · — ·',
-            rhymingTokens: ['stopped', 'adrenaline'],
-          },
-          {
-            barNumber: 3,
-            originalText: 'Writing in the matrix where the algorithms bleed',
-            refactoredText: 'Writing in the matrix where the algorithms bleed',
-            schemeTag: 'B',
-            syllableCount: 15,
-            cadenceSpeedBpm: 140,
-            stressPattern: '· — · — — · — ·',
-            rhymingTokens: ['bleed', 'matrix'],
-          },
-          {
-            barNumber: 4,
-            originalText: 'Sonic independence is the only law we need',
-            refactoredText: 'Sonic independence is the only law we need',
-            schemeTag: 'B',
-            syllableCount: 14,
-            cadenceSpeedBpm: 140,
-            stressPattern: '— · — · — · — ·',
-            rhymingTokens: ['need', 'independence'],
-          },
-        ],
-      },
-      ipRegistry: {
-        isRegistered: true,
-        registrationId: 'IB-ERA-941028',
-        eraHash: '0x9F4A_B82E',
-        timestamp: new Date().toISOString(),
-        workTitle: 'ERA SYNTHESIS: FREQUENCY MATRIX',
-        artistName: 'IndieBrotherhood Artist',
-        lyricistShare: 100,
-        publisherShare: 100,
-        iswcCode: 'T-938102495-2',
-        ascapStatus: 'SECURED',
-        mlcStatus: 'READY_FOR_BULK_EXPORT',
-      },
-      suggestedChordsOrKey: 'F# Minor / D Harmonic Minor (140 BPM)',
-      producerTips: [
-        'Layer a crisp sub-808 sidechained to downbeat syllables in Bar 1 & 3.',
-        'Apply 1/8 dotted ping-pong delay on rhyme anchors (#locked, #stopped).',
-        'Carve 450Hz notch filter in master EQ for vocal prominence.',
-      ],
-    };
-    setSynthesisData(initialSeed);
-  }, []);
-
+  const [errorMessage, setErrorMessage] = useState('');
   // Full Write Synthesis Trigger
   const handleExecuteSynthesis = async () => {
     if (isSynthesizing) return;
     setIsSynthesizing(true);
+    setErrorMessage('');
+    setSynthesisData(null);
     playHudClick('synthesize');
 
     try {
@@ -180,61 +88,7 @@ export const SemanticLab: React.FC = () => {
         }
       }
     } catch (err) {
-      console.warn('Synthesis API error, executing local fallback synthesis:', err);
-      // Do not manufacture analysis or ownership records when the provider is unavailable.
-      return;
-      const fallbackResult: SynthesisResult = {
-        synthesizedText: inputText,
-        peakProbability: Number((94.5 + Math.random() * 5).toFixed(1)),
-        sonicSaturation: unleashedDrive ? 'HIGH' : 'MEDIUM',
-        eraCompatibility: 'OPTIMAL',
-        metrics: {
-          catchiness: 92,
-          emotionalResonance: 89,
-          replayability: 95,
-          earwormFactor: 94,
-          marketVelocity: 90,
-          hookLineHighlight: inputText.split('\n')[0] || 'Sonic independence is the only law we need',
-          sonicNotes: [
-            `Processed in ${engineMode} Mode with ${unleashedDrive ? '+6dB Overdrive' : 'Standard Dynamic Range'}.`,
-            `Syllabic cadence locked to ${bpm} BPM.`,
-          ],
-        },
-        flowMatrix: {
-          schemeType: 'COMPLEX_MULTI_SYLLABIC',
-          recommendedBpm: bpm,
-          bpmFitLabel: `${bpm} BPM (Pocket Lock)`,
-          pocketDriftMs: 0.8,
-          cadenceDescription: 'Multi-syllabic stress patterns with internal rhyme anchors.',
-          bars: inputText.split('\n').slice(0, 4).map((line, idx) => ({
-            barNumber: idx + 1,
-            originalText: line,
-            refactoredText: line,
-            schemeTag: (idx % 2 === 0 ? 'A' : 'B') as 'A' | 'B',
-            syllableCount: 14,
-            cadenceSpeedBpm: bpm,
-            stressPattern: '· — · — — · — ·',
-            rhymingTokens: [line.split(' ').pop() || 'pulse'],
-          })),
-        },
-        ipRegistry: {
-          isRegistered: true,
-          registrationId: `IB-ERA-${Date.now().toString().slice(-6)}`,
-          eraHash: `0x${Date.now().toString(16).slice(-6).toUpperCase()}`,
-          timestamp: new Date().toISOString(),
-          workTitle: `ERA SYNTHESIS: TRACK #${Math.floor(10 + Math.random() * 90)}`,
-          artistName: 'IndieBrotherhood Artist',
-          lyricistShare: 100,
-          publisherShare: 100,
-          iswcCode: `T-93${Math.floor(1000000 + Math.random() * 9000000)}-1`,
-          ascapStatus: 'SECURED',
-          mlcStatus: 'READY_FOR_BULK_EXPORT',
-        },
-        suggestedChordsOrKey: 'F# Minor (140 BPM)',
-        producerTips: ['Layer sub-bass on beat 1', 'Stereo slapback delay on rhyme tokens'],
-      };
-      setSynthesisData(fallbackResult);
-      playHudClick('success');
+      setErrorMessage(err instanceof Error ? err.message : 'Synthesis failed. No result was generated.');
     } finally {
       setIsSynthesizing(false);
     }
@@ -242,6 +96,7 @@ export const SemanticLab: React.FC = () => {
 
   return (
     <div id="semantic-lab-root" className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-cyan-500 selection:text-zinc-950 pb-16">
+      <p role="status" className="p-3 text-center text-amber-300">{errorMessage || 'Creative AI estimates only—not measured market data or a rights registration.'}</p>
       {/* Background Cyber Glow Gradients */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="absolute -top-40 -left-40 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
@@ -299,6 +154,7 @@ export const SemanticLab: React.FC = () => {
         {/* 1. Global ERA Trajectory & Analytics Chart */}
         <section aria-label="Global ERA Trajectory Analytics">
           <EraTrajectoryChart
+            hasResult={!!synthesisData}
             peakProbability={synthesisData?.peakProbability || 0}
             sonicSaturation={synthesisData?.sonicSaturation || (unleashedDrive ? 'HIGH' : 'MEDIUM')}
             eraCompatibility={synthesisData?.eraCompatibility || 'OPTIMAL'}

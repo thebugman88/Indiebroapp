@@ -1,123 +1,52 @@
-import { ArtistTrack, SonicTasteProfile, UserJudgeProfile } from '../types';
-import { checkAndRefreshDailyCycle } from './matchmaker';
-import {
-  getFirebaseUser,
-  isFirebaseConfigured,
-  loadRemoteProfile,
-  loadRemoteTracks,
-  saveRemoteProfile,
-  saveRemoteTracks
-} from '../services/firebase';
-
-const STORAGE_KEYS = {
-  TRACKS: 'judgement_zone_tracks_v1',
-  PROFILE: 'judgement_zone_user_profile_v1',
-  TERMS: 'judgement_zone_terms_agreed_v1'
-};
-
-const DEFAULT_TASTE_PROFILE: SonicTasteProfile = {
-  preferredGenres: ['Hip-Hop / BoomBap', 'R&B / Neo-Soul', 'Trap / Drill', 'Synthwave / Retro'],
-  preferredMoods: ['Introspective', 'Energetic', 'Sensual', 'Cinematic'],
-  productionFocus: ['beat_production', 'lyrics', 'vocals'],
-  tempoPreference: 'all'
-};
-
-const DEFAULT_PROFILE: UserJudgeProfile = {
-  id: 'local-judge',
-  name: 'New Judge',
-  judgeTier: 'Apprentice Ear',
-  judgeTierLevel: 1,
-  judgeXp: 0,
-  reputationScore: 0,
-  auditsCompletedTotal: 0,
-  fullListensTotal: 0,
-  skipsRemaining: 3,
-  dailyAuditsRemaining: 18,
-  dailyAuditsMax: 20,
-  lastCycleTimestamp: Date.now(),
-  tasteProfile: DEFAULT_TASTE_PROFILE,
-  savedVaultTrackIds: [],
-  submittedTrackIds: [],
-  songsJudgedGoodCount: 0,
-  termsAccepted: false
-};
-
-export async function loadStoredTracks(): Promise<ArtistTrack[]> {
-  if (isFirebaseConfigured) {
-    try {
-      const remoteTracks = await loadRemoteTracks();
-      if (remoteTracks) return remoteTracks;
-    } catch (error) {
-      console.error('Firebase tracks unavailable; using local storage:', error);
-    }
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.TRACKS);
-    if (raw) {
-      const parsed: ArtistTrack[] = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.error('Failed to load stored tracks:', e);
-  }
-  return [];
+import { authenticatedFetch } from "../../../src/services/authService";
+import type { ArtistTrack, JudgeReview, UserJudgeProfile } from "../types";
+async function request(path: string, method = "GET", body?: unknown) {
+  const res = await authenticatedFetch("/api/judgement" + path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Operation failed.");
+  return data;
 }
-
-export async function saveTracks(tracks: ArtistTrack[]): Promise<void> {
-  if (isFirebaseConfigured) {
-    try {
-      await saveRemoteTracks(tracks);
-      return;
-    } catch (error) {
-      console.error('Failed to save tracks to Firebase; using local storage:', error);
-    }
-  }
-  try {
-    localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(tracks));
-  } catch (e) {
-    console.error('Failed to save tracks:', e);
-  }
-}
-
-export async function loadStoredProfile(): Promise<UserJudgeProfile> {
-  let firebaseUser = null;
-  try {
-    firebaseUser = await getFirebaseUser();
-  } catch (error) {
-    console.error('Firebase authentication unavailable; using local storage:', error);
-  }
-  if (firebaseUser) {
-    const remoteProfile = await loadRemoteProfile(firebaseUser.uid);
-    if (remoteProfile) return checkAndRefreshDailyCycle(remoteProfile);
-    const profile = { ...DEFAULT_PROFILE, id: firebaseUser.uid };
-    await saveRemoteProfile(profile);
-    return profile;
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.PROFILE);
-    if (raw) {
-      const parsed: UserJudgeProfile = JSON.parse(raw);
-      // Run 24h daily quota refresh check
-      const refreshed = checkAndRefreshDailyCycle(parsed);
-      return refreshed;
-    }
-  } catch (e) {
-    console.error('Failed to load user profile:', e);
-  }
-  saveProfile(DEFAULT_PROFILE);
-  return DEFAULT_PROFILE;
-}
-
-export async function saveProfile(profile: UserJudgeProfile): Promise<void> {
-  if (isFirebaseConfigured) {
-    await saveRemoteProfile(profile);
-    return;
-  }
-  try {
-    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
-  } catch (e) {
-    console.error('Failed to save user profile:', e);
-  }
+export const loadStoredTracks = (): Promise<ArtistTrack[]> =>
+  request("/tracks");
+export const loadStoredProfile = (): Promise<UserJudgeProfile> =>
+  request("/profile");
+export const saveProfile = (p: UserJudgeProfile): Promise<UserJudgeProfile> =>
+  request("/profile", "PATCH", {
+    name: p.name,
+    tasteProfile: p.tasteProfile,
+    savedVaultTrackIds: p.savedVaultTrackIds,
+    termsAccepted: p.termsAccepted,
+  });
+export const useSkip = (): Promise<UserJudgeProfile> =>
+  request("/skip", "POST", {});
+export const startListening = (id: string) =>
+  request("/tracks/" + encodeURIComponent(id) + "/listen", "POST", {});
+export const submitReview = (
+  id: string,
+  review: JudgeReview,
+): Promise<{
+  track: ArtistTrack;
+  profile: UserJudgeProfile;
+  review: JudgeReview;
+}> =>
+  request("/tracks/" + encodeURIComponent(id) + "/reviews", "POST", {
+    scores: review.scores,
+    writtenFeedback: review.writtenFeedback,
+  });
+export async function submitTrack(
+  track: ArtistTrack,
+  file: File,
+): Promise<ArtistTrack> {
+  if (file.size > 15000000) throw new Error("Audio must be at most 15 MB.");
+  const audioData = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Audio could not be read."));
+    reader.readAsDataURL(file);
+  });
+  return request("/tracks", "POST", { ...track, audioData });
 }

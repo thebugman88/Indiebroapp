@@ -19,7 +19,7 @@ import { SonicProfileView } from './components/SonicProfileView';
 import { TermsModal } from './components/TermsModal';
 import { JudgeTierModal } from './components/JudgeTierModal';
 import { ArtistTrack, JudgeReview, SonicTasteProfile, UserJudgeProfile } from './types';
-import { loadStoredProfile, loadStoredTracks, saveProfile, saveTracks } from './utils/storage';
+import { loadStoredProfile, loadStoredTracks, saveProfile, submitTrack, submitReview, useSkip } from './utils/storage';
 import { calculateTierFromXp, recalculateTrackScores } from './utils/matchmaker';
 
 export default function App() {
@@ -27,94 +27,29 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserJudgeProfile | null>(null);
   const [activeTab, setActiveTab] = useState<'chamber' | 'submit' | 'dossier' | 'vault' | 'sonic'>('chamber');
 
+  const [error,setError]=useState('');
   // Modals
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isTierModalOpen, setIsTierModalOpen] = useState(false);
 
-  // Initialize data on mount
   useEffect(() => {
-    let isMounted = true;
-    Promise.all([loadStoredTracks(), loadStoredProfile()]).then(([loadedTracks, loadedProfile]) => {
-      if (!isMounted) return;
-      setTracks(loadedTracks);
-      setUserProfile(loadedProfile);
-      if (!loadedProfile.termsAccepted) setIsTermsOpen(true);
-    }).catch((error) => {
-      console.error('Failed to initialize Judgement Zone:', error);
-    });
-    return () => { isMounted = false; };
+    let version=0;
+    const refresh=()=>{const request=++version;setUserProfile(null);setTracks([]);setError('');
+      Promise.all([loadStoredTracks(),loadStoredProfile()]).then(([list,profile])=>{if(request!==version)return;setTracks(list);setUserProfile(profile);setIsTermsOpen(!profile.termsAccepted);}).catch(e=>{if(request===version)setError(e.message);});
+    };
+    refresh();window.addEventListener('ib_auth_changed',refresh);
+    return()=>{version++;window.removeEventListener('ib_auth_changed',refresh);};
   }, []);
 
-  // Save tracks when updated
-  const handleUpdateTracks = (newTracks: ArtistTrack[]) => {
-    setTracks(newTracks);
-    saveTracks(newTracks);
+  const handleUpdateProfile = async (newProfile:UserJudgeProfile) => {
+    try { setUserProfile(await saveProfile(newProfile));setError(''); } catch(e:any) {setError(e.message);}
   };
-
-  // Save profile when updated
-  const handleUpdateProfile = (newProfile: UserJudgeProfile) => {
-    setUserProfile(newProfile);
-    saveProfile(newProfile);
+  const handleRecordReview = async (review:JudgeReview,trackId:string,_xp:number) => {
+    const result=await submitReview(trackId,review);
+    setTracks(old=>old.map(t=>t.id===trackId?result.track:t));setUserProfile(result.profile);
+    return result.review;
   };
-
-  // Record a review from the Judgement Chamber
-  const handleRecordReview = (review: JudgeReview, trackId: string, xpEarned: number) => {
-    if (!userProfile) return;
-
-    // 1. Update track reviews & recalculate aggregated scores
-    const updatedTracks = tracks.map((t) => {
-      if (t.id === trackId) {
-        const newReviews = [...t.reviews, review];
-        const newAggregated = recalculateTrackScores(newReviews);
-        const isCompleted = newReviews.length >= 10;
-        return {
-          ...t,
-          reviews: newReviews,
-          aggregatedScores: newAggregated,
-          status: (isCompleted ? 'completed' : 'evaluating') as 'completed' | 'evaluating'
-        };
-      }
-      return t;
-    });
-
-    handleUpdateTracks(updatedTracks);
-
-    // 2. Update user profile (XP, Audits completed, Tier progression, Daily quota)
-    const newXp = userProfile.judgeXp + xpEarned;
-    const tierInfo = calculateTierFromXp(newXp);
-    const newAuditsTotal = userProfile.auditsCompletedTotal + 1;
-    const newFullListens = userProfile.fullListensTotal + (review.completedFullListen ? 1 : 0);
-    const newDailyRemaining = Math.max(0, userProfile.dailyAuditsRemaining - 1);
-
-    // Count how many user submitted tracks are rated "Good" (>= 8.0/10)
-    const goodSongsCount = updatedTracks.filter(
-      (t) => userProfile.submittedTrackIds.includes(t.id) && t.aggregatedScores.overall >= 8.0
-    ).length;
-
-    const updatedProfile: UserJudgeProfile = {
-      ...userProfile,
-      judgeXp: newXp,
-      judgeTier: tierInfo.tier,
-      judgeTierLevel: tierInfo.level,
-      auditsCompletedTotal: newAuditsTotal,
-      fullListensTotal: newFullListens,
-      dailyAuditsRemaining: newDailyRemaining,
-      songsJudgedGoodCount: goodSongsCount,
-      reputationScore: Math.min(100, Math.round(92 + (newFullListens / Math.max(1, newAuditsTotal)) * 8))
-    };
-
-    handleUpdateProfile(updatedProfile);
-  };
-
-  // Handle using a skip
-  const handleUseSkip = () => {
-    if (!userProfile || userProfile.skipsRemaining <= 0) return;
-    const updatedProfile: UserJudgeProfile = {
-      ...userProfile,
-      skipsRemaining: userProfile.skipsRemaining - 1
-    };
-    handleUpdateProfile(updatedProfile);
-  };
+  const handleUseSkip = async () => {setUserProfile(await useSkip());};
 
   // Save track to Vault
   const handleSaveToVault = (trackId: string) => {
@@ -137,17 +72,8 @@ export default function App() {
     handleUpdateProfile(updatedProfile);
   };
 
-  // User submits a new track
-  const handleTrackSubmitted = (newTrack: ArtistTrack) => {
-    if (!userProfile) return;
-    const updatedTracks = [newTrack, ...tracks];
-    handleUpdateTracks(updatedTracks);
-
-    const updatedProfile: UserJudgeProfile = {
-      ...userProfile,
-      submittedTrackIds: [newTrack.id, ...userProfile.submittedTrackIds]
-    };
-    handleUpdateProfile(updatedProfile);
+  const handleTrackSubmitted = async (newTrack:ArtistTrack,file:File) => {
+    const track=await submitTrack(newTrack,file);setTracks(old=>[track,...old]);setUserProfile(await loadStoredProfile());return track;
   };
 
   // Update taste profile
@@ -177,7 +103,7 @@ export default function App() {
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
         <div className="flex items-center gap-3 font-mono text-xs text-amber-400">
           <Gavel className="w-5 h-5 animate-spin" />
-          <span>Booting Judgement Zone Engine...</span>
+          <span>{error || 'Loading Judgement Zone…'}</span>
         </div>
       </div>
     );
@@ -185,6 +111,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-amber-500 selection:text-amber-950 font-sans">
+      {error && <p role="alert" className="p-4 text-amber-300">{error}</p>}
       {/* Global Header */}
       <Header
         activeTab={activeTab}
@@ -218,11 +145,8 @@ export default function App() {
 
         {activeTab === 'dossier' && (
           <ArtistDossierView
-            tracks={tracks}
-            onUpdateTrack={(updated) => {
-              const newTracks = tracks.map((t) => (t.id === updated.id ? updated : t));
-              handleUpdateTracks(newTracks);
-            }}
+            tracks={tracks.filter(t=>t.ownerId===userProfile.id)}
+            onUpdateTrack={() => setError('Submitted tracks cannot be overwritten.')}
             onNavigateToSubmit={() => setActiveTab('submit')}
           />
         )}

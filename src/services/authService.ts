@@ -84,6 +84,7 @@ if (typeof window !== 'undefined') {
     localStorage.removeItem('ib_auth_current_user_v2');
     localStorage.removeItem('ib_auth_registered_users_v2');
     localStorage.removeItem('hangout_artist_profile');
+    localStorage.removeItem('indie_current_auth_user');
   } catch { /* Storage may be disabled. */ }
 }
 
@@ -181,6 +182,11 @@ export async function resendVerification() {
   const user = requireAuthClient().currentUser;
   if (!user || user.isAnonymous) throw new Error('Sign in first.');
   await sendEmailVerification(user);
+}
+export async function getSuiteIdToken(): Promise<string> {
+  const client = requireAuthClient(); await client.authStateReady();
+  if (!client.currentUser || client.currentUser.isAnonymous) throw new Error('Sign in to continue.');
+  return client.currentUser.getIdToken();
 }
 export async function authenticatedFetch(input: string, init: RequestInit = {}) {
   const client = requireAuthClient();

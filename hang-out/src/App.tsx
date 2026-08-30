@@ -1,3 +1,5 @@
+import { addNotification } from '../../src/services/notificationService';
+import { getCurrentAuthUser } from '../../src/services/authService';
 import React, { useState, useEffect } from 'react';
 import { UserProfile, RoomId, SubRoomTier, GenreType, ChatMessage, BattleState } from './types';
 import { wsService } from './services/websocket';
@@ -13,45 +15,12 @@ import { TermsModal } from './components/TermsModal';
 import { Footer } from './components/Footer';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    try {
-      const masterAuth = localStorage.getItem('ib_auth_current_user_v2') || localStorage.getItem('indie_current_auth_user');
-      if (masterAuth) {
-        const u = JSON.parse(masterAuth);
-        return {
-          id: u.id || 'user_' + Math.random().toString(36).substring(2, 9),
-          nickname: u.displayName || 'Indie Artist',
-          role: u.role === 'admin' || u.isAdmin ? 'Master Admin' : 'Artist',
-          primaryGenre: (u.artistEnvironment?.genres?.[0] || 'Hip-Hop') as GenreType,
-          avatarUrl: u.avatarUrl || '',
-          joinedAt: u.createdAt || Date.now(),
-        };
-      }
-      const saved = localStorage.getItem('hangout_artist_profile');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  // Listen for global auth updates
-  useEffect(() => {
-    const handleAuth = (e: any) => {
-      if (e.detail) {
-        const u = e.detail;
-        setCurrentUser({
-          id: u.id,
-          nickname: u.displayName,
-          role: u.role === 'admin' || u.isAdmin ? 'Master Admin' : 'Artist',
-          primaryGenre: (u.artistEnvironment?.genres?.[0] || 'Hip-Hop') as GenreType,
-          avatarUrl: u.avatarUrl || '',
-          joinedAt: u.createdAt || Date.now(),
-        });
-      }
-    };
-    window.addEventListener('ib_auth_changed', handleAuth);
-    return () => window.removeEventListener('ib_auth_changed', handleAuth);
-  }, []);
+  const readUser = (): UserProfile | null => {
+    const u=getCurrentAuthUser(); return u.id==='guest'?null:{id:u.id,nickname:u.displayName,role:u.isAdmin?'Master Admin':'Artist',avatarUrl:u.avatarUrl};
+  };
+  const [currentUser,setCurrentUser]=useState<UserProfile|null>(readUser);
+  const [connectionError,setConnectionError]=useState('');
+  useEffect(()=>{const refresh=()=>{wsService.disconnect();setCurrentUser(readUser());};window.addEventListener('ib_auth_changed',refresh);return()=>window.removeEventListener('ib_auth_changed',refresh);},[]);
 
   const [activeRoom, setActiveRoom] = useState<RoomId>('rap-battle');
   const [currentGenre, setCurrentGenre] = useState<GenreType>('Hip-Hop');
@@ -72,7 +41,10 @@ export default function App() {
 
     const unsubscribe = wsService.subscribe((data) => {
       switch (data.type) {
+        case 'ADMIN_BROADCAST':addNotification({category:'broadcast',type:'admin',priority:'high',title:data.title,message:data.message,sender:data.senderName});break;
+        case 'ERROR': setConnectionError(data.message); break;
         case 'ROOM_JOINED': {
+          setConnectionError('');
           setMessages(data.history || []);
           setSharedPad(data.sharedPad || '');
           setRoomUsers(data.roomUsers || []);
@@ -127,9 +99,9 @@ export default function App() {
     wsService.joinRoom(targetRoomId, currentUser);
 
     return () => {
-      unsubscribe();
+      unsubscribe(); wsService.disconnect();
     };
-  }, []);
+  }, [currentUser?.id]);
 
   // Handle Room Switching
   const handleSelectRoom = (roomId: RoomId) => {
@@ -143,14 +115,8 @@ export default function App() {
     wsService.joinRoom(`collaboration-${genre}`, currentUser);
   };
 
-  const handleSaveProfile = (profile: UserProfile) => {
-    setCurrentUser(profile);
-    try {
-      localStorage.setItem('hangout_artist_profile', JSON.stringify(profile));
-    } catch (e) {
-      console.error('Failed to save profile locally:', e);
-    }
-    wsService.connect(profile);
+  const handleSaveProfile = (_profile: UserProfile) => {
+    setConnectionError('Sign in and update your profile in the suite account settings.');
   };
 
   const handleSendMessage = (roomId: string, message: Partial<ChatMessage>) => {
@@ -200,6 +166,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 flex flex-col">
       {/* App Header */}
+      {connectionError && <p role="status" className="p-3 text-amber-300">{connectionError}</p>}
+      {!currentUser && <p className="p-3 text-amber-300">Sign in to the suite to join conversations.</p>}
       <Header
         activeRoom={activeRoom}
         onSelectRoom={handleSelectRoom}

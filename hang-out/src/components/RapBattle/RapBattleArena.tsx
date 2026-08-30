@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../../src/services/authService';
 import React, { useState, useEffect, useRef } from 'react';
 import { BattleState, UserProfile } from '../../types';
 import { JudgePanel } from './JudgePanel';
@@ -86,7 +87,7 @@ export const RapBattleArena: React.FC<Props> = ({
     try {
       const lastWords = verseInput.split(' ').slice(-1)[0] || 'fire';
       const prompt = `Give me 4 clever battle rap end-rhymes for the word "${lastWords}". Return plain comma-separated list.`;
-      const res = await fetch(backendApiUrl('/api/gemini/ai-bot-rap'), {
+      const res = await authenticatedFetch(backendApiUrl('/api/gemini/ai-bot-rap'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

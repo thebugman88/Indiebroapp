@@ -48,7 +48,7 @@ export const requireAdmin: RequestHandler = (_req, res, next) => {
 };
 export const requireVerifiedEmail: RequestHandler = (_req, res, next) => {
   if (res.locals.identity?.email_verified !== true) {
-    res.status(403).json({ error: 'Verify your email before purchasing a subscription.' }); return;
+    res.status(403).json({ error: 'Verify your email to use this feature.' }); return;
   }
   next();
 };

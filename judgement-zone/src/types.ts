@@ -48,6 +48,7 @@ export interface JudgeReview {
 }
 
 export interface ArtistTrack {
+  ownerId?: string;
   id: string;
   title: string;
   artistName: string;

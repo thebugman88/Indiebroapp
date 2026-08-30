@@ -23,7 +23,7 @@ test('production server blocks audit exploits without configured credentials', {
   const base = `http://127.0.0.1:${port}`;
   for (const route of ['/api/admin/broadcast', '/api/admin/kick', '/api/admin/blacklist',
     '/api/security/pause-account', '/api/security/unpause-account', '/api/security/remediate',
-    '/api/stripe/create-checkout-session', '/api/stripe/verify-session', '/api/analyze']) {
+    '/api/stripe/create-checkout-session', '/api/stripe/verify-session', '/api/analyze', '/api/dm/bob', '/api/judgement/tracks', '/api/synthesize', '/api/ai/strategy-plan']) {
     const response = await fetch(base + route, { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ sessionId: 'sim_session_invented', isAdmin: true, userId: 'admin_christopher_ray' }) });
     assert.equal(response.status, 401, route);
@@ -39,7 +39,7 @@ test('production server blocks audit exploits without configured credentials', {
     const socket = new WebSocket(`ws://127.0.0.1:${port}`);
     socket.once('open', () => { socket.close(); reject(new Error('Unauthenticated socket opened')); });
     socket.once('unexpected-response', (_request, response) => {
-      try { assert.equal(response.statusCode, 503); response.resume(); socket.terminate(); resolve(); } catch (err) { reject(err); }
+      try { assert.equal(response.statusCode, 404); response.resume(); socket.terminate(); resolve(); } catch (err) { reject(err); }
     });
     socket.on('error', () => {});
   });

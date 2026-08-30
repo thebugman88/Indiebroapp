@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../../src/services/authService';
 import React, { useState } from 'react';
 import { BattleState, UserProfile } from '../../types';
 import { backendApiUrl } from '../../services/backend';
@@ -21,7 +22,7 @@ export const JudgePanel: React.FC<Props> = ({ battle, currentUser, onVote }) => 
       const p1Verses = battle.verses.filter((v) => v.authorId === battle.player1.id).map((v) => v.text);
       const p2Verses = battle.verses.filter((v) => v.authorId === battle.player2.id).map((v) => v.text);
 
-      const res = await fetch(backendApiUrl('/api/gemini/battle-judge'), {
+      const res = await authenticatedFetch(backendApiUrl('/api/gemini/battle-judge'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
