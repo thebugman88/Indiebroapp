@@ -366,7 +366,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  You can provide your own key if you wish to run dedicated quota. It is stored solely in your local browser vault.
+                  Custom keys are not saved. The unified suite uses authenticated platform AI and its displayed Coin prices; custom-key mode is only supported by the separate prototype server and is not a quota bypass.
                 </p>
               </div>
             </div>

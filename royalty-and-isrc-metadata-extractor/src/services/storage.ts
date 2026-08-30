@@ -1,3 +1,4 @@
+import { withoutProviderCredentials } from '../../../shared/browserSettings';
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Folder, MediaFile, ParsedTrack, AppSettings } from '../types';
 
@@ -66,7 +67,7 @@ export function getDB(): Promise<IDBPDatabase<RoyaltyDB>> {
 // ----------------- DEFAULT SETTINGS -----------------
 export const DEFAULT_SETTINGS: AppSettings = {
   ocrEngine: 'tesseract',
-  geminiApiKey: (import.meta as any).env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '',
+  geminiApiKey: '',
   ocrLanguage: 'eng',
   autoPreprocessImage: true,
   enhanceContrast: true,
@@ -221,10 +222,12 @@ export async function clearAllData(): Promise<void> {
 export async function getSettings(): Promise<AppSettings> {
   const db = await getDB();
   const settings = await db.get('settings', 'app_config');
-  return settings || DEFAULT_SETTINGS;
+  const safe = withoutProviderCredentials(settings || DEFAULT_SETTINGS);
+  if (settings) await db.put('settings', safe, 'app_config');
+  return safe;
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
   const db = await getDB();
-  await db.put('settings', settings, 'app_config');
+  await db.put('settings', withoutProviderCredentials(settings), 'app_config');
 }

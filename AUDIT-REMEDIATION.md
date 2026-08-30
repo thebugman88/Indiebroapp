@@ -40,7 +40,7 @@ Follow `SECURITY-ROLLOUT.md`. Provision and validate Firebase Authentication, pr
 
 Room chat, meeting state, and battle state are in memory and reset when a room becomes empty or the process restarts. They are public rooms for registered users, not invitation-only rooms. Room chat and battle verses currently accept text; unsupported media requests return an error rather than silently dropping their attachments. Private DMs support voice notes. A single persistent Node process is required; distributed durable realtime state is a separate platform task. DMs and Judgment Zone records are durable server storage.
 
-Other older platform-roadmap items remain: suite-wide server-owned coins/feature quotas, a billing-management UI, account-scoped migration of all creative drafts, a global admin directory/ban management, durable multi-instance rooms, and separate standalone-app deployment audits. Disabled global ban/free-access controls remain explicitly unavailable; no fake success is returned. These are not silently marked fixed by this checklist.
+Server-owned coins/feature quotas and billing management are implemented in `ECONOMY-ROLLOUT.md`. Other older platform-roadmap items remain: account-scoped migration of all creative drafts, a global admin directory/ban management, durable multi-instance rooms, and separate standalone-app deployment audits. Disabled global ban/free-access controls remain explicitly unavailable; no fake success is returned. These are not silently marked fixed by this checklist.
 
 ## Follow-up: Lyric Pro vault isolation
 

@@ -8,7 +8,6 @@ import { QuizRunner } from './components/QuizRunner';
 import { QuizResults } from './components/QuizResults';
 import { AiQuizGeneratorModal } from './components/AiQuizGeneratorModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
-import { SponsoredAdBanner } from './components/SponsoredAdBanner';
 import { Footer } from './components/Footer';
 import {
   Mic,
@@ -200,11 +199,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
-              {/* Native Sponsored Banner */}
-              <SponsoredAdBanner variant="banner" />
-
-              {/* Main Content Layout with Sidebar for Genres */}
+{/* Main Content Layout with Sidebar for Genres */}
               <div className="flex flex-col lg:flex-row gap-8">
                 {/* Sidebar / Genres section matching Immersive UI pattern */}
                 <aside className="w-full lg:w-64 shrink-0 flex flex-col gap-6">

@@ -97,6 +97,7 @@ export const ByokIntegrationsModal: React.FC<ByokIntegrationsModalProps> = ({
             </div>
           </div>
 
+          <p className="text-xs text-amber-300">Keys are kept only in page memory, not saved. Requests send the required credentials and selected data to the respective provider. Provider charges may apply. Re-enter keys after reload; do not use a privileged server secret in a browser.</p>
           {/* BYOK Integrations Grid */}
           <div className="space-y-4 font-mono">
             <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest block">

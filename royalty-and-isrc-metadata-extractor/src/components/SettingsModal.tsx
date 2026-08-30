@@ -157,7 +157,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full text-xs px-3 py-2 bg-[#0b0f1a] border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                 />
                 <p className="text-[10px] text-slate-500 font-sans">
-                  Your API key is stored strictly inside your browser's private storage and is never uploaded anywhere.
+                  Your key stays in this page’s memory and is sent directly to Google when using BYOK. It is not saved; re-enter it after reload. Provider usage may be billed to your account.
                 </p>
               </div>
             )}

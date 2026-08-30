@@ -3,7 +3,6 @@ import { Quiz, DifficultyLevel, UserAnswer, QuizResultRecord, DIFFICULTY_CONFIGS
 import { Clock, Zap, AlertCircle, Check, X, Music, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import { sonicSynth } from '../lib/audioSynth';
 import { fetchRealSongsFromiTunes } from '../services/itunesMusic';
-import { SponsoredAdBanner } from './SponsoredAdBanner';
 
 interface QuizRunnerProps {
   quiz: Quiz;
@@ -479,13 +478,7 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
             </p>
           </div>
         )}
-
-        {/* Sponsored Reward Placement */}
-        <SponsoredAdBanner
-          variant="reward_cta"
-          onEarnReward={(pts) => setAccumulatedScore((prev) => prev + pts)}
-        />
-      </div>
+</div>
     </div>
   );
 };

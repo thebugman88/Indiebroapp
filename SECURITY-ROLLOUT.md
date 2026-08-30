@@ -46,10 +46,14 @@ Run `npm run check:staging` on the intended staging host after setting the envir
 
 Still unverified: deployed project IAM, private bucket access and signed uploads, deployed indexes/rules, real email delivery and browser login, Gemini success responses, and actual Stripe test checkout/webhook/payment-renewal-cancellation flows. Emulator success does not replace those live staging checks.
 
-The eleven root-suite findings and remaining staging checks are listed in `AUDIT-REMEDIATION.md`. Their code remediation is complete; live configuration and provider integration are unverified. Broader platform work remains: suite-wide trusted coins/quotas, billing management, creative-data migration, a global admin directory and ban controls, durable multi-instance rooms, and standalone deployment audits. Local gamification/profile state MUST NOT authorize valuable server actions. Room state is transient and requires one persistent process. DMs and judge records use durable storage.
+The eleven root-suite findings and remaining staging checks are listed in `AUDIT-REMEDIATION.md`. Their code remediation is complete; live configuration and provider integration are unverified. Server-owned coins/quotas and billing management are documented in `ECONOMY-ROLLOUT.md`. Broader platform work remains: creative-data migration, a global admin directory and ban controls, durable multi-instance rooms, and standalone deployment audits. Local gamification/profile state MUST NOT authorize valuable server actions. Room state is transient and requires one persistent process. DMs and judge records use durable storage.
 
 Legacy Judgment Zone tracks require a deliberate migration with verified ownership and re-uploaded audio. Browser object URLs cannot be migrated into durable media. Do not import old client-asserted XP, review identities, or ownership as trusted data.
 
 ## Rollback
 
 Keep this branch separate until staging validation succeeds. If staging fails, disable the affected feature or revert the branch there. Do not restore automatic admin login, unsigned webhooks, simulation payments, or the raw global socket relay on a public deployment. Preserve Firestore billing records during any rollback and pause new checkout rather than taking payments without fulfillment.
+
+## Later contract updates
+
+The checkout contract and webhook event set above describe the first security batch. For current versioned terms consent, product selection, Coin packs, invoice/refund/dispute events and recovery, use `ECONOMY-ROLLOUT.md` and the validators in `server/billing.ts`. Do not configure a new deployment from the first-batch event list alone. Test counts above are historical; run the scripts for current results.

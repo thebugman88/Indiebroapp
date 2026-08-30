@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-23  
 **Workspace:** `indieapps`  
-**Status:** Prototype portfolio moving toward production platform
+**Status:** Historical baseline; current root-suite remediation and build follow-up below supersede obsolete findings
 
 ## Executive Finding
 
@@ -71,3 +71,15 @@ Security foundation branch replaces founder auto-login/local credentials, requir
 ## Remaining audit remediation (2026-08-30)
 
 The follow-up replaces the disabled raw relay with authenticated room protocols, implements private durable DMs and server-owned Judgment Zone mutations/uploads, removes fabricated analysis/catalog/chart results, and connects missing root AI routes. See `AUDIT-REMEDIATION.md` for all eleven findings and explicit staging/remaining-platform boundaries. This supersedes the first-batch realtime pause and “still open” list, but does not imply production deployment or complete the older platform roadmap.
+
+## Root-markdown execution follow-up — 2026-08-30
+
+The current tree includes ten child apps (Quick Tools was absent from the old nine-app inventory), a unified root runtime, authenticated APIs, server-owned Coins and payment recovery. See `ECONOMY-ROLLOUT.md`; billing management and usage accounting are no longer unimplemented roadmap items for the root.
+
+This batch adds per-app lockfiles and Windows/Linux build jobs, explicit child TypeScript/Vite configs, portable clean scripts, server/browser output separation, and bundle secret checks. It removes the quiz's fake sponsored advertisement and timer-generated reward, stops provider-key injection, strips persisted BYOK keys, and removes the artist assistant's unused CJS-incompatible `import.meta` initialization. `BUILD-VALIDATION.md` defines commands and rollback.
+
+The prototype Hang Out audit contained unsafe key-exposure and serverless WebSocket advice; `HANG-OUT_AUDIT.md` now corrects it. No live infrastructure decision, legal approval or deployment is implied. Independent legacy servers still need security audits; durable cross-device creator data, retention/deletion, moderation and managed multi-instance realtime remain open.
+
+## Local validation for this batch
+
+Node 24.19.0 / npm 11.9.0 on Linux: root typecheck, 19 unit/security tests, production build and one production smoke test pass. All ten child typechecks/builds and browser secret/artifact checks pass. Existing large-chunk warnings remain. Windows CI, live browser flows and provider/storage checks have not been run; no deployment or production credential changes were made. Firebase emulator tests were not rerun for this build/UI/settings batch.

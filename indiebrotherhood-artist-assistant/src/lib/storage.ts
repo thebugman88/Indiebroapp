@@ -1,3 +1,4 @@
+import { withoutProviderCredentials } from '../../../shared/browserSettings';
 import {
   ArtistProfile,
   ChatMessage,
@@ -129,7 +130,11 @@ export function getStoredSettings(): SettingsState {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const raw = localStorage.getItem("indie_app_settings");
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const safe = withoutProviderCredentials({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
+      saveStoredSettings(safe);
+      return safe;
+    }
   } catch (e) {
     console.error("Failed to read stored settings:", e);
   }
@@ -139,10 +144,11 @@ export function getStoredSettings(): SettingsState {
 export function saveStoredSettings(settings: SettingsState): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem("indie_app_settings", JSON.stringify(settings));
+    const safe = withoutProviderCredentials(settings);
+    localStorage.setItem("indie_app_settings", JSON.stringify(safe));
     openDB().then((db) => {
       const tx = db.transaction("kv_store", "readwrite");
-      tx.objectStore("kv_store").put({ id: "app_settings", value: settings });
+      tx.objectStore("kv_store").put({ id: "app_settings", value: safe });
     }).catch(() => {});
   } catch (e) {
     console.error("Failed to save settings:", e);

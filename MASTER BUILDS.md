@@ -66,3 +66,9 @@ A feature is done only when its UI, backend contract, persistence, authorization
 - Realtime state: managed Firebase realtime services or a separately hosted persistent service.
 - Files: Firebase Storage with signed/authenticated access.
 - Durable application data: Firestore with rules plus trusted server mutations.
+
+## Active implementation batch — 2026-08-30
+
+Owner: root build/security maintenance, plus each creator app for its UI. Preserve separate app manifests; no deployment-topology decision is implied. There are now ten embedded apps, including Quick Tools, rather than the original nine.
+
+Implement independent Linux/Windows build jobs, portable clean commands and isolated browser output; remove browser-injected provider keys and quiz ad simulations; prevent creator settings from persisting BYOK secrets. Existing authenticated `/api` contracts remain unchanged. Sub-app builds are compatibility checks, not approval to deploy their older unaudited servers. Validate with all-app typechecks/builds, bundle secret checks and root security/production tests. Roll back UI/build changes by reverting this batch, but never restore public provider keys or publicly served server bundles. Live hosting, Windows execution and provider behavior must be recorded separately from local Linux results.
