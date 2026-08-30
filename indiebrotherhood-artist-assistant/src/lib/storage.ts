@@ -9,15 +9,12 @@ import {
   UploadedDocument,
 } from "../types";
 
-const DB_NAME = "IndieArtistCareerOS_DB";
-const DB_VERSION = 1;
-
 export const DEFAULT_SETTINGS: SettingsState = {
   customApiKey: "",
   preferredModel: "gemini-3.7-flash",
   enableWebSearch: true,
   enableSoundAlerts: true,
-  storageMode: "local_indexeddb",
+  storageMode: "localStorage_only",
   desktopNotificationsEnabled: true,
 };
 
@@ -68,280 +65,82 @@ export const DEFAULT_FOLDERS: FolderItem[] = [
   },
 ];
 
-// Open IndexedDB connection
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined" || !window.indexedDB) {
-      return reject(new Error("IndexedDB is not supported"));
-    }
-
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event: any) => {
-      const db = event.target.result as IDBDatabase;
-
-      const stores = [
-        "songs",
-        "folders",
-        "documents",
-        "events",
-        "chat_history",
-        "kv_store",
-      ];
-
-      for (const storeName of stores) {
-        if (!db.objectStoreNames.contains(storeName)) {
-          db.createObjectStore(storeName, { keyPath: "id" });
-        }
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+export interface CareerSnapshot {
+  profile: ArtistProfile;
+  settings: SettingsState;
+  songs: SongMetadata[];
+  folders: FolderItem[];
+  documents: UploadedDocument[];
+  events: ScheduledEvent[];
+  chatMessages: ChatMessage[];
 }
 
-// Synchronous and mirrored LocalStorage helpers for instant render
-export function getStoredProfile(): ArtistProfile {
-  if (typeof window === "undefined") return DEFAULT_PROFILE;
-  try {
-    const raw = localStorage.getItem("indie_artist_profile");
-    if (raw) return { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
-  } catch (e) {
-    console.error("Failed to read stored profile:", e);
-  }
-  return DEFAULT_PROFILE;
+export function emptyCareerSnapshot(): CareerSnapshot {
+  return structuredClone({ profile: DEFAULT_PROFILE, settings: DEFAULT_SETTINGS,
+    songs: [], folders: DEFAULT_FOLDERS, documents: [], events: [], chatMessages: [] });
 }
 
-export function saveStoredProfile(profile: ArtistProfile): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("indie_artist_profile", JSON.stringify(profile));
-    openDB().then((db) => {
-      const tx = db.transaction("kv_store", "readwrite");
-      tx.objectStore("kv_store").put({ id: "artist_profile", value: profile });
-    }).catch(() => {});
-  } catch (e) {
-    console.error("Failed to save profile:", e);
-  }
-}
-
-export function getStoredSettings(): SettingsState {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
-  try {
-    const raw = localStorage.getItem("indie_app_settings");
-    if (raw) {
-      const safe = withoutProviderCredentials({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
-      saveStoredSettings(safe);
-      return safe;
-    }
-  } catch (e) {
-    console.error("Failed to read stored settings:", e);
-  }
-  return DEFAULT_SETTINGS;
-}
-
-export function saveStoredSettings(settings: SettingsState): void {
-  if (typeof window === "undefined") return;
-  try {
-    const safe = withoutProviderCredentials(settings);
-    localStorage.setItem("indie_app_settings", JSON.stringify(safe));
-    openDB().then((db) => {
-      const tx = db.transaction("kv_store", "readwrite");
-      tx.objectStore("kv_store").put({ id: "app_settings", value: safe });
-    }).catch(() => {});
-  } catch (e) {
-    console.error("Failed to save settings:", e);
-  }
-}
-
-export function getStoredSongs(): SongMetadata[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem("indie_songs");
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error("Failed to read songs:", e);
-  }
-  return [];
-}
-
-export function saveStoredSongs(songs: SongMetadata[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("indie_songs", JSON.stringify(songs));
-    openDB().then((db) => {
-      const tx = db.transaction("songs", "readwrite");
-      const store = tx.objectStore("songs");
-      store.clear();
-      for (const song of songs) {
-        store.put(song);
-      }
-    }).catch(() => {});
-  } catch (e) {
-    console.error("Failed to save songs:", e);
-  }
-}
-
-export function getStoredFolders(): FolderItem[] {
-  if (typeof window === "undefined") return DEFAULT_FOLDERS;
-  try {
-    const raw = localStorage.getItem("indie_folders");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    console.error("Failed to read folders:", e);
-  }
-  return DEFAULT_FOLDERS;
-}
-
-export function saveStoredFolders(folders: FolderItem[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("indie_folders", JSON.stringify(folders));
-    openDB().then((db) => {
-      const tx = db.transaction("folders", "readwrite");
-      const store = tx.objectStore("folders");
-      store.clear();
-      for (const f of folders) {
-        store.put(f);
-      }
-    }).catch(() => {});
-  } catch (e) {
-    console.error("Failed to save folders:", e);
-  }
-}
-
-export function getStoredDocuments(): UploadedDocument[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem("indie_documents");
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error("Failed to read documents:", e);
-  }
-  return [];
-}
-
-export function saveStoredDocuments(docs: UploadedDocument[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("indie_documents", JSON.stringify(docs));
-    openDB().then((db) => {
-      const tx = db.transaction("documents", "readwrite");
-      const store = tx.objectStore("documents");
-      store.clear();
-      for (const doc of docs) {
-        store.put(doc);
-      }
-    }).catch(() => {});
-  } catch (e) {
-    console.error("Failed to save documents:", e);
-  }
-}
-
-export function getStoredEvents(): ScheduledEvent[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem("indie_events");
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error("Failed to read events:", e);
-  }
-  return [];
-}
-
-export function saveStoredEvents(events: ScheduledEvent[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("indie_events", JSON.stringify(events));
-    openDB().then((db) => {
-      const tx = db.transaction("events", "readwrite");
-      const store = tx.objectStore("events");
-      store.clear();
-      for (const evt of events) {
-        store.put(evt);
-      }
-    }).catch(() => {});
-  } catch (e) {
-    console.error("Failed to save events:", e);
-  }
-}
-
-export function getStoredChatHistory(): ChatMessage[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem("indie_chat_history");
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error("Failed to read chat history:", e);
-  }
-  return [];
-}
-
-export function saveStoredChatHistory(messages: ChatMessage[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("indie_chat_history", JSON.stringify(messages));
-  } catch (e) {
-    console.error("Failed to save chat history:", e);
-  }
-}
-
-// Reset / Clear all data
-export function clearAllVaultData(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem("indie_songs");
-  localStorage.removeItem("indie_documents");
-  localStorage.removeItem("indie_events");
-  localStorage.removeItem("indie_chat_history");
-  localStorage.setItem("indie_folders", JSON.stringify(DEFAULT_FOLDERS));
-
-  openDB().then((db) => {
-    const stores = ["songs", "documents", "events", "chat_history"];
-    for (const s of stores) {
-      try {
-        const tx = db.transaction(s, "readwrite");
-        tx.objectStore(s).clear();
-      } catch {}
-    }
-  }).catch(() => {});
-}
-
-// Export Full Career Archive JSON
-export async function exportFullCareerArchiveJSON(): Promise<string> {
-  const songs = getStoredSongs();
-  const folders = getStoredFolders();
-  const documents = getStoredDocuments();
-  const events = getStoredEvents();
-  const profile = getStoredProfile();
-  const settings = getStoredSettings();
-
-  const archive = {
-    app: "IndieBrotherhood Career OS",
-    version: "2026.1",
-    exportedAt: new Date().toISOString(),
-    profile,
-    settings: {
-      ...settings,
-      customApiKey: settings.customApiKey ? "REDACTED" : "",
-    },
-    catalogue: songs,
-    folders,
-    documents: documents.map((d) => ({
-      id: d.id,
-      name: d.name,
-      folderId: d.folderId,
-      size: d.size,
-      status: d.status,
-      ocrRawText: d.ocrRawText,
-      parsedSongMetadata: d.parsedSongMetadata,
-      uploadedAt: d.uploadedAt,
-    })),
-    events,
+export function createCareerVault(
+  uid: string,
+  isCurrent: () => boolean,
+  storage: () => Pick<Storage, 'getItem' | 'setItem'>,
+) {
+  const key = `ib_career_v2:${encodeURIComponent(uid)}`;
+  const guest = !uid || uid === 'guest';
+  const check = () => {
+    if (!isCurrent()) throw new Error('Account changed. Reopen Artist Assistant.');
   };
-
-  return JSON.stringify(archive, null, 2);
+  const sanitize = (snapshot: CareerSnapshot): CareerSnapshot => ({ ...snapshot,
+    settings: { ...withoutProviderCredentials(snapshot.settings), storageMode: 'localStorage_only' },
+  });
+  const validate = (snapshot: any): snapshot is CareerSnapshot => {
+    if (!snapshot || typeof snapshot.profile !== 'object' || !snapshot.profile ||
+        typeof snapshot.settings !== 'object' || !snapshot.settings) return false;
+    return ['songs', 'folders', 'documents', 'events', 'chatMessages'].every(field =>
+      Array.isArray(snapshot[field]) && snapshot[field].every((item: any) => item && typeof item.id === 'string'));
+  };
+  return {
+    load(): CareerSnapshot {
+      check();
+      if (guest) return emptyCareerSnapshot();
+      const raw = storage().getItem(key);
+      if (raw === null) return emptyCareerSnapshot();
+      const record = JSON.parse(raw);
+      if (!record || record.schemaVersion !== 2 || record.ownerUid !== uid || !validate(record.snapshot)) {
+        throw new Error('This account’s saved workspace is invalid. Existing data was not changed.');
+      }
+      return sanitize(record.snapshot);
+    },
+    save(snapshot: CareerSnapshot): boolean {
+      check();
+      if (!validate(snapshot)) throw new Error('Invalid workspace. Existing data was not changed.');
+      if (guest) return false;
+      const now = new Date().toISOString();
+      const raw = storage().getItem(key);
+      const old = raw === null ? null : JSON.parse(raw);
+      if (raw !== null && (!old || old.ownerUid !== uid || old.schemaVersion !== 2 || !validate(old.snapshot))) {
+        throw new Error('Saved workspace is invalid. Export your current work before recovery.');
+      }
+      storage().setItem(key, JSON.stringify({ schemaVersion: 2, ownerUid: uid,
+        createdAt: old?.createdAt || now, updatedAt: now, snapshot: sanitize(snapshot) }));
+      return true;
+    },
+    reset(snapshot: CareerSnapshot): CareerSnapshot {
+      check();
+      const cleared = { ...snapshot, songs: [], folders: structuredClone(DEFAULT_FOLDERS),
+        documents: [], events: [], chatMessages: [] };
+      this.save(cleared);
+      return cleared;
+    },
+    export(snapshot: CareerSnapshot): string {
+      check();
+      if (!validate(snapshot)) throw new Error('Cannot export an invalid workspace.');
+      const safe = sanitize(snapshot);
+      return JSON.stringify({ app: 'IndieBrotherhood Career OS', schemaVersion: 2,
+        ownerUid: uid, exportedAt: new Date().toISOString(), ...safe,
+        documents: safe.documents.map(({ id, name, folderId, size, status, ocrRawText, parsedSongMetadata, uploadedAt }) =>
+          ({ id, name, folderId, size, status, ocrRawText, parsedSongMetadata, uploadedAt })),
+      }, null, 2);
+    },
+  };
 }

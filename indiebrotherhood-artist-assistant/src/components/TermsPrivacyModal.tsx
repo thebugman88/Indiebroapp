@@ -42,7 +42,7 @@ export const TermsPrivacyModal: React.FC<TermsPrivacyModalProps> = ({
               1. 100% Artist Data Privacy & Local Sovereignty
             </h3>
             <p>
-              Your unreleased song metadata, ISRC codes, split sheets, royalty earnings, and personal songwriter identifiers (IPI/CAE numbers) are stored locally in your browser's persistent IndexedDB vault. We do not sell, rent, monetize, or harvest independent artist data.
+              Your unreleased song metadata, ISRC codes, split sheets, royalty earnings, and personal songwriter identifiers (IPI/CAE numbers) are stored in an account-scoped snapshot in this browser. This is not encrypted storage or a cloud backup; anyone with access to your browser profile may be able to inspect it. We do not sell, rent, monetize, or harvest independent artist data.
             </p>
           </section>
 

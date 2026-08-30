@@ -61,5 +61,6 @@ This queue covers the broader platform, not just the eleven root-suite audit fin
 - [x] Add `SECURITY.md` maintenance/reporting boundaries; correct unsafe historical Hang Out audit instructions.
 - [ ] Execute the new Windows matrix on GitHub (not verified by local Linux builds).
 - [ ] Complete privacy/copyright policy review, monitored reporting contacts and data-retention decisions; do not invent founder approval.
-- [ ] Complete account-scoped data migration beyond Lyric Pro, cloud creator-data sync and legacy import ownership checks.
+- [x] Isolate Lyric Pro and Artist Assistant browser workspaces by account, including save/export/reset boundaries.
+- [ ] Isolate the remaining tools and catalog stores; add cloud creator-data sync and legacy import ownership checks.
 - [ ] Complete staging credentials, provider checks, durable realtime and legal/launch approvals.

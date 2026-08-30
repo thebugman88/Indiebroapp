@@ -14,7 +14,6 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { ArtistProfile, SettingsState, ProType } from "../types";
-import { exportFullCareerArchiveJSON } from "../lib/storage";
 import { requestNotificationPermission } from "../lib/notificationEngine";
 
 interface SettingsModalProps {
@@ -25,6 +24,7 @@ interface SettingsModalProps {
   onSaveProfile: (profile: ArtistProfile) => void;
   onSaveSettings: (settings: SettingsState) => void;
   onResetData: () => void;
+  onExportBackup: () => string;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -35,10 +35,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSaveProfile,
   onSaveSettings,
   onResetData,
+  onExportBackup,
 }) => {
   const [activeTab, setActiveTab] = useState<"profile" | "ai" | "notifications" | "data">("profile");
   const [localProfile, setLocalProfile] = useState<ArtistProfile>({ ...profile });
   const [localSettings, setLocalSettings] = useState<SettingsState>({ ...settings });
+  const [exportError, setExportError] = useState("");
   const [savedNotice, setSavedNotice] = useState(false);
   const [newGoalInput, setNewGoalInput] = useState("");
 
@@ -71,7 +73,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleExportBackup = async () => {
-    const jsonStr = await exportFullCareerArchiveJSON();
+    let jsonStr: string;
+    try { jsonStr = onExportBackup(); setExportError(''); }
+    catch { setExportError('Export failed or the account changed. Reopen this workspace.'); return; }
     const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -90,6 +94,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+      {exportError && <p role="alert" className="text-amber-300">{exportError}</p>}
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden text-slate-200">
         {/* Header */}
         <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
@@ -417,7 +422,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold text-slate-100">Export Career Vault (JSON Backup)</h4>
-                  <p className="text-slate-400">Download a complete, portable backup of all songs, split sheets, folders, files, and scheduled events.</p>
+                  <p className="text-slate-400">Export this account’s current metadata, profile, preferences, catalog, schedule and chat. Original uploaded files are not included; automatic restore is not yet supported.</p>
                 </div>
                 <button
                   type="button"
@@ -432,12 +437,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/40 flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold text-rose-200">Reset Local Vault</h4>
-                  <p className="text-rose-300/80">Clear local song catalog, documents, and reset database to fresh slate.</p>
+                  <p className="text-rose-300/80">Clear this account’s catalog, document metadata, schedule and chat. Profile and preferences are retained; default folders are restored.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm("Are you sure you want to reset your local database? All songs and folders will be cleared.")) {
+                    if (window.confirm("Reset this account’s browser workspace? Catalog, document metadata, schedule and chat will be cleared. Profile and preferences stay.")) {
                       onResetData();
                       onClose();
                     }
@@ -457,7 +462,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="text-[11px] text-slate-400">
             {savedNotice ? (
               <span className="text-emerald-400 font-medium flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" /> Changes saved to local vault!
+                <Check className="w-3.5 h-3.5" /> Changes applied. Check the workspace save status.
               </span>
             ) : (
               <span>Preferences persist across page sessions</span>
