@@ -41,3 +41,9 @@ Follow `SECURITY-ROLLOUT.md`. Provision and validate Firebase Authentication, pr
 Room chat, meeting state, and battle state are in memory and reset when a room becomes empty or the process restarts. They are public rooms for registered users, not invitation-only rooms. Room chat and battle verses currently accept text; unsupported media requests return an error rather than silently dropping their attachments. Private DMs support voice notes. A single persistent Node process is required; distributed durable realtime state is a separate platform task. DMs and Judgment Zone records are durable server storage.
 
 Other older platform-roadmap items remain: suite-wide server-owned coins/feature quotas, a billing-management UI, account-scoped migration of all creative drafts, a global admin directory/ban management, durable multi-instance rooms, and separate standalone-app deployment audits. Disabled global ban/free-access controls remain explicitly unavailable; no fake success is returned. These are not silently marked fixed by this checklist.
+
+## Follow-up: Lyric Pro vault isolation
+
+Lyric Pro now keys its local vault and startup-guideline acceptance by the signed-in Firebase UID. Account transitions remount the editor and discard late cloud/native generation responses. Guests have transient drafts only. Save/delete failures are surfaced before the UI claims success. The previous browser-wide vault remains untouched and is never silently assigned to a new account; manual recovery/import with explicit ownership is still pending. This is browser account separation, not encrypted storage or cloud backup. Other tools’ local drafts/catalogues still require their own migration.
+
+Validation: 18 unit/security tests (including four vault regression tests), typecheck, build and production smoke test pass. A real browser two-account switch check remains a staging gate; Firebase integration tests were not rerun for this browser-only change.

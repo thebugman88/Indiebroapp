@@ -1,4 +1,5 @@
-import { authenticatedFetch } from '../../src/services/authService';
+import { createLyricVault } from './vault';
+import { authenticatedFetch, getCurrentAuthUser } from '../../src/services/authService';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
@@ -40,8 +41,29 @@ import { generateAlgorithmicLyrics } from './data/lyricTemplates';
 import { generateNativeLyrics } from '../../src/services/nativeBrowserAi';
 
 export default function App() {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => {
+      const uid = getCurrentAuthUser().id;
+      setSession(old => uid === old.uid ? old : { uid, revision: old.revision + 1 });
+    };
+    window.addEventListener('ib_auth_changed', sync);
+    sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+  return <LyricStudio key={session.revision} accountId={session.uid} />;
+}
+
+function LyricStudio({ accountId }: { accountId: string }) {
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  const isCurrentSession = () => active.current && getCurrentAuthUser().id === accountId;
+  const vault = createLyricVault(accountId, () => getCurrentAuthUser().id, () => window.localStorage);
+  const [vaultError, setVaultError] = useState('');
   // ACCOUNT & SECURITY SENTINEL STATE
-  const [accountId, setAccountId] = useState<string>('');
   const [securityState, setSecurityState] = useState<SecurityState>({
     status: 'ACTIVE',
     trustScore: 100,
@@ -79,38 +101,20 @@ export default function App() {
 
   // INITIAL LOAD & ACCOUNT INITIALIZATION
   useEffect(() => {
-    // 1. Initialize unique account identifier
-    let storedAccountId = localStorage.getItem('lyric_pro_account_id');
-    if (!storedAccountId) {
-      storedAccountId = `acc_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-      localStorage.setItem('lyric_pro_account_id', storedAccountId);
-    }
-    setAccountId(storedAccountId);
-
-    // 2. Check TOS acceptance (Startup Guidelines)
-    const tos = localStorage.getItem('lyric_pro_tos_accepted');
-    if (tos === 'true') {
-      setTosAccepted(true);
-    } else {
-      // Auto open Startup Rules & Guidelines on first load
-      setIsTosOpen(true);
-    }
-
-    // 3. Load saved history
-    const saved = localStorage.getItem('lyric_pro_saved_vault');
-    if (saved) {
-      try {
-        setSavedEntries(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse saved vault:', e);
-      }
+    // Never infer ownership from the old browser-wide vault or random account ID.
+    try {
+      setTosAccepted(vault.acceptedTerms());
+      setIsTosOpen(!vault.acceptedTerms());
+      setSavedEntries(vault.load());
+    } catch {
+      setVaultError('Browser storage is unavailable or damaged. Your vault could not be loaded.');
     }
 
     // 4. Fetch account security status from server
-    authenticatedFetch(`/api/security/account-status?accountId=${storedAccountId}`)
+    authenticatedFetch('/api/security/account-status')
       .then((r) => r.json())
       .then((data) => {
-        if (data?.status) {
+        if (isCurrentSession() && data?.status) {
           setSecurityState({
             status: data.status.status || 'ACTIVE',
             pausedUntil: data.status.pausedUntil,
@@ -159,7 +163,7 @@ export default function App() {
 
   const handleAcceptTos = () => {
     setTosAccepted(true);
-    localStorage.setItem('lyric_pro_tos_accepted', 'true');
+    try { vault.acceptTerms(); } catch { setVaultError('Guidelines accepted for this session only; browser storage is unavailable.'); }
   };
 
   // UNPAUSE ACCOUNT (REMEDIAL ACTION)
@@ -170,7 +174,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId }),
       });
-      if (res.ok) {
+      if (res.ok && isCurrentSession()) {
         setPauseCountdown(0);
         setSecurityState({
           status: 'ACTIVE',
@@ -249,8 +253,10 @@ export default function App() {
         })
       });
 
+      if (!isCurrentSession()) return;
       if (response.status === 429) {
         const errorData = await response.json();
+        if (!isCurrentSession()) return;
         const remaining = errorData.remainingSeconds || 60;
         setSecurityState({
           status: 'PAUSED',
@@ -265,6 +271,7 @@ export default function App() {
 
       if (response.ok) {
         const data: LyricGenerateResponse = await response.json();
+        if (!isCurrentSession()) return;
         setSetA(data.setA);
         setSetB(data.setB);
         setIsAiGenerated(data.isAiGenerated);
@@ -278,6 +285,7 @@ export default function App() {
       console.debug('[Lyric Pro] Cloud API offline/keyless, trying native browser AI:', err);
     }
 
+    if (!isCurrentSession()) return;
     try {
       // Step 2: Try Native Browser AI (Chrome Prompt API / Gemini Nano)
       const nativeResult = await generateNativeLyrics({
@@ -291,6 +299,7 @@ export default function App() {
         userLyricsOption,
       });
 
+      if (!isCurrentSession()) return;
       if (nativeResult) {
         setSetA(nativeResult.setA);
         setSetB(nativeResult.setB);
@@ -302,6 +311,7 @@ export default function App() {
       console.debug('[Lyric Pro] Browser AI fallback to algorithmic:', browserAiErr);
     }
 
+    if (!isCurrentSession()) return;
     // Step 3: High-precision client-side Algorithmic Lyric Synthesis (Zero-Cost, Keyless)
     try {
       const algoResult = generateAlgorithmicLyrics({
@@ -343,20 +353,32 @@ export default function App() {
     };
 
     const updated = [newEntry, ...savedEntries];
+    if (!isCurrentSession()) return;
+    try { vault.save(updated); } catch (error) {
+      setVaultError(error instanceof Error ? error.message : 'Could not save this vault.');
+      return;
+    }
+    setVaultError('');
     setSavedEntries(updated);
-    localStorage.setItem('lyric_pro_saved_vault', JSON.stringify(updated));
     setCurrentEntrySaved(true);
   };
 
   const handleDeleteSavedEntry = (id: string) => {
     const updated = savedEntries.filter(e => e.id !== id);
+    if (!isCurrentSession()) return;
+    try { vault.save(updated); } catch (error) {
+      setVaultError(error instanceof Error ? error.message : 'Could not save this vault.');
+      return;
+    }
+    setVaultError('');
     setSavedEntries(updated);
-    localStorage.setItem('lyric_pro_saved_vault', JSON.stringify(updated));
   };
 
   const handleClearVault = () => {
+    if (!isCurrentSession()) return;
+    try { vault.clear(); } catch { setVaultError('Could not clear this vault.'); return; }
+    setVaultError('');
     setSavedEntries([]);
-    localStorage.removeItem('lyric_pro_saved_vault');
   };
 
   const handleLoadSavedEntry = (entry: SavedLyricEntry) => {
@@ -382,6 +404,13 @@ export default function App() {
         <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl" />
       </div>
 
+      <div className="relative z-10 p-3 text-sm text-zinc-300" role="status">
+        {accountId === 'guest'
+          ? 'Guest drafts are temporary and clear when you sign in or leave this tool. Copy them before switching; sign in before creating a saved vault.'
+          : 'Your vault is saved for this account on this browser only. It is not a cloud backup.'}
+        {' '}Older browser-wide drafts are preserved but are not automatically imported because their owner is unknown.
+        {vaultError && <p role="alert" className="text-amber-300">{vaultError}</p>}
+      </div>
       {/* HEADER */}
       <Header
         onOpenTos={() => setIsTosOpen(true)}
