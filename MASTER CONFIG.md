@@ -70,3 +70,12 @@ Keep these in Vercel or Firebase/Google Cloud secret storage, never in client bu
 ## Judgement Zone Current Config
 
 `judgement-zone/firebase.json` correctly references `firestore.rules` and `storage.rules`. `src/vite-env.d.ts` correctly types the Firebase variables. The app still needs Firebase Storage upload code, trusted review mutations, Functions/API configuration, indexes, emulator tests, and a project selection strategy before launch.
+
+## Security foundation update (2026-08-30)
+
+The root unified suite now uses Firebase Email/Password authentication and Firebase Admin ID-token verification. Root builds serve `dist/client`, with server output isolated in `dist/server.cjs`. Stripe fulfillment writes server-only Firestore subscription/event records. See `SECURITY-ROLLOUT.md` for exact environment variables, endpoint contracts, staging checks, admin claim assignment, and rollback. Realtime is deliberately unavailable until authenticated room membership replaces the raw broadcast relay. Standalone deployment configs are unchanged.
+
+
+## Remaining audit remediation (2026-08-30)
+
+The follow-up replaces the disabled raw relay with authenticated room protocols, implements private durable DMs and server-owned Judgment Zone mutations/uploads, removes fabricated analysis/catalog/chart results, and connects missing root AI routes. See `AUDIT-REMEDIATION.md` for all eleven findings and explicit staging/remaining-platform boundaries. This supersedes the first-batch realtime pause and “still open” list, but does not imply production deployment or complete the older platform roadmap.

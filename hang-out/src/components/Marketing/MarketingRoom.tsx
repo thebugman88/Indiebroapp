@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../../src/services/authService';
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, UserProfile, GenreType } from '../../types';
 import { backendApiUrl } from '../../services/backend';
@@ -55,7 +56,7 @@ export const MarketingRoom: React.FC<Props> = ({
 
     setIsGeneratingPlan(true);
     try {
-      const res = await fetch(backendApiUrl('/api/gemini/marketing-advisor'), {
+      const res = await authenticatedFetch(backendApiUrl('/api/gemini/marketing-advisor'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

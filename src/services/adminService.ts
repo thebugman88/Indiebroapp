@@ -1,3 +1,4 @@
+import { authenticatedFetch } from './authService';
 /**
  * Admin Management & Telemetry Service
  * Exclusively for Master Admin (xchristopherrayx@gmail.com)
@@ -141,7 +142,7 @@ export function getManagedUsers(): ManagedUser[] {
     const userLogs = logs.filter((l) => l.userEmail.toLowerCase() === emailKey);
     const latestLog = userLogs[0];
 
-    const isMasterAdmin = emailKey === ADMIN_EMAIL.toLowerCase();
+    const isMasterAdmin = u.isAdmin === true;
 
     // Determine online status based on recent activity (within 15 minutes)
     const isRecentlyActive = latestLog && (Date.now() - latestLog.timestamp < 15 * 60 * 1000);
@@ -175,162 +176,35 @@ export function getManagedUsers(): ManagedUser[] {
  * Give user Free Access to everything (Unlimited VIP Pass)
  */
 export function grantFreeAccessToUser(email: string): { success: boolean; message: string } {
-  const clean = email.toLowerCase();
-  const overrides = getUserOverrides();
-  overrides[clean] = {
-    ...overrides[clean],
-    isUnlimited: true,
-    freeAccessGrantedAt: Date.now(),
-  };
-  saveUserOverrides(overrides);
-
-  // If current auth user is this user, update local storage
-  const current = getCurrentAuthUser();
-  if (current.email.toLowerCase() === clean) {
-    current.isUnlimited = true;
-    saveCurrentAuthUser(current);
-  }
-
-  logUserActivity({
-    userEmail: clean,
-    displayName: clean.split('@')[0],
-    action: 'VIP Free Access Granted',
-    appLocation: 'Admin Control Center',
-    details: 'Master Admin granted full unlimited access to all 10 studios.',
-    status: 'success',
-  });
-
-  return { success: true, message: `Unlimited Free Access granted to ${email}!` };
+  return { success: false, message: 'This control is unavailable until server-backed moderation is connected. No changes were made.' };
 }
 
 /**
  * Revoke Free Access from user
  */
 export function revokeFreeAccessFromUser(email: string): { success: boolean; message: string } {
-  const clean = email.toLowerCase();
-  if (clean === ADMIN_EMAIL.toLowerCase()) {
-    return { success: false, message: 'Cannot revoke privileges from Master Founder Admin.' };
-  }
-  const overrides = getUserOverrides();
-  overrides[clean] = {
-    ...overrides[clean],
-    isUnlimited: false,
-  };
-  saveUserOverrides(overrides);
-
-  const current = getCurrentAuthUser();
-  if (current.email.toLowerCase() === clean) {
-    current.isUnlimited = false;
-    saveCurrentAuthUser(current);
-  }
-
-  return { success: true, message: `Unlimited access revoked for ${email}.` };
+  return { success: false, message: 'This control is unavailable until server-backed moderation is connected. No changes were made.' };
 }
 
 /**
  * Whitelist user
  */
 export function whitelistUser(email: string): { success: boolean; message: string } {
-  const clean = email.toLowerCase();
-  const overrides = getUserOverrides();
-  overrides[clean] = {
-    ...overrides[clean],
-    isWhitelisted: true,
-    isBlacklisted: false,
-    isKicked: false,
-  };
-  saveUserOverrides(overrides);
-
-  logUserActivity({
-    userEmail: clean,
-    displayName: clean.split('@')[0],
-    action: 'User Whitelisted',
-    appLocation: 'Admin Control Center',
-    details: 'User added to Verified White-List with 100% Trust Score.',
-    status: 'success',
-  });
-
-  return { success: true, message: `User ${email} has been whitelisted.` };
+  return { success: false, message: 'This control is unavailable until server-backed moderation is connected. No changes were made.' };
 }
 
 /**
  * Blacklist / Ban user
  */
 export function blacklistUser(email: string, reason = 'Administrative sanction'): { success: boolean; message: string } {
-  const clean = email.toLowerCase();
-  if (clean === ADMIN_EMAIL.toLowerCase()) {
-    return { success: false, message: 'Cannot blacklist Master Founder Admin.' };
-  }
-
-  const overrides = getUserOverrides();
-  overrides[clean] = {
-    ...overrides[clean],
-    isBlacklisted: true,
-    isWhitelisted: false,
-    isKicked: true,
-    kickReason: reason,
-    bannedAt: Date.now(),
-  };
-  saveUserOverrides(overrides);
-
-  // Notify backend WebSocket to kick user
-  fetch('/api/admin/blacklist', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: clean, reason }),
-  }).catch(() => {});
-
-  logUserActivity({
-    userEmail: clean,
-    displayName: clean.split('@')[0],
-    action: 'User Blacklisted & Banned',
-    appLocation: 'Admin Control Center',
-    details: `Banned by Master Admin. Reason: ${reason}`,
-    status: 'blocked',
-  });
-
-  return { success: true, message: `User ${email} has been blacklisted and banned.` };
+  return { success: false, message: 'This control is unavailable until server-backed moderation is connected. No changes were made.' };
 }
 
 /**
  * Kick out user from active session / meeting room
  */
 export function kickOutUser(emailOrId: string, reason = 'Kicked by Master Admin'): { success: boolean; message: string } {
-  const clean = emailOrId.toLowerCase();
-  if (clean === ADMIN_EMAIL.toLowerCase()) {
-    return { success: false, message: 'Cannot kick out Master Founder Admin.' };
-  }
-
-  const overrides = getUserOverrides();
-  overrides[clean] = {
-    ...overrides[clean],
-    isKicked: true,
-    kickReason: reason,
-  };
-  saveUserOverrides(overrides);
-
-  // Trigger server kick
-  fetch('/api/admin/kick', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target: clean, reason }),
-  }).catch(() => {});
-
-  // Global browser event
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('ib_user_kicked', { detail: { target: clean, reason } }));
-  }
-
-  logUserActivity({
-    userEmail: clean,
-    displayName: clean.split('@')[0],
-    action: 'User Forcibly Kicked',
-    appLocation: 'Assembly Meeting Room / Studio',
-    details: `Session terminated by Master Admin. Reason: ${reason}`,
-    status: 'warning',
-  });
-
-  return { success: true, message: `User ${emailOrId} has been kicked from the session.` };
+  return { success: false, message: 'This control is unavailable until server-backed moderation is connected. No changes were made.' };
 }
 
 /**
@@ -338,5 +212,5 @@ export function kickOutUser(emailOrId: string, reason = 'Kicked by Master Admin'
  */
 export function isMasterAdminLoggedIn(): boolean {
   const user = getCurrentAuthUser();
-  return user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() || user.isAdmin === true;
+  return  user.isAdmin === true;
 }

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../src/services/authService';
 import React, { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
@@ -117,7 +118,7 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
         parts: [{ text: m.content || m.text || "" }],
       }));
 
-      const res = await fetch("/api/ai/chat", {
+      const res = await authenticatedFetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,0 +1,1 @@
+{"firestore":{"rules":"judgement-zone/firestore.rules","indexes":"judgement-zone/firestore.indexes.json"}}

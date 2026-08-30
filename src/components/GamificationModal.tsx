@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../services/authService';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -98,10 +99,10 @@ export const GamificationModal: React.FC = () => {
     if (activeTab === 'sentinel') {
       setIsLoadingSentinel(true);
       Promise.all([
-        fetch('/api/security/stats').then((r) => r.json()).catch(() => null),
-        fetch('/api/security/logs').then((r) => r.json()).catch(() => null),
-        fetch('/api/audit/transactions').then((r) => r.json()).catch(() => null),
-        fetch('/api/resilience/status').then((r) => r.json()).catch(() => null),
+        authenticatedFetch('/api/security/stats').then((r) => r.json()).catch(() => null),
+        authenticatedFetch('/api/security/logs').then((r) => r.json()).catch(() => null),
+        authenticatedFetch('/api/audit/transactions').then((r) => r.json()).catch(() => null),
+        authenticatedFetch('/api/resilience/status').then((r) => r.json()).catch(() => null),
       ]).then(([stats, secLogs, txLogs, resPolicy]) => {
         if (stats) setSentinelStats(stats);
         if (secLogs?.logs) setSecurityLogs(secLogs.logs);

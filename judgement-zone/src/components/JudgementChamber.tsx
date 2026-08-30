@@ -1,3 +1,4 @@
+import { startListening } from '../utils/storage';
 import React, { useState, useEffect } from 'react';
 import {
   Play,
@@ -32,8 +33,8 @@ import { calculateReviewReward, calculateSonicDrift, JUDGE_TIERS } from '../util
 interface JudgementChamberProps {
   tracks: ArtistTrack[];
   userProfile: UserJudgeProfile;
-  onRecordReview: (review: JudgeReview, trackId: string, xpEarned: number) => void;
-  onUseSkip: () => void;
+  onRecordReview: (review: JudgeReview, trackId: string, xpEarned: number) => Promise<JudgeReview>;
+  onUseSkip: () => Promise<void>;
   onSaveToVault: (trackId: string) => void;
   onNavigateToSubmit: () => void;
   onNavigateToSonicProfile: () => void;
@@ -75,8 +76,8 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
   const [showLyricsModal, setShowLyricsModal] = useState(false);
 
   // Filter available queue for blind chamber
-  const candidateTracks = tracks.filter(t => !userProfile.savedVaultTrackIds.includes(t.id) || isRevealed);
-  const currentTrack = candidateTracks[currentTrackIndex] || tracks[0];
+  const candidateTracks = tracks.filter(t => t.ownerId!==userProfile.id && (!userProfile.savedVaultTrackIds.includes(t.id) || isRevealed));
+  const currentTrack = candidateTracks[currentTrackIndex] || candidateTracks[0];
 
   const sonicMatchScore = currentTrack ? calculateSonicDrift(userProfile.tasteProfile, currentTrack) : 75;
 
@@ -114,11 +115,12 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
     };
   }, [currentTrack?.id]);
 
-  const handleTogglePlay = () => {
+  const handleTogglePlay = async () => {
     if (isPlaying) {
       audioEngine.pause();
       setIsPlaying(false);
     } else {
+      try {await startListening(currentTrack.id);}catch(e:any){setSeekWarning(e.message);return;}
       audioEngine.play();
       setIsPlaying(true);
     }
@@ -148,14 +150,14 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
     }
   };
 
-  const handleSkipTrack = () => {
+  const handleSkipTrack = async () => {
     if (userProfile.skipsRemaining <= 0) {
       setSeekWarning('Daily skip limit reached (3/3 used). Complete this evaluation or wait for 24h reset.');
       setTimeout(() => setSeekWarning(null), 3500);
       return;
     }
 
-    onUseSkip();
+    try {await onUseSkip();}catch(e:any){setSeekWarning(e.message);return;}
     audioEngine.stop();
     setIsPlaying(false);
     setCurrentTrackIndex((prev) => (prev + 1) % Math.max(1, candidateTracks.length));
@@ -172,13 +174,9 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
   );
 
   // Real-time reward calculator
-  const rewardPreview = calculateReviewReward({
-    listenPercentage: listenRatio,
-    writtenFeedback: feedbackText,
-    userTier: userProfile.judgeTier
-  });
+  const rewardPreview = {xp:50,depthMultiplier:1,listenMultiplier:1,breakdown:'50 XP for a validated review; no unverified listening bonus.'};
 
-  const handleSubmitVerdict = () => {
+  const handleSubmitVerdict = async () => {
     if (!is50PercentMet) {
       setSeekWarning('Integrity Gate: You must listen to at least 50% of the song before submitting your verdict.');
       setTimeout(() => setSeekWarning(null), 3500);
@@ -195,13 +193,7 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
     setIsSubmitting(true);
     audioEngine.playGavelImpact();
 
-    setTimeout(() => {
-      // Confetti burst
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
+    try {
 
       const newReview: JudgeReview = {
         id: `rev-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -220,12 +212,13 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
         driftMatchScore: sonicMatchScore
       };
 
-      onRecordReview(newReview, currentTrack.id, rewardPreview.xp);
-      setRevealedReview(newReview);
+      const confirmed=await onRecordReview(newReview, currentTrack.id, rewardPreview.xp);
+      setRevealedReview(confirmed);
+      confetti({particleCount:80,spread:70,origin:{y:0.6}});
       setIsRevealed(true);
       setIsSubmitting(false);
       audioEngine.playUnveilSound();
-    }, 450);
+    }catch(e:any){setSeekWarning(e.message);}finally{setIsSubmitting(false);}
   };
 
   const handleNextTrack = () => {
@@ -524,7 +517,7 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>
-                <strong>100% Direct Rights Certified:</strong> {currentTrack.rightsHolderSignature}
+                <strong>Ownership declared by uploader:</strong> {currentTrack.rightsHolderSignature}
               </span>
             </div>
             <span className="font-mono text-zinc-500 text-[10px]">
@@ -716,9 +709,9 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
               </label>
               <div className="text-[11px] font-mono text-zinc-400">
                 {feedbackText.length > 250 ? (
-                  <span className="text-emerald-400 font-bold">★ Deep Critique (+1.75x XP Multiplier)</span>
+                  <span className="text-emerald-400 font-bold">★ Detailed critique</span>
                 ) : feedbackText.length > 120 ? (
-                  <span className="text-cyan-400 font-bold">✓ Strong Critique (+1.4x XP)</span>
+                  <span className="text-cyan-400 font-bold">✓ Developed critique</span>
                 ) : (
                   <span>{feedbackText.length} characters</span>
                 )}

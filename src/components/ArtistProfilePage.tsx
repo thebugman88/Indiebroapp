@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../services/authService';
 import React, { useState, useEffect } from 'react';
 import {
   User,
@@ -116,7 +117,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
     setIsSearching(true);
     setHasSearched(true);
     try {
-      const resp = await fetch(`/api/artist/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      const resp = await authenticatedFetch(`/api/artist/search?q=${encodeURIComponent(searchQuery.trim())}`);
       const data = await resp.json();
       if (data.artists) {
         setSearchResults(data.artists);
@@ -133,7 +134,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
     setIsLoadingCatalog(true);
     try {
       const url = `/api/artist/catalog?artistId=${encodeURIComponent(artist.artistId)}&artistName=${encodeURIComponent(artist.artistName)}`;
-      const resp = await fetch(url);
+      const resp = await authenticatedFetch(url);
       const data = await resp.json();
 
       if (data.success && data.tracks) {
@@ -930,10 +931,10 @@ export const ArtistProfilePage: React.FC<Props> = ({
 
               {/* Unlimited Passkey Info */}
               <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800 space-y-2">
-                <h3 className="text-xs font-bold text-white">Master Admin Passkey</h3>
-                <p className="text-[11px] text-slate-400">Your permanent biometric passkey for rapid device restoration.</p>
+                <h3 className="text-xs font-bold text-white">Account recovery</h3>
+                <p className="text-[11px] text-slate-400">Use the sign-in dialog to request a password reset email.</p>
                 <div className="rounded-xl bg-slate-900 px-3 py-1.5 font-mono text-xs font-bold text-cyan-300 border border-slate-800">
-                  {currentUser.passkey}
+                  {'Use email password recovery'}
                 </div>
               </div>
 

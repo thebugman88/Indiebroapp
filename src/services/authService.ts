@@ -1,9 +1,6 @@
-/**
- * Authentication, Admin Privileges & Account Recovery Service
- * Supports Master Admin (xchristopherrayx@gmail.com with unlimited access),
- * Passkeys, Security Questions for 1-click password/login recovery,
- * and Real-World Artist Environment Profile Synchronization.
- */
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, onIdTokenChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  sendPasswordResetEmail, sendEmailVerification, updateProfile, signOut, type User } from 'firebase/auth';
 
 export interface RegisteredUser {
   id: string;
@@ -13,10 +10,6 @@ export interface RegisteredUser {
   role: 'admin' | 'artist' | 'producer' | 'engineer';
   isAdmin: boolean;
   isUnlimited: boolean;
-  password?: string;
-  passkey: string;
-  securityQuestion: string;
-  securityAnswer: string;
   avatarUrl: string;
   avatarSeed: string;
   avatarBg: string;
@@ -62,48 +55,150 @@ export interface VerifiedArtistInfo {
   totalCatalogTracks: number;
 }
 
-const AUTH_USER_KEY = 'ib_auth_current_user_v2';
-const USERS_REGISTRY_KEY = 'ib_auth_registered_users_v2';
 const ARTIST_CATALOG_KEY = 'ib_artist_verified_catalog_v2';
 const ARTIST_INFO_KEY = 'ib_artist_verified_info_v2';
-
+// Display/contact information only. Never use this address as an authorization rule.
 export const ADMIN_EMAIL = 'xchristopherrayx@gmail.com';
-
-// Default Master Admin Profile
-export const DEFAULT_MASTER_ADMIN: RegisteredUser = {
-  id: 'admin_christopher_ray',
-  email: ADMIN_EMAIL,
-  displayName: 'Christopher Ray (Founder)',
-  artistHandle: 'christopherray',
-  role: 'admin',
-  isAdmin: true,
-  isUnlimited: true,
-  passkey: 'MASTER-IB-2026',
-  securityQuestion: 'What is the supreme music creation suite?',
-  securityAnswer: 'indiebrotherhood',
-  avatarUrl: '',
-  avatarSeed: 'CR',
-  avatarBg: 'from-amber-400 via-rose-500 to-purple-600',
-  bio: 'Founder & Master Architect of indiebrotherhood ecosystem. Unlimited authority & full studio privileges enabled.',
-  dawSetup: 'Ableton Live 12 Suite & Universal Audio DSP',
-  proAffiliation: 'ASCAP / Independent',
-  labelDistributor: 'indiebrotherhood Records / DistroKid',
-  isrcPrefix: 'US-IBH-2026',
-  studioAura: 'gold',
-  spotifyUrl: 'https://open.spotify.com',
-  appleMusicUrl: 'https://music.apple.com',
-  instagramUrl: 'https://instagram.com/indiebrotherhood',
-  createdAt: 1704067200000,
-  lastLoginAt: Date.now(),
+export const GUEST_USER: RegisteredUser = {
+  id: 'guest', email: '', displayName: 'Guest Artist', artistHandle: '', role: 'artist',
+  isAdmin: false, isUnlimited: false, avatarUrl: '', avatarSeed: 'GA',
+  avatarBg: 'from-amber-400 via-rose-500 to-purple-600', studioAura: 'gold',
+  createdAt: 0, lastLoginAt: 0,
 };
+const config = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+export const isAuthConfigured = Object.values(config).every(Boolean);
+const app = isAuthConfigured
+  ? getApps().find(a => a.name === 'suite-auth') || initializeApp(config, 'suite-auth') : null;
+const auth = app ? getAuth(app) : null;
+let currentUser: RegisteredUser = { ...GUEST_USER };
+let authRevision = 0;
 
-export const SECURITY_QUESTIONS = [
-  'What is the name of your first musical project, band, or beat?',
-  'What was your first audio workstation (DAW) or sampler?',
-  'What is the title of your all-time favorite song or anthem?',
-  'What city or town was your first song written in?',
-  'What is the brand of your primary studio microphone or headphones?',
-];
+// Discard insecure demo credentials. Catalog and creative drafts are left untouched.
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem('ib_auth_current_user_v2');
+    localStorage.removeItem('ib_auth_registered_users_v2');
+    localStorage.removeItem('hangout_artist_profile');
+    localStorage.removeItem('indie_current_auth_user');
+  } catch { /* Storage may be disabled. */ }
+}
+
+function publishUser(user: RegisteredUser) {
+  currentUser = user;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ib_auth_changed', { detail: { ...user } }));
+  }
+}
+
+async function syncUser(user: User | null): Promise<RegisteredUser> {
+  const revision = ++authRevision;
+  if (!user || user.isAnonymous) {
+    publishUser({ ...GUEST_USER });
+    return getCurrentAuthUser();
+  }
+  const token = await user.getIdTokenResult();
+  if (revision !== authRevision || auth?.currentUser?.uid !== user.uid) return getCurrentAuthUser();
+  const isAdmin = token.claims.admin === true && token.claims.email_verified === true;
+  const profile: RegisteredUser = {
+    ...GUEST_USER, id: user.uid, email: user.email || '',
+    displayName: user.displayName || 'Independent Artist',
+    artistHandle: (user.displayName || 'artist').toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    avatarUrl: user.photoURL || '', avatarSeed: (user.displayName || 'IA').slice(0, 2).toUpperCase(),
+    role: isAdmin ? 'admin' : 'artist', isAdmin, isUnlimited: isAdmin,
+    createdAt: Date.parse(user.metadata.creationTime || '') || 0, lastLoginAt: Date.now(),
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(`ib_profile_details_v3:${user.uid}`) || '{}');
+    for (const field of PROFILE_FIELDS) if (typeof saved[field] === 'string') (profile as any)[field] = saved[field];
+  } catch { /* Optional local profile details are not credentials. */ }
+  publishUser(profile);
+  return getCurrentAuthUser();
+}
+const PROFILE_FIELDS = ['displayName', 'artistHandle', 'avatarUrl', 'avatarSeed', 'avatarBg', 'bio',
+  'dawSetup', 'proAffiliation', 'labelDistributor', 'isrcPrefix', 'studioAura', 'spotifyUrl', 'appleMusicUrl', 'instagramUrl'] as const;
+if (auth) onIdTokenChanged(auth, user => {
+  void syncUser(user).catch(() => publishUser({ ...GUEST_USER }));
+});
+
+export function getCurrentAuthUser(): RegisteredUser { return { ...currentUser }; }
+export function saveCurrentAuthUser(user: RegisteredUser): void {
+  if (!auth?.currentUser || auth.currentUser.uid !== user.id) return;
+  const details: Record<string, string> = {};
+  for (const field of PROFILE_FIELDS) if (typeof user[field] === 'string') details[field] = user[field];
+  try { localStorage.setItem(`ib_profile_details_v3:${user.id}`, JSON.stringify(details)); } catch {}
+  publishUser({ ...currentUser, ...details });
+}
+// This is the current browser's profile, not a server-wide user directory.
+export function getRegisteredUsers(): Record<string, RegisteredUser> {
+  return currentUser.id === 'guest' ? {} : { [currentUser.email]: getCurrentAuthUser() };
+}
+function requireAuthClient() {
+  if (!auth) throw new Error('Sign-in is unavailable until Firebase Authentication is configured.');
+  return auth;
+}
+function authError(error: unknown): string {
+  const code = (error as { code?: string })?.code;
+  if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') return 'Email or password is incorrect.';
+  if (code === 'auth/too-many-requests') return 'Too many attempts. Please try again later.';
+  if (code === 'auth/weak-password') return 'Choose a stronger password (at least 8 characters).';
+  if (code === 'auth/email-already-in-use') return 'Unable to create this account. Try signing in or resetting your password.';
+  return 'Authentication is unavailable. Check your connection and try again.';
+}
+export async function loginUser(email: string, password: string) {
+  if (!auth) return { success: false, error: 'Firebase sign-in is not configured yet.' };
+  try {
+    const result = await signInWithEmailAndPassword(requireAuthClient(), email.trim(), password);
+    return { success: true, user: await syncUser(result.user) };
+  } catch (error) { return { success: false, error: authError(error) }; }
+}
+export async function registerUser(params: { email: string; displayName: string; password: string }) {
+  if (!auth) return { success: false, error: 'Firebase sign-in is not configured yet.' };
+  if (!params.displayName.trim() || params.password.length < 8) return { success: false, error: 'Enter a name and a password of at least 8 characters.' };
+  try {
+    const result = await createUserWithEmailAndPassword(requireAuthClient(), params.email.trim(), params.password);
+    await updateProfile(result.user, { displayName: params.displayName.trim() });
+    let message = 'Account created. Check your email to verify your address.';
+    try { await sendEmailVerification(result.user); } catch { message = 'Account created. Verification email could not be sent; use Resend verification.'; }
+    return { success: true, user: await syncUser(result.user), message };
+  } catch (error) { return { success: false, error: authError(error) }; }
+}
+export async function recoverAccount(params: { email: string }) {
+  if (!auth) return { success: false, error: 'Firebase sign-in is not configured yet.' };
+  try {
+    await sendPasswordResetEmail(requireAuthClient(), params.email.trim());
+    return { success: true, message: 'If this address has an account, a password reset email will arrive shortly.' };
+  } catch (error) {
+    if ((error as { code?: string }).code === 'auth/user-not-found') return { success: true, message: 'If this address has an account, a password reset email will arrive shortly.' };
+    return { success: false, error: authError(error) };
+  }
+}
+export async function logoutUser() { if (auth) await signOut(auth); publishUser({ ...GUEST_USER }); }
+export async function resendVerification() {
+  const user = requireAuthClient().currentUser;
+  if (!user || user.isAnonymous) throw new Error('Sign in first.');
+  await sendEmailVerification(user);
+}
+export async function getSuiteIdToken(): Promise<string> {
+  const client = requireAuthClient(); await client.authStateReady();
+  if (!client.currentUser || client.currentUser.isAnonymous) throw new Error('Sign in to continue.');
+  return client.currentUser.getIdToken();
+}
+export async function authenticatedFetch(input: string, init: RequestInit = {}) {
+  const client = requireAuthClient();
+  await client.authStateReady();
+  if (!client.currentUser || client.currentUser.isAnonymous) throw new Error('Sign in to continue.');
+  // Never forward a bearer token to an external URL.
+  const target = new URL(input, window.location.origin);
+  if (target.origin !== window.location.origin) throw new Error('Authenticated requests must use the suite backend.');
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${await client.currentUser.getIdToken()}`);
+  return fetch(target, { ...init, headers });
+}
 
 export const STUDIO_AURAS: {
   id: RegisteredUser['studioAura'];
@@ -119,243 +214,6 @@ export const STUDIO_AURAS: {
   { id: 'rose', name: 'Rose Quartz', glowClass: 'ring-2 ring-rose-400/80 shadow-[0_0_20px_rgba(244,63,94,0.5)]', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40', hex: '#f43f5e' },
   { id: 'crimson', name: 'Apex Crimson', glowClass: 'ring-2 ring-red-400/80 shadow-[0_0_20px_rgba(239,68,68,0.5)]', badgeClass: 'bg-red-500/20 text-red-300 border-red-500/40', hex: '#ef4444' },
 ];
-
-/**
- * Load current authenticated user (defaults to Admin Christopher Ray for seamless unlimited access)
- */
-export function getCurrentAuthUser(): RegisteredUser {
-  if (typeof window === 'undefined') return DEFAULT_MASTER_ADMIN;
-  try {
-    const raw = localStorage.getItem(AUTH_USER_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // If email is master admin, ensure admin flags remain strictly true
-      if (parsed.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-        parsed.isAdmin = true;
-        parsed.isUnlimited = true;
-        parsed.role = 'admin';
-      }
-      return parsed;
-    }
-  } catch (e) {
-    console.error('Failed to load current auth user:', e);
-  }
-
-  // Save default Master Admin if first run
-  saveCurrentAuthUser(DEFAULT_MASTER_ADMIN);
-  return DEFAULT_MASTER_ADMIN;
-}
-
-export function saveCurrentAuthUser(user: RegisteredUser): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-    // Keep users registry updated
-    const registry = getRegisteredUsers();
-    registry[user.email.toLowerCase()] = user;
-    localStorage.setItem(USERS_REGISTRY_KEY, JSON.stringify(registry));
-
-    // Also sync to hangout_artist_profile so Hang Out instantly shows updated picture & handle
-    const hangoutProfile = {
-      id: user.id,
-      nickname: user.displayName,
-      role: user.role === 'admin' ? 'Founder & Producer' : 'Producer',
-      avatarUrl: user.avatarUrl,
-      favoriteGenre: 'Hip-Hop',
-      battlesWon: 12,
-      battlesTotal: 15,
-      reputation: 99,
-      isAdmin: user.isAdmin,
-      isUnlimited: user.isUnlimited,
-      studioAura: user.studioAura,
-    };
-    localStorage.setItem('hangout_artist_profile', JSON.stringify(hangoutProfile));
-
-    // Dispatch global event
-    window.dispatchEvent(new CustomEvent('ib_auth_changed', { detail: user }));
-  } catch (e) {
-    console.error('Failed to save auth user:', e);
-  }
-}
-
-export function getRegisteredUsers(): Record<string, RegisteredUser> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = localStorage.getItem(USERS_REGISTRY_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (!parsed[ADMIN_EMAIL.toLowerCase()]) {
-        parsed[ADMIN_EMAIL.toLowerCase()] = DEFAULT_MASTER_ADMIN;
-      }
-      return parsed;
-    }
-  } catch {
-    // fallback
-  }
-  const initial = { [ADMIN_EMAIL.toLowerCase()]: DEFAULT_MASTER_ADMIN };
-  try {
-    localStorage.setItem(USERS_REGISTRY_KEY, JSON.stringify(initial));
-  } catch {}
-  return initial;
-}
-
-/**
- * 1-Click Master Admin Login
- */
-export function loginAsMasterAdmin(): RegisteredUser {
-  const admin: RegisteredUser = {
-    ...DEFAULT_MASTER_ADMIN,
-    lastLoginAt: Date.now(),
-  };
-  saveCurrentAuthUser(admin);
-  return admin;
-}
-
-/**
- * Standard Login with Email, Password or Passkey
- */
-export function loginUser(
-  email: string,
-  password?: string,
-  passkey?: string
-): { success: boolean; user?: RegisteredUser; error?: string } {
-  const cleanEmail = email.trim().toLowerCase();
-  
-  if (cleanEmail === ADMIN_EMAIL.toLowerCase()) {
-    const admin = loginAsMasterAdmin();
-    return { success: true, user: admin };
-  }
-
-  const registry = getRegisteredUsers();
-  const user = registry[cleanEmail];
-
-  if (!user) {
-    return { success: false, error: 'No account found with this email. Click "Create Account" to register.' };
-  }
-
-  // Check passkey first
-  if (passkey && passkey.trim() && user.passkey && user.passkey.toLowerCase() === passkey.trim().toLowerCase()) {
-    user.lastLoginAt = Date.now();
-    saveCurrentAuthUser(user);
-    return { success: true, user };
-  }
-
-  // Check password
-  if (password && user.password && user.password === password) {
-    user.lastLoginAt = Date.now();
-    saveCurrentAuthUser(user);
-    return { success: true, user };
-  }
-
-  if (passkey && !password) {
-    return { success: false, error: 'Invalid Passkey provided.' };
-  }
-
-  return { success: false, error: 'Incorrect password. Use Passkey or "Forgot Login" recovery.' };
-}
-
-/**
- * Register New Artist User
- */
-export function registerUser(params: {
-  email: string;
-  displayName: string;
-  artistHandle?: string;
-  password?: string;
-  passkey: string;
-  securityQuestion: string;
-  securityAnswer: string;
-  role?: 'admin' | 'artist' | 'producer' | 'engineer';
-  avatarUrl?: string;
-}): { success: boolean; user?: RegisteredUser; error?: string } {
-  const cleanEmail = params.email.trim().toLowerCase();
-  if (!cleanEmail || !params.displayName.trim()) {
-    return { success: false, error: 'Email and Display Name are required.' };
-  }
-
-  if (!params.securityAnswer.trim()) {
-    return { success: false, error: 'Please provide an answer to your security question for account recovery.' };
-  }
-
-  const isAdminEmail = cleanEmail === ADMIN_EMAIL.toLowerCase();
-
-  const newUser: RegisteredUser = {
-    id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    email: cleanEmail,
-    displayName: params.displayName.trim(),
-    artistHandle: params.artistHandle?.trim() || params.displayName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-    role: isAdminEmail ? 'admin' : (params.role || 'artist'),
-    isAdmin: isAdminEmail,
-    isUnlimited: isAdminEmail,
-    password: params.password || '',
-    passkey: params.passkey.trim() || `IB-KEY-${Math.floor(1000 + Math.random() * 9000)}`,
-    securityQuestion: params.securityQuestion || SECURITY_QUESTIONS[0],
-    securityAnswer: params.securityAnswer.trim().toLowerCase(),
-    avatarUrl: params.avatarUrl || `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(params.displayName)}`,
-    avatarSeed: params.displayName.slice(0, 2).toUpperCase(),
-    avatarBg: 'from-amber-400 via-rose-500 to-purple-600',
-    studioAura: 'gold',
-    createdAt: Date.now(),
-    lastLoginAt: Date.now(),
-  };
-
-  saveCurrentAuthUser(newUser);
-  return { success: true, user: newUser };
-}
-
-/**
- * Recover Account / Reset Password via Security Question or Passkey
- */
-export function recoverAccount(params: {
-  email: string;
-  securityAnswer?: string;
-  passkey?: string;
-  newPassword?: string;
-}): { success: boolean; recoveredUser?: RegisteredUser; error?: string; message?: string } {
-  const cleanEmail = params.email.trim().toLowerCase();
-  const registry = getRegisteredUsers();
-  const user = registry[cleanEmail];
-
-  if (!user) {
-    return { success: false, error: 'No account found registered under this email address.' };
-  }
-
-  let verified = false;
-
-  // 1. Verify via Passkey
-  if (params.passkey && params.passkey.trim() && user.passkey) {
-    if (params.passkey.trim().toLowerCase() === user.passkey.toLowerCase()) {
-      verified = true;
-    }
-  }
-
-  // 2. Verify via Security Answer
-  if (!verified && params.securityAnswer && params.securityAnswer.trim() && user.securityAnswer) {
-    if (params.securityAnswer.trim().toLowerCase() === user.securityAnswer.toLowerCase()) {
-      verified = true;
-    }
-  }
-
-  if (!verified) {
-    return {
-      success: false,
-      error: 'Security answer or Passkey did not match the registered records.',
-    };
-  }
-
-  if (params.newPassword && params.newPassword.trim()) {
-    user.password = params.newPassword.trim();
-  }
-
-  user.lastLoginAt = Date.now();
-  saveCurrentAuthUser(user);
-
-  return {
-    success: true,
-    recoveredUser: user,
-    message: `Account recovered successfully! Logged in as ${user.displayName}. Your active passkey is ${user.passkey}.`,
-  };
-}
 
 // -------------------------------------------------------------
 // VERIFIED ARTIST SONG CATALOG STORAGE & MANAGEMENT

@@ -40,7 +40,7 @@ import { HostDialog } from './components/HostDialog';
 import { MeetingMinutesModal } from './components/MeetingMinutesModal';
 import { HelpModal, TermsModal, PrivacyModal } from './components/LegalModals';
 import { Footer } from './components/Footer';
-import { ADMIN_EMAIL, getCurrentAuthUser } from '../../src/services/authService';
+import { getSuiteIdToken, getCurrentAuthUser } from '../../src/services/authService';
 import { addNotification } from '../../src/services/notificationService';
 import { kickOutUser, logUserActivity } from '../../src/services/adminService';
 import { AdminControlRoomModal } from '../../src/components/AdminControlRoomModal';
@@ -48,7 +48,7 @@ import { AdminControlRoomModal } from '../../src/components/AdminControlRoomModa
 export default function App() {
   const prefs = loadUserPrefs();
   const currentUser = getCurrentAuthUser();
-  const isMasterAdmin = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() || currentUser.isAdmin === true;
+  const isMasterAdmin = currentUser.isAdmin === true;
 
   // URL room param override
   const urlParams = new URLSearchParams(window.location.search);
@@ -56,10 +56,11 @@ export default function App() {
 
   const [roomId, setRoomId] = useState<string>(initialRoomId);
   const [userName, setUserName] = useState<string>(currentUser.displayName || prefs.name || (isMasterAdmin ? 'Christopher Ray' : 'Attendee'));
-  const [userRole, setUserRole] = useState<UserRole>(isMasterAdmin ? 'host' : prefs.role);
+  const [userRole, setUserRole] = useState<UserRole>(isMasterAdmin ? 'host' : 'attendee');
   const [userColor, setUserColor] = useState<string>(prefs.color || getRandomColor());
   const [userId, setUserId] = useState<string>(() => currentUser.id || `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
 
+  const [connectionError,setConnectionError]=useState('');
   const [connected, setConnected] = useState(false);
   const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [roomState, setRoomState] = useState<MeetingRoomState>({
@@ -106,46 +107,34 @@ export default function App() {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}`;
+    const wsUrl = `${protocol}//${host}/ws/meeting`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      setConnected(true);
-      // Join Room
-      const joinMsg: WSClientMessage = {
-        type: 'JOIN_ROOM',
-        roomId,
-        attendee: {
-          id: userId,
-          name: userName.trim() || 'Attendee',
-          role: userRole,
-          status: 'active',
-          hasHandRaised: false,
-          avatarColor: userColor,
-        },
-      };
-      ws.send(JSON.stringify(joinMsg));
-
-      // Start keepalive ping
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'PING' }));
-        }
-      }, 25000);
+    ws.onopen = async () => {
+      try { const token=await getSuiteIdToken();if(wsRef.current===ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'AUTH',token})); }
+      catch { ws.close(); }
     };
 
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data) as WSServerMessage;
+        const parsed = JSON.parse(event.data);
+        if (parsed.type==='AUTH_OK') {
+          setConnected(true);ws.send(JSON.stringify({type:'JOIN_ROOM',roomId}));
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current=setInterval(()=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'PING'}));},25000);
+          return;
+        }
+        const msg = parsed as WSServerMessage;
         switch (msg.type) {
+          case 'ERROR': setConnectionError(msg.message);break;
           case 'INIT_STATE':
           case 'STATE_UPDATE':
-            setRoomState(msg.state);
+            setConnectionError('');setRoomState(msg.state);
             if (msg.type === 'INIT_STATE' && msg.yourId) {
               setUserId(msg.yourId);
+              setUserRole(msg.state.attendees[msg.yourId]?.role || 'attendee');
             }
             break;
 
@@ -254,7 +243,7 @@ export default function App() {
                 msg.target === (currentUser.email || '').toLowerCase())
             ) {
               window.dispatchEvent(new CustomEvent('ib_user_kicked', { detail: { reason: msg.reason } }));
-              if (wsRef.current) wsRef.current.close();
+              const old=wsRef.current;wsRef.current=null;old?.close();
             }
             break;
 
@@ -277,12 +266,13 @@ export default function App() {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      if(wsRef.current!==ws)return;
       setConnected(false);
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       // Auto reconnect after 3 seconds
       setTimeout(() => {
-        if (wsRef.current === ws) {
+        if (wsRef.current === ws && event.code!==4003) {
           connectWebSocket();
         }
       }, 3000);
@@ -291,13 +281,16 @@ export default function App() {
     ws.onerror = (err) => {
       console.warn('WebSocket connection warning:', err);
     };
-  }, [roomId, userId, userName, userRole, userColor]);
+  }, [roomId]);
 
   useEffect(() => {
     connectWebSocket();
+    const refresh=()=>{setRoomState(old=>({...old,attendees:{},chatMessages:[],topics:[],activeMotion:null,motionHistory:[]}));setConnected(false);connectWebSocket();};
+    window.addEventListener('ib_auth_changed',refresh);
     return () => {
+      window.removeEventListener('ib_auth_changed',refresh);
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-      if (wsRef.current) wsRef.current.close();
+      const old=wsRef.current;wsRef.current=null;old?.close();
     };
   }, [connectWebSocket]);
 

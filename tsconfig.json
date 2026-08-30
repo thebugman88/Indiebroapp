@@ -33,6 +33,8 @@
     "quick-tools-by-indiebrotherhood/src",
     "royalty-and-isrc-metadata-extractor/src",
     "server",
-    "server.ts"
+    "server.ts",
+    "tests",
+    "scripts"
   ]
 }

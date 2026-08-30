@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../src/services/authService';
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { AudioInputSection } from './components/AudioInputSection';
@@ -8,7 +9,6 @@ import { AnalysisResults } from './components/AnalysisResults';
 import { HelpTermsModal } from './components/HelpTermsModal';
 import { Footer } from './components/Footer';
 import { AnalysisResult } from './types';
-import { analyzeTrackKeylessly } from '../../src/services/webAudioEngine';
 import { Flame, Radio, Loader2, Sparkles, ArrowUpRight } from 'lucide-react';
 
 export default function App() {
@@ -89,13 +89,7 @@ export default function App() {
     setErrorMessage(null);
 
     // Loading steps animation
-    const steps = [
-      'Scanning acoustic frequency spectrum & LUFS dynamics...',
-      'Verifying 100% original content & checking copyright guard...',
-      'Evaluating TikTok & Reels 15-second hook velocity...',
-      'Benchmarking 2026 Spotify 30s skip prevention metrics...',
-      'Finalizing Hit Potential Score & production tweaks...'
-    ];
+    const steps = ['Uploading your audio…', 'Requesting AI listening feedback…', 'Preparing advisory results…'];
 
     let stepIndex = 0;
     const interval = setInterval(() => {
@@ -104,7 +98,7 @@ export default function App() {
     }, 900);
 
     try {
-      const response = await fetch('/api/analyze', {
+      const response = await authenticatedFetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -117,37 +111,13 @@ export default function App() {
         }),
       });
 
-      if (response.ok) {
-        const data: AnalysisResult = await response.json();
-        clearInterval(interval);
-        setAnalysisResult(data);
-        return;
-      }
-      // If server returned non-ok (e.g. keyless mode or network timeout), fall through to local Web Audio engine
-    } catch (err: any) {
-      console.debug('[Hit Analyzer] Server API offline/keyless, seamlessly running local Web Audio engine:', err);
-    }
-
-    try {
-      // Local client-side Web Audio & Logic Engine (Zero-Cost, Keyless DSP)
-      const localResult = await analyzeTrackKeylessly({
-        audioData,
-        audioUrl,
-        audioName: selectedAudioName || 'Untitled Song',
-        artistName: artistName || 'Indie Artist',
-        lyrics,
-      });
-
-      clearInterval(interval);
-      setAnalysisResult({
-        ...localResult,
-        copyrightReason: localResult.copyrightReason || '',
-      });
-    } catch (localErr: any) {
-      clearInterval(interval);
-      console.error('Local analysis error:', localErr);
-      setErrorMessage('Unable to process audio file. Please check that your audio format is valid.');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Analysis is unavailable.');
+      setAnalysisResult(data);
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Analysis failed. No results were generated.');
     } finally {
+      clearInterval(interval);
       setIsAnalyzing(false);
     }
   };
@@ -164,7 +134,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col justify-between">
       
-      {/* Top Header */}
+      <p className="p-3 text-center text-xs text-amber-300">AI feedback is advisory. Scores are subjective, not measured streaming performance or a guarantee of success.</p>
+        {/* Top Header */}
       <div>
         <Header onOpenHelp={handleOpenHelp} />
 

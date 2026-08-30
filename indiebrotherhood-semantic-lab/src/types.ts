@@ -69,7 +69,7 @@ export interface SynthesisResult {
   eraCompatibility: 'OPTIMAL' | 'SUB-OPTIMAL' | 'BREAKTHROUGH_PIONEER';
   metrics: MetricBreakdown;
   flowMatrix: FlowMatrixData;
-  ipRegistry: IPRightsRecord;
+  ipRegistry?: IPRightsRecord;
   suggestedChordsOrKey: string;
   producerTips: string[];
 }

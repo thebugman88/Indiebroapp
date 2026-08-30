@@ -1,3 +1,4 @@
+import { getSuiteIdToken } from '../../../src/services/authService';
 import { UserProfile, ChatMessage, BattleState } from '../types';
 import { backendWebSocketUrl } from './backend';
 
@@ -9,58 +10,36 @@ class WebSocketService {
   private reconnectInterval: number = 3000;
   private isConnecting: boolean = false;
   private activeRoomId: string | null = null;
+  private authenticated = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private savedProfile: UserProfile | null = null;
 
+  public disconnect() {
+    clearTimeout(this.reconnectTimer); this.savedProfile=null; this.authenticated=false;
+    const old=this.socket; this.socket=null; old?.close();
+  }
   public connect(profile: UserProfile | null) {
-    if (profile) this.savedProfile = profile;
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
-      if (profile && this.socket.readyState === WebSocket.OPEN) {
-        this.send({ type: 'REGISTER_USER', profile });
-      }
-      return;
-    }
-
-    this.isConnecting = true;
-    const wsUrl = backendWebSocketUrl();
-
-    try {
-      this.socket = new WebSocket(wsUrl);
-
-      this.socket.onopen = () => {
-        this.isConnecting = false;
-        if (this.savedProfile) {
-          this.send({ type: 'REGISTER_USER', profile: this.savedProfile });
-        }
-        if (this.activeRoomId) {
-          this.joinRoom(this.activeRoomId, this.savedProfile);
-        }
-      };
-
-      this.socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          this.handlers.forEach((handler) => handler(data));
-        } catch (e) {
-          console.error('Failed to parse WebSocket message:', e);
-        }
-      };
-
-      this.socket.onclose = () => {
-        this.isConnecting = false;
-        this.socket = null;
-        setTimeout(() => {
-          if (this.savedProfile) this.connect(this.savedProfile);
-        }, this.reconnectInterval);
-      };
-
-      this.socket.onerror = (error) => {
-        console.error('WebSocket connection error:', error);
-        this.socket?.close();
-      };
-    } catch (e) {
-      this.isConnecting = false;
-      console.error('WebSocket setup error:', e);
-    }
+    if (!profile) { this.disconnect(); return; }
+    this.savedProfile=profile;
+    if (this.socket) return;
+    const ws = new WebSocket(backendWebSocketUrl()); this.socket=ws;
+    ws.onopen=async()=>{
+      try { const token=await getSuiteIdToken(); if(this.socket===ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'AUTH',token})); }
+      catch(e:any) { this.handlers.forEach(h=>h({type:'ERROR',message:e.message})); ws.close(); }
+    };
+    ws.onmessage=event=>{
+      if(this.socket!==ws)return;
+      try { const data=JSON.parse(event.data);
+        if(data.type==='AUTH_OK'){this.authenticated=true;if(this.activeRoomId)this.joinRoom(this.activeRoomId,this.savedProfile);}
+        this.handlers.forEach(h=>h(data));
+      } catch { ws.close(); }
+    };
+    ws.onclose=event=>{
+      if(this.socket!==ws)return;this.socket=null;this.authenticated=false;
+      this.handlers.forEach(h=>h({type:'ERROR',message:event.code===4003?'Removed by a moderator.':'Disconnected from the room.'}));
+      if(event.code!==4003)this.reconnectTimer=setTimeout(()=>{if(this.savedProfile)this.connect(this.savedProfile);},this.reconnectInterval);
+    };
+    ws.onerror=()=>ws.close();
   }
 
   public subscribe(handler: MessageHandler) {
@@ -71,10 +50,10 @@ class WebSocketService {
   }
 
   public send(data: any) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+    if (this.authenticated && this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(data));
     } else {
-      console.warn('Socket not open, message queued or dropped:', data);
+      if(data.type!=='JOIN_ROOM')this.handlers.forEach(h=>h({type:'ERROR',message:'Message was not sent. Wait for the room to connect.'}));
     }
   }
 

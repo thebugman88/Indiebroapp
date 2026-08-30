@@ -290,8 +290,7 @@ function SuiteApp() {
   const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [unreadDms, setUnreadDms] = useState<number>(0);
 
-  const isMasterAdmin =
-    currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() || currentUser.isAdmin === true;
+  const isMasterAdmin = currentUser.isAdmin === true;
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -301,6 +300,7 @@ function SuiteApp() {
 
   // Sync Unread DMs and Auth changes
   useEffect(() => {
+    setCurrentUser(getCurrentAuthUser());
     setUnreadDms(getUnreadDmCount(currentUser.id));
 
     const handleAuthChange = (e: any) => {

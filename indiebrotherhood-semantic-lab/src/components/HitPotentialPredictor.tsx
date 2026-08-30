@@ -24,7 +24,7 @@ export const HitPotentialPredictor: React.FC<HitPotentialPredictorProps> = ({
           <Target className="w-6 h-6" />
         </div>
         <h3 className="text-sm font-mono font-bold text-zinc-300 uppercase tracking-wider mb-1">
-          SMART HOOK & HIT POTENTIAL PREDICTOR
+          CREATIVE HOOK ASSESSMENT
         </h3>
         <p className="text-xs font-mono text-zinc-500 max-w-md mx-auto">
           Execute write synthesis to calculate sonic catchiness, emotional resonance, replayability loop factor, and production mix suggestions.
@@ -79,23 +79,23 @@ export const HitPotentialPredictor: React.FC<HitPotentialPredictorProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono font-bold tracking-widest text-sky-400 uppercase">
-                SMART HOOK & HIT POTENTIAL PREDICTOR
+                CREATIVE HOOK ASSESSMENT
               </span>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-950 text-sky-300 border border-sky-800/50">
                 AI SCORING ENGINE
               </span>
             </div>
             <p className="text-[11px] text-zinc-400 font-mono">
-              Algorithmic breakdown of viral resonance, earworm retention, and sonic traction
+              Subjective AI feedback on the submitted lyrics
             </p>
           </div>
         </div>
 
         {/* Global Hit Composite Rating */}
         <div className="text-right">
-          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Composite Peak</span>
+          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Advisory score</span>
           <span className="text-lg font-mono font-bold text-sky-300">
-            {peakProbability.toFixed(1)}%
+            {peakProbability.toFixed(1)} / 100
           </span>
         </div>
       </div>

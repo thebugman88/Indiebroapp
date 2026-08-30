@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../src/services/authService';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
@@ -106,7 +107,7 @@ export default function App() {
     }
 
     // 4. Fetch account security status from server
-    fetch(`/api/security/account-status?accountId=${storedAccountId}`)
+    authenticatedFetch(`/api/security/account-status?accountId=${storedAccountId}`)
       .then((r) => r.json())
       .then((data) => {
         if (data?.status) {
@@ -164,7 +165,7 @@ export default function App() {
   // UNPAUSE ACCOUNT (REMEDIAL ACTION)
   const handleUnpause = async () => {
     try {
-      const res = await fetch('/api/security/unpause-account', {
+      const res = await authenticatedFetch('/api/security/unpause-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId }),
@@ -229,7 +230,7 @@ export default function App() {
     setCurrentEntrySaved(false);
 
     try {
-      const response = await fetch('/api/generate-lyrics', {
+      const response = await authenticatedFetch('/api/generate-lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

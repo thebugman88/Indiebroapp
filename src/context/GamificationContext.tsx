@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../services/authService';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
   UserProfileState,
@@ -64,6 +65,27 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     };
   }, []);
 
+  // Subscription storage is a display cache only. Revalidate for each signed-in account.
+  useEffect(() => {
+    let revision = 0;
+    const refresh = async () => {
+      const request = ++revision;
+      setProfile(cancelProSubscription());
+      try {
+        const response = await authenticatedFetch('/api/stripe/subscription');
+        const status = await response.json();
+        if (request === revision && response.ok && status.valid === true && status.expiresAt > Date.now()) {
+          setProfile(activateProSubscription(status.expiresAt));
+        }
+      } catch { /* No trusted status means free access. */ }
+    };
+    void refresh();
+    window.addEventListener('ib_auth_changed', refresh);
+    window.addEventListener('focus', refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => { revision++; clearInterval(timer); window.removeEventListener('ib_auth_changed', refresh); window.removeEventListener('focus', refresh); };
+  }, []);
+
   // Check URL for stripe payment redirect params on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -73,14 +95,14 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     if (paymentStatus === 'success' && sessionId) {
       // Verify session with server
-      fetch('/api/stripe/verify-session', {
+      authenticatedFetch('/api/stripe/verify-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
       })
         .then((r) => r.json())
         .then((data) => {
-          if (data.valid || data.isSimulated) {
+          if (data.valid === true && data.tier === 'pro') {
             const updated = activateProSubscription(data.expiresAt, data.customerId);
             setProfile(updated);
             awardXP({
@@ -157,58 +179,32 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setProfile(updated);
   }, []);
 
-  const startStripeCheckout = useCallback(async (returnUrl?: string) => {
+  const startStripeCheckout = useCallback(async (_returnUrl?: string) => {
     try {
-      const clientKey = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `ib_idemp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-
-      const res = await fetch('/api/stripe/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userEmail: '',
-          userId: `usr_${profile.displayName.toLowerCase().replace(/\s+/g, '_')}`,
-          clientCustomKey: clientKey,
-          returnUrl: returnUrl || window.location.href.split('?')[0]
-        })
+      const res = await authenticatedFetch('/api/stripe/create-checkout-session', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientCustomKey: crypto.randomUUID() })
       });
-
       const data = await res.json();
-      if (data.url) {
-        // Redirect to real Stripe checkout
-        window.location.href = data.url;
-        return { success: true, url: data.url, isSimulated: false };
-      } else if (data.isSimulated) {
-        // Instant simulated Pro activation
-        activatePro(data.subscription?.currentPeriodEnd);
-        awardXP({
-          amount: 250,
-          actionTitle: 'Activated Artist Pro Powerhouse Pass',
-          sourceApp: 'Pro Checkout'
-        });
-        return { success: true, isSimulated: true };
-      } else if (data.error) {
-        return { success: false, error: data.error };
-      }
-      return { success: true, isSimulated: true };
+      if (!res.ok || typeof data.url !== 'string') return { success: false, error: data.error || 'Checkout is unavailable.' };
+      const url = new URL(data.url);
+      if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com') return { success: false, error: 'Unexpected checkout destination.' };
+      window.location.assign(url.href);
+      return { success: true, url: url.href };
     } catch (err: any) {
-      console.error('Error starting Stripe checkout:', err);
-      // Fallback to local simulation if offline or error
-      activatePro();
-      return { success: true, isSimulated: true };
+      return { success: false, error: err?.message || 'Checkout failed. No subscription was activated.' };
     }
-  }, [profile.displayName, activatePro, awardXP]);
+  }, []);
 
   const verifyCheckoutSession = useCallback(async (sessionId: string) => {
     try {
-      const res = await fetch('/api/stripe/verify-session', {
+      const res = await authenticatedFetch('/api/stripe/verify-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
       });
       const data = await res.json();
-      return data;
+      return res.ok && data.valid === true ? data : { valid: false, tier: 'free' };
     } catch (err) {
       return { valid: false, tier: 'free' };
     }

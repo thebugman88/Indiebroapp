@@ -269,12 +269,13 @@ export function autoRepairPayload(body: any, endpoint: string): { repaired: any;
  */
 export function codeSentinelMiddleware(req: Request, res: Response, next: NextFunction) {
   totalRequestsInspected++;
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const rateKey = res.locals.identity?.uid ? `uid:${res.locals.identity.uid}` : `ip:${clientIp}`;
   const userAgent = req.headers['user-agent'] || 'unknown';
   const endpoint = req.originalUrl || req.url;
 
   // 1. IP Quarantine Check
-  if (quarantinedIps.has(clientIp)) {
+  if (quarantinedIps.has(rateKey)) {
     console.warn(`[SENTINEL BLOCKED] Quarantined IP attempt: ${clientIp} on ${endpoint}`);
     return res.status(403).json({
       error: 'Access Denied by indiebrotherhood Code Sentinel',
@@ -285,20 +286,20 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
     });
   }
 
-  // 2. Rate-Limiting & Burst Protection (120 req / 60s per IP)
+  // 2. Rate-Limiting & Burst Protection (120 req / 60s per verified UID, or IP for public routes)
   const now = Date.now();
-  const windowData = ipRequestWindows.get(clientIp) || { count: 0, windowStart: now };
+  const windowData = ipRequestWindows.get(rateKey) || { count: 0, windowStart: now };
   if (now - windowData.windowStart > 60000) {
     windowData.count = 1;
     windowData.windowStart = now;
   } else {
     windowData.count++;
   }
-  ipRequestWindows.set(clientIp, windowData);
+  ipRequestWindows.set(rateKey, windowData);
 
   if (windowData.count > 120) {
     const incident = recordSecurityIncident({
-      threatOriginIp: clientIp,
+      threatOriginIp: rateKey,
       userAgent,
       endpoint,
       method: req.method,
@@ -310,7 +311,7 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
     });
 
     return res.status(429).json({
-      error: 'Rate Limit Exceeded. IP Quarantined.',
+      error: 'Rate Limit Exceeded. Account/request source temporarily blocked.',
       incidentId: incident.id,
       remediation: incident.recommendedRemediation,
     });
@@ -332,7 +333,7 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
     if (pattern.regex.test(combinedPayload) || pattern.regex.test(endpoint)) {
       const match = combinedPayload.match(pattern.regex)?.[0] || endpoint;
       const incident = recordSecurityIncident({
-        threatOriginIp: clientIp,
+        threatOriginIp: rateKey,
         userAgent,
         endpoint,
         method: req.method,
@@ -359,7 +360,7 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
     if (changesApplied.length > 0) {
       req.body = repaired;
       recordSecurityIncident({
-        threatOriginIp: clientIp,
+        threatOriginIp: rateKey,
         userAgent,
         endpoint,
         method: req.method,

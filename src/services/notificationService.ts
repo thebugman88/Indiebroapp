@@ -1,3 +1,4 @@
+import { authenticatedFetch } from './authService';
 /**
  * Universal In-App Notification Service
  * Supports Real-Time WebSocket Announcements, Action Feeds,
@@ -261,7 +262,7 @@ export async function sendAdminBroadcast(payload: {
   actionLabel?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch('/api/admin/broadcast', {
+    const res = await authenticatedFetch('/api/admin/broadcast', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -284,18 +285,6 @@ export async function sendAdminBroadcast(payload: {
     }
     return { success: false, error: data.error || 'Failed to dispatch broadcast' };
   } catch (err: any) {
-    // Client fallback if offline
-    addNotification({
-      title: payload.title,
-      message: payload.message,
-      category: 'broadcast',
-      type: payload.priority === 'urgent' ? 'emergency' : 'admin',
-      sender: payload.senderName,
-      senderEmail: payload.senderEmail,
-      actionUrl: payload.actionUrl,
-      actionLabel: payload.actionLabel,
-      priority: payload.priority || 'high',
-    });
-    return { success: true };
+    return { success: false, error: err?.message || 'Broadcast was not delivered.' };
   }
 }

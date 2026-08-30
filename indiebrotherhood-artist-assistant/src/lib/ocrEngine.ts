@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../src/services/authService';
 import { createWorker } from "tesseract.js";
 import { SongMetadata } from "../types";
 
@@ -60,7 +61,7 @@ export async function performDeepServerOCR(
   error?: string;
 }> {
   try {
-    const response = await fetch("/api/ai/ocr-parse", {
+    const response = await authenticatedFetch("/api/ai/ocr-parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

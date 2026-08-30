@@ -76,10 +76,7 @@ export function AdminControlRoomModal({
   const [actionFeedback, setActionFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Security gate: ONLY Christopher Ray / Master Admin
-  const isAuthorized =
-    currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ||
-    currentUser.isAdmin === true ||
-    isMasterAdminLoggedIn();
+  const isAuthorized = currentUser.isAdmin === true && isMasterAdminLoggedIn();
 
   const loadData = () => {
     setUsers(getManagedUsers());

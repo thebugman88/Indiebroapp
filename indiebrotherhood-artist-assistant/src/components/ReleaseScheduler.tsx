@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../../src/services/authService';
 import React, { useState } from "react";
 import {
   Calendar,
@@ -103,13 +104,15 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
     setFormDescription("");
   };
 
+  const [roadmapError,setRoadmapError]=useState('');
   // 8-Week Release Roadmap Generator
   const handleGenerate8WeekRoadmap = async () => {
     setIsGeneratingRoadmap(true);
+    setRoadmapError('');
 
     try {
       // Call server strategy endpoint
-      const res = await fetch("/api/ai/strategy-plan", {
+      const res = await authenticatedFetch("/api/ai/strategy-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,116 +135,22 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
         return d.toISOString().slice(0, 10);
       };
 
-      const defaultMilestones: ScheduledEvent[] = [
-        {
-          id: `evt_${Date.now()}_1`,
-          title: `Final Master & Signed Split Sheets: '${roadmapTitle}'`,
-          date: makeDate(42), // 6 weeks out
-          time: "12:00",
-          category: "registration",
-          description: "Ensure 24-bit 48kHz WAV master audio is delivered and co-writer split sheet agreement is 100% signed.",
-          completed: false,
-          priority: "high",
-          reminderMinutesBefore: 1440,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `evt_${Date.now()}_2`,
-          title: `Distributor Upload (DistroKid/TuneCore): '${roadmapTitle}'`,
-          date: makeDate(35), // 5 weeks out
-          time: "10:00",
-          category: "release",
-          description: "Upload to DSPs with release date locked. Obtain official ISRC & UPC codes.",
-          completed: false,
-          priority: "high",
-          reminderMinutesBefore: 1440,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `evt_${Date.now()}_3`,
-          title: `ASCAP/BMI & The MLC Registration Filing`,
-          date: makeDate(28), // 4 weeks out
-          time: "11:00",
-          category: "registration",
-          description: "Register musical work with ASCAP/BMI and submit bulk mechanical claim to The MLC.",
-          completed: false,
-          priority: "high",
-          reminderMinutesBefore: 1440,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `evt_${Date.now()}_4`,
-          title: `Spotify for Artists Editorial Pitch Deadline (CRITICAL)`,
-          date: makeDate(21), // 3 weeks out
-          time: "09:00",
-          category: "pitch",
-          description: "Submit 500-char story pitch, exact instrument tags, and mood descriptors in Spotify for Artists portal.",
-          completed: false,
-          priority: "high",
-          reminderMinutesBefore: 4320, // 3 days before
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `evt_${Date.now()}_5`,
-          title: `TikTok & Instagram Reel Audio Teaser Drop`,
-          date: makeDate(14), // 2 weeks out
-          time: "15:00",
-          category: "social",
-          description: "Publish 3 short-form videos focusing on the emotional lyric hook with official pre-save link in bio.",
-          completed: false,
-          priority: "medium",
-          reminderMinutesBefore: 1440,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `evt_${Date.now()}_6`,
-          title: `Indie Blog & Curator Press Outreach (SubmitHub/Groover)`,
-          date: makeDate(7), // 1 week out
-          time: "10:00",
-          category: "marketing",
-          description: "Pitch indie music journalists, YouTube tastemakers, and independent Spotify playlist curators.",
-          completed: false,
-          priority: "medium",
-          reminderMinutesBefore: 1440,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `evt_${Date.now()}_7`,
-          title: `RELEASE DAY: '${roadmapTitle}' Official Worldwide Drop 🚀`,
-          date: makeDate(0), // Day 0
-          time: "00:01",
-          category: "release",
-          description: "Celebrate launch! Post full social campaign, activate Spotify Canvas, dispatch email newsletter.",
-          completed: false,
-          priority: "high",
-          reminderMinutesBefore: 60,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `evt_${Date.now()}_8`,
-          title: `SoundExchange Recording Registration & Sync Pitch`,
-          date: makeDate(-14), // 2 weeks post release
-          time: "14:00",
-          category: "sync",
-          description: "Verify non-interactive digital radio registration with SoundExchange and pitch instrumental stems for TV/film sync.",
-          completed: false,
-          priority: "medium",
-          reminderMinutesBefore: 1440,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-
-      for (const evt of defaultMilestones) {
-        onAddEvent(evt);
-      }
+      if(!res.ok||!Array.isArray(json.plan?.timelineWeeks))throw new Error(json.error||'No valid roadmap was returned.');
+      const tasks=json.plan.timelineWeeks.flatMap((week:any)=>Array.isArray(week.checklist)?week.checklist:[]).slice(0,100);
+      if(!tasks.length)throw new Error('The provider returned an empty roadmap.');
+      const events:ScheduledEvent[]=tasks.map((task:any,index:number)=>{
+        if(typeof task.task!=='string'||!Number.isFinite(task.recommendedDaysBefore)||Math.abs(task.recommendedDaysBefore)>365)throw new Error('The provider returned an invalid milestone.');
+        return {id:`evt_${Date.now()}_${index}`,title:task.task,date:makeDate(task.recommendedDaysBefore),time:'12:00',category:['pitch','marketing','registration','social','sync'].includes(task.category)?task.category:'marketing',description:String(task.details||''),completed:false,priority:['high','medium','low'].includes(task.priority)?task.priority:'medium',reminderMinutesBefore:1440,createdAt:new Date().toISOString()};
+      });
+      for(const event of events)onAddEvent(event);
 
       setShowRoadmapModal(false);
       if (settings.enableSoundAlerts) {
         playNotificationChime();
       }
       confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
-    } catch (e) {
-      console.error("Roadmap generation failed:", e);
+    } catch (e:any) {
+      setRoadmapError(e.message);
     } finally {
       setIsGeneratingRoadmap(false);
     }
@@ -268,6 +177,7 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
 
   return (
     <div id="release-scheduler-view" className="space-y-6 animate-fadeIn">
+      {roadmapError && <p role="alert" className="text-red-400">{roadmapError}</p>}
       {/* Top Header & Strategy Launcher */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -481,7 +391,7 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
               <button
                 type="button"
                 disabled={isGeneratingRoadmap}
-                onClick={handleGenerate8WeekRoadmap}
+                title={roadmapError || undefined} onClick={handleGenerate8WeekRoadmap}
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20"
               >
                 {isGeneratingRoadmap ? (

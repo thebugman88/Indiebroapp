@@ -62,3 +62,12 @@ This workspace contains nine independent Vite + React applications. They are not
 ## Audit Verdict
 
 Do not call the portfolio production-ready yet. Use `MASTER BUILDS.md` as the implementation sequence, `MASTER CONFIG.md` as the deployment contract, and `TO DOs.md` as the live execution queue. The founder decisions in `Founder check list.md` are gates, not paperwork: they determine whether the apps become one platform or remain separate experiments.
+
+## Remediation checkpoint (2026-08-30)
+
+Security foundation branch replaces founder auto-login/local credentials, requires verified identity and admin claims for protected root APIs, removes unpaid Pro activation, verifies signed Stripe events, persists subscription state, and separates browser/server build artifacts. The raw cross-room WebSocket relay is disabled pending replacement. See `SECURITY-ROLLOUT.md` for the rollout and explicit remaining blockers. This checkpoint does not mark the platform production-ready or imply live credentials/rules were validated.
+
+
+## Remaining audit remediation (2026-08-30)
+
+The follow-up replaces the disabled raw relay with authenticated room protocols, implements private durable DMs and server-owned Judgment Zone mutations/uploads, removes fabricated analysis/catalog/chart results, and connects missing root AI routes. See `AUDIT-REMEDIATION.md` for all eleven findings and explicit staging/remaining-platform boundaries. This supersedes the first-batch realtime pause and “still open” list, but does not imply production deployment or complete the older platform roadmap.
