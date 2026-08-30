@@ -1,6 +1,18 @@
+import { authenticatedFetch } from '../../../src/services/authService';
 // Web Audio Engine & Sound Synthesis for Judgement Zone (IndieBrotherhood 2026)
 
 class AudioEngine {
+  private remotePath: string | null = null;
+  private playbackRevision = 0;
+  private objectUrl: string | null = null;
+  private download: AbortController | null = null;
+  constructor() {
+    if (typeof window !== 'undefined') window.addEventListener('ib_auth_changed', () => {
+      this.stop(); this.remotePath = null; this.currentElement = null;
+      if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    });
+  }
   private ctx: AudioContext | null = null;
   private currentSource: AudioBufferSourceNode | HTMLMediaElement | null = null;
   private currentElement: HTMLAudioElement | null = null;
@@ -57,6 +69,9 @@ class AudioEngine {
   }
 
   public stop() {
+    this.playbackRevision++;
+    this.download?.abort();
+    this.download = null;
     this.isPlaying = false;
     if (this.playbackTimer) {
       window.clearInterval(this.playbackTimer);
@@ -73,6 +88,9 @@ class AudioEngine {
   }
 
   public pause() {
+    this.playbackRevision++;
+    this.download?.abort();
+    this.download = null;
     this.isPlaying = false;
     if (this.playbackTimer) {
       window.clearInterval(this.playbackTimer);
@@ -87,23 +105,40 @@ class AudioEngine {
     }
   }
 
-  public play() {
+  public async play() {
     this.init();
     if (this.isPlaying) return;
     this.isPlaying = true;
-
-    if (this.currentElement && this.currentElement.src) {
-      this.currentElement.play().catch(() => {});
-      this.startTimer();
-    } else {
-      // Procedural Web Audio Synth playback for simulated stems/preview
-      this.startProceduralSynth();
-      this.startTimer();
+    const revision = this.playbackRevision;
+    try {
+      if (this.remotePath) {
+        this.download = new AbortController();
+        const response = await authenticatedFetch(this.remotePath, { signal: this.download.signal });
+        if (!response.ok) throw new Error('Audio unavailable. Please retry.');
+        const blob = await response.blob();
+        if (revision !== this.playbackRevision) return;
+        this.objectUrl = URL.createObjectURL(blob);
+        this.currentElement!.src = this.objectUrl;
+        this.remotePath = null;
+        this.download = null;
+      }
+      if (revision !== this.playbackRevision) return;
+      if (!this.currentElement?.src) throw new Error('No audio is available for this track.');
+      await this.currentElement.play();
+      if (revision === this.playbackRevision) this.startTimer();
+    } catch {
+      if (revision !== this.playbackRevision) return;
+      this.isPlaying = false;
+      this.onSeekBlockedCallback?.('Audio could not play. Check your connection and retry.');
+      this.onEndedCallback?.();
     }
   }
 
   public loadTrack(audioBlobUrl: string | undefined, durationSeconds: number, synthPreset?: string) {
     this.stop();
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
+    this.objectUrl = null;
+    this.remotePath = audioBlobUrl?.startsWith('/api/judgement/tracks/') ? audioBlobUrl : null;
     this.currentTime = 0;
     this.maxListenedTime = 0;
     this.duration = Math.max(15, durationSeconds || 60);
@@ -113,7 +148,8 @@ class AudioEngine {
         this.currentElement = new Audio();
         this.currentElement.crossOrigin = 'anonymous';
       }
-      this.currentElement.src = audioBlobUrl;
+      if (this.remotePath) this.currentElement.removeAttribute('src');
+      else this.currentElement.src = audioBlobUrl;
       this.currentElement.onended = () => {
         this.isPlaying = false;
         if (this.onEndedCallback) this.onEndedCallback();

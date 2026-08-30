@@ -517,11 +517,11 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>
-                <strong>Ownership declared by uploader:</strong> {currentTrack.rightsHolderSignature}
+                <strong>Ownership declared by uploader:</strong> {currentTrack.ownershipConfirmed ? 'Declaration on file (not independent verification)' : 'Not declared'}
               </span>
             </div>
             <span className="font-mono text-zinc-500 text-[10px]">
-              Chamber Progress: {currentTrack.reviews.length}/10 Peer Reviews
+              Chamber Progress: {currentTrack.aggregatedScores.totalReviews}/10 Peer Reviews
             </span>
           </div>
 

@@ -57,7 +57,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({
               <Lock className="w-3.5 h-3.5 text-amber-400" /> 2. Unanimous Anonymous Peer-Review Judgement Protocol
             </h4>
             <p>
-              You acknowledge and agree that all evaluation and scoring in the Judgement Chamber is conducted <strong>unanimously and entirely anonymously by fellow peer users</strong>. Artist identities and track titles remain completely concealed behind the blind veil until an evaluation is recorded. Peer judge individual identities are permanently confidential and never disclosed to artists or third parties (only their verified Judge Tier level is displayed in audit dossiers).
+              The platform hides artist names, track titles, lyrics and uploader account identifiers from other users until they submit a review. Ownership signatures remain private to the uploader. Reviewers’ account identifiers are not shared with other users; dossiers show judge tier information. Audio, embedded file metadata, or information a user includes in feedback can still identify someone. This is blind presentation of platform metadata, not a guarantee of anonymity or protection against recognition.
             </p>
           </section>
 
@@ -104,7 +104,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({
               className="mt-0.5 w-4 h-4 rounded text-amber-500 bg-zinc-800 border-zinc-700 focus:ring-amber-500 focus:ring-offset-zinc-950"
             />
             <span className="text-xs text-zinc-200">
-              <strong>Unanimous Anonymous Protocol:</strong> I understand that judging is performed blindly and anonymously by 10 peer users, with identities protected on both sides.
+              <strong>Unanimous Anonymous Protocol:</strong> I understand that platform identity fields are hidden during blind judging, but audio and voluntarily shared content may identify a participant.
             </span>
           </label>
 

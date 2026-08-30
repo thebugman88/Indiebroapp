@@ -1,5 +1,6 @@
+import { createArtistCatalog } from '../services/artistCatalog';
 import { authenticatedFetch } from '../services/authService';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Crown,
@@ -39,10 +40,6 @@ import {
   CatalogTrack,
   VerifiedArtistInfo,
   STUDIO_AURAS,
-  loadVerifiedArtistInfo,
-  loadVerifiedCatalog,
-  saveVerifiedArtistAndCatalog,
-  addCustomTrackToCatalog,
   getCurrentAuthUser,
   saveCurrentAuthUser,
 } from '../services/authService';
@@ -55,13 +52,33 @@ interface Props {
   onNavigateToApp: (appId: string) => void;
 }
 
-export const ArtistProfilePage: React.FC<Props> = ({
+export const ArtistProfilePage: React.FC<Props> = (props) => {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => { const uid = getCurrentAuthUser().id; setSession(old => old.uid === uid ? old : { uid, revision: old.revision + 1 }); };
+    window.addEventListener('ib_auth_changed', sync); sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+  return <ArtistProfileWorkspace key={session.revision} {...props} uid={session.uid} />;
+};
+const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
   currentUser,
   onUpdateUser,
   onOpenAuthModal,
   onNavigateToApp,
 }) => {
   const { profile, levelDetails, awardXP, updateProfile } = useGamification();
+  const active = useRef(true);
+  const isCurrent = () => active.current && getCurrentAuthUser().id === uid;
+  useEffect(() => {
+    active.current = true;
+    const changed = () => { if (getCurrentAuthUser().id !== uid) active.current = false; };
+    window.addEventListener('ib_auth_changed', changed);
+    return () => { active.current = false; window.removeEventListener('ib_auth_changed', changed); };
+  }, [uid]);
+  const [vault] = useState(() => createArtistCatalog(uid, isCurrent, () => window.localStorage));
+  const [initial] = useState(() => { try { return { data: vault.load(), error: '' }; } catch { return { data: { artist: null, tracks: [] }, error: 'Saved catalog could not be read. Reopen after checking browser storage; existing data has not been replaced.' }; } });
+  const [catalogError, setCatalogError] = useState(initial.error);
 
   // Search Real-World Artist Identifier
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,8 +87,8 @@ export const ArtistProfilePage: React.FC<Props> = ({
   const [hasSearched, setHasSearched] = useState(false);
 
   // Catalog State
-  const [verifiedArtist, setVerifiedArtist] = useState<VerifiedArtistInfo | null>(loadVerifiedArtistInfo);
-  const [catalog, setCatalog] = useState<CatalogTrack[]>(loadVerifiedCatalog);
+  const [verifiedArtist, setVerifiedArtist] = useState<VerifiedArtistInfo | null>(initial.data.artist);
+  const [catalog, setCatalog] = useState<CatalogTrack[]>(initial.data.tracks);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
   // Audio Preview Player
@@ -119,6 +136,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
     try {
       const resp = await authenticatedFetch(`/api/artist/search?q=${encodeURIComponent(searchQuery.trim())}`);
       const data = await resp.json();
+      if (!isCurrent()) return;
       if (data.artists) {
         setSearchResults(data.artists);
       }
@@ -136,6 +154,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
       const url = `/api/artist/catalog?artistId=${encodeURIComponent(artist.artistId)}&artistName=${encodeURIComponent(artist.artistName)}`;
       const resp = await authenticatedFetch(url);
       const data = await resp.json();
+      if (!isCurrent()) return;
 
       if (data.success && data.tracks) {
         const artistInfo: VerifiedArtistInfo = {
@@ -148,9 +167,9 @@ export const ArtistProfilePage: React.FC<Props> = ({
           totalCatalogTracks: data.tracks.length,
         };
 
+        vault.save(artistInfo, data.tracks);
         setVerifiedArtist(artistInfo);
         setCatalog(data.tracks);
-        saveVerifiedArtistAndCatalog(artistInfo, data.tracks);
 
         // Award XP for verifying real-world catalog
         awardXP({
@@ -168,7 +187,8 @@ export const ArtistProfilePage: React.FC<Props> = ({
           saveCurrentAuthUser(updatedUser);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (isCurrent()) setCatalogError(err.message || 'Catalog could not be saved.');
       console.error('Failed to load artist catalog:', err);
     } finally {
       setIsLoadingCatalog(false);
@@ -246,7 +266,8 @@ export const ArtistProfilePage: React.FC<Props> = ({
       isrc: `${editIsrc}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
     };
 
-    const updated = addCustomTrackToCatalog(newTrack);
+    let updated: CatalogTrack[];
+    try { updated = vault.add(newTrack); } catch (e: any) { setCatalogError(e.message); return; }
     setCatalog(updated);
     setIsAddTrackOpen(false);
     setNewTrackName('');
@@ -268,6 +289,8 @@ export const ArtistProfilePage: React.FC<Props> = ({
   const hours = Math.floor(totalMinutes / 60);
   const remainingMinutes = totalMinutes % 60;
   const playtimeString = hours > 0 ? `${hours}h ${remainingMinutes}m` : `${totalMinutes} mins`;
+
+  if (catalogError) return <p role="alert" className="p-6 text-red-300">{catalogError}</p>;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
@@ -944,6 +967,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
                 <p className="text-[11px] text-slate-400">Download complete catalog, profile, and XP audit logs.</p>
                 <button
                   onClick={() => {
+                    if (!isCurrent()) return;
                     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ user: currentUser, catalog, profile }, null, 2));
                     const downloadAnchor = document.createElement('a');
                     downloadAnchor.setAttribute('href', dataStr);

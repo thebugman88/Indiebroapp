@@ -56,8 +56,6 @@ export interface VerifiedArtistInfo {
   totalCatalogTracks: number;
 }
 
-const ARTIST_CATALOG_KEY = 'ib_artist_verified_catalog_v2';
-const ARTIST_INFO_KEY = 'ib_artist_verified_info_v2';
 // Display/contact information only. Never use this address as an authorization rule.
 export const ADMIN_EMAIL = 'xchristopherrayx@gmail.com';
 export const GUEST_USER: RegisteredUser = {
@@ -222,52 +220,3 @@ export const STUDIO_AURAS: {
   { id: 'rose', name: 'Rose Quartz', glowClass: 'ring-2 ring-rose-400/80 shadow-[0_0_20px_rgba(244,63,94,0.5)]', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40', hex: '#f43f5e' },
   { id: 'crimson', name: 'Apex Crimson', glowClass: 'ring-2 ring-red-400/80 shadow-[0_0_20px_rgba(239,68,68,0.5)]', badgeClass: 'bg-red-500/20 text-red-300 border-red-500/40', hex: '#ef4444' },
 ];
-
-// -------------------------------------------------------------
-// VERIFIED ARTIST SONG CATALOG STORAGE & MANAGEMENT
-// -------------------------------------------------------------
-
-export function loadVerifiedArtistInfo(): VerifiedArtistInfo | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(ARTIST_INFO_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
-}
-
-export function loadVerifiedCatalog(): CatalogTrack[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(ARTIST_CATALOG_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [];
-}
-
-export function saveVerifiedArtistAndCatalog(artist: VerifiedArtistInfo, tracks: CatalogTrack[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(ARTIST_INFO_KEY, JSON.stringify(artist));
-    localStorage.setItem(ARTIST_CATALOG_KEY, JSON.stringify(tracks));
-    window.dispatchEvent(new CustomEvent('ib_catalog_updated', { detail: { artist, tracks } }));
-  } catch (e) {
-    console.error('Failed to save verified artist & catalog:', e);
-  }
-}
-
-export function addCustomTrackToCatalog(track: CatalogTrack): CatalogTrack[] {
-  const current = loadVerifiedCatalog();
-  const updated = [track, ...current];
-  const artist = loadVerifiedArtistInfo() || {
-    artistId: 'custom_artist',
-    artistName: track.artistName,
-    primaryGenreName: track.primaryGenreName,
-    artworkUrl: track.artworkUrl,
-    claimedAt: Date.now(),
-    totalCatalogTracks: updated.length,
-  };
-  artist.totalCatalogTracks = updated.length;
-  saveVerifiedArtistAndCatalog(artist, updated);
-  return updated;
-}

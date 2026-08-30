@@ -1,3 +1,4 @@
+import { getCurrentAuthUser } from '../../src/services/authService';
 import React, { useState, useEffect } from 'react';
 import {
   Gavel,
@@ -23,6 +24,16 @@ import { loadStoredProfile, loadStoredTracks, saveProfile, submitTrack, submitRe
 import { calculateTierFromXp, recalculateTrackScores } from './utils/matchmaker';
 
 export default function App() {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => { const uid = getCurrentAuthUser().id; setSession(old => old.uid === uid ? old : { uid, revision: old.revision + 1 }); };
+    window.addEventListener('ib_auth_changed', sync); sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+  // Late review/profile responses can only update the unmounted old workspace.
+  return <JudgementWorkspace key={session.revision} />;
+}
+function JudgementWorkspace() {
   const [tracks, setTracks] = useState<ArtistTrack[]>([]);
   const [userProfile, setUserProfile] = useState<UserJudgeProfile | null>(null);
   const [activeTab, setActiveTab] = useState<'chamber' | 'submit' | 'dossier' | 'vault' | 'sonic'>('chamber');

@@ -31,6 +31,7 @@ export interface SecurityIncident {
   rawSignatureExcerpt: string;
   actionTaken: SecurityActionTaken;
   autoRepairApplied?: string;
+  quarantineUntil?: number;
   recommendedRemediation: string;
 }
 
@@ -51,7 +52,12 @@ const HEALTH_LOG_FILE = path.join(LOGS_DIR, 'system-health.log');
 
 // Memory store for incident records & IP tracking
 const securityIncidents: SecurityIncident[] = [];
-const quarantinedIps = new Set<string>();
+const quarantinedIps = new Map<string, number>();
+const QUARANTINE_MS = 5 * 60 * 1000;
+const recoveryWindows = new Map<string, { count: number; start: number }>();
+function expireQuarantines() {
+  for (const [key, until] of quarantinedIps) if (until <= Date.now()) quarantinedIps.delete(key);
+}
 const ipRequestWindows = new Map<string, { count: number; windowStart: number }>();
 const accountSecurityStore = new Map<string, AccountSecurityState>();
 let totalRequestsInspected = 0;
@@ -135,11 +141,17 @@ function loadSecurityLogs() {
     if (fs.existsSync(AUDIT_FILE)) {
       const raw = fs.readFileSync(AUDIT_FILE, 'utf-8');
       const loaded = JSON.parse(raw) as SecurityIncident[];
+      // Logs are newest first. The latest block/unblock determines state.
+      const resolved = new Set<string>();
       for (const item of loaded) {
+        if (!resolved.has(item.threatOriginIp) && (item.actionTaken === 'BLOCKED_AND_QUARANTINED' || item.threatType === 'MANUAL_REMEDIATION_UNBLOCK')) {
+          resolved.add(item.threatOriginIp);
+          const until = item.quarantineUntil ?? Date.parse(item.timestamp) + QUARANTINE_MS;
+          if (item.actionTaken === 'BLOCKED_AND_QUARANTINED' && until > Date.now()) quarantinedIps.set(item.threatOriginIp, until);
+        }
         securityIncidents.push(item);
         severityCounts[item.severity] = (severityCounts[item.severity] || 0) + 1;
         if (item.actionTaken === 'BLOCKED_AND_QUARANTINED') {
-          quarantinedIps.add(item.threatOriginIp);
           threatsBlockedCount++;
         }
         if (item.actionTaken === 'SELF_REPAIRED') {
@@ -181,6 +193,7 @@ export function recordSecurityIncident(params: {
     rawSignatureExcerpt: params.rawSignatureExcerpt.slice(0, 200),
     actionTaken: params.actionTaken,
     autoRepairApplied: params.autoRepairApplied,
+    ...(params.actionTaken === 'BLOCKED_AND_QUARANTINED' ? { quarantineUntil: Date.now() + QUARANTINE_MS } : {}),
     recommendedRemediation: params.recommendedRemediation,
   };
 
@@ -193,7 +206,7 @@ export function recordSecurityIncident(params: {
   severityCounts[params.severity] = (severityCounts[params.severity] || 0) + 1;
 
   if (params.actionTaken === 'BLOCKED_AND_QUARANTINED') {
-    quarantinedIps.add(params.threatOriginIp);
+    quarantinedIps.set(params.threatOriginIp, incident.quarantineUntil!);
     threatsBlockedCount++;
   } else if (params.actionTaken === 'SELF_REPAIRED') {
     selfRepairsCount++;
@@ -274,20 +287,39 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
   const userAgent = req.headers['user-agent'] || 'unknown';
   const endpoint = req.originalUrl || req.url;
 
+  expireQuarantines();
+  const normalizedPath = endpoint.split('?')[0].replace(/\/+$/, '').toLowerCase();
+  // Authentication/admin checks precede Sentinel. Keep cancellation and admin
+  // recovery reachable, with an independent bounded rate limit.
+  if (req.method === 'POST' && res.locals.identity?.uid &&
+      (normalizedPath === '/api/stripe/cancel' ||
+       (normalizedPath === '/api/security/remediate' && res.locals.identity.admin === true && res.locals.identity.email_verified === true))) {
+    for (const [key, value] of recoveryWindows) if (Date.now() - value.start >= 60000) recoveryWindows.delete(key);
+    const window = recoveryWindows.get(rateKey) || { count: 0, start: Date.now() };
+    window.count++; recoveryWindows.set(rateKey, window);
+    if (window.count > 10) {
+      res.setHeader('Retry-After', Math.max(1, Math.ceil((window.start + 60000 - Date.now()) / 1000)));
+      return res.status(429).json({ error: 'Too many recovery requests. Retry after the indicated delay.' });
+    }
+    return next();
+  }
   // 1. IP Quarantine Check
   if (quarantinedIps.has(rateKey)) {
     console.warn(`[SENTINEL BLOCKED] Quarantined IP attempt: ${clientIp} on ${endpoint}`);
+    res.setHeader('Retry-After', Math.max(1, Math.ceil((quarantinedIps.get(rateKey)! - Date.now()) / 1000)));
     return res.status(403).json({
       error: 'Access Denied by indiebrotherhood Code Sentinel',
       status: 'QUARANTINED',
-      reason: 'Your IP address has been isolated due to anomalous threat signatures.',
+      reason: 'This account/request source is temporarily restricted after a threat signature.',
+      retryAt: quarantinedIps.get(rateKey),
       incidentId: `sec_lock_${Date.now()}`,
-      remediation: 'Contact system security or submit an unblock token.',
+      remediation: 'Retry after the indicated delay or contact support. Subscription cancellation remains available.',
     });
   }
 
   // 2. Rate-Limiting & Burst Protection (120 req / 60s per verified UID, or IP for public routes)
   const now = Date.now();
+  for (const [key, value] of ipRequestWindows) if (now - value.windowStart >= 60000) ipRequestWindows.delete(key);
   const windowData = ipRequestWindows.get(rateKey) || { count: 0, windowStart: now };
   if (now - windowData.windowStart > 60000) {
     windowData.count = 1;
@@ -298,23 +330,15 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
   ipRequestWindows.set(rateKey, windowData);
 
   if (windowData.count > 120) {
-    const incident = recordSecurityIncident({
-      threatOriginIp: rateKey,
-      userAgent,
-      endpoint,
-      method: req.method,
-      severity: 'HIGH',
-      threatType: 'RATE_LIMIT_BURST_FLOOD',
-      rawSignatureExcerpt: `Rate: ${windowData.count} requests / minute`,
-      actionTaken: 'BLOCKED_AND_QUARANTINED',
-      recommendedRemediation: 'Quarantine origin IP, verify rate limit configuration.',
+    if (windowData.count === 121) recordSecurityIncident({
+      threatOriginIp: rateKey, userAgent, endpoint, method: req.method,
+      severity: 'HIGH', threatType: 'RATE_LIMIT_BURST_FLOOD',
+      rawSignatureExcerpt: 'Exceeded 120 requests per minute', actionTaken: 'WARNED',
+      recommendedRemediation: 'Retry after the request window resets.',
     });
-
-    return res.status(429).json({
-      error: 'Rate Limit Exceeded. Account/request source temporarily blocked.',
-      incidentId: incident.id,
-      remediation: incident.recommendedRemediation,
-    });
+    const retryAfter = Math.max(1, Math.ceil((windowData.windowStart + 60000 - now) / 1000));
+    res.setHeader('Retry-After', retryAfter);
+    return res.status(429).json({ error: 'Rate limit exceeded. Retry after the indicated delay.', retryAfter });
   }
 
   // 3. Payload & Parameter Threat Signature Scanning
@@ -381,12 +405,13 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
  * Get Security & Health Statistics
  */
 export function getSecurityStats(): SecurityStats {
+  expireQuarantines();
   return {
     totalRequestsInspected,
     threatsBlocked: threatsBlockedCount,
     selfRepairsExecuted: selfRepairsCount,
     activeQuarantinedIps: quarantinedIps.size,
-    quarantinedIps: Array.from(quarantinedIps),
+    quarantinedIps: Array.from(quarantinedIps.keys()),
     severityCounts,
     uptimeSeconds: Math.floor((Date.now() - serverStartTime) / 1000),
     lastIncidentTimestamp: securityIncidents[0]?.timestamp,

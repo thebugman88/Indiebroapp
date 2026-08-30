@@ -1,3 +1,4 @@
+import { visibleTrack } from './judgementPrivacy';
 import {
   reserveStorage,
   finishStorage,
@@ -150,16 +151,6 @@ function bucket() {
     process.env.FIREBASE_STORAGE_BUCKET,
   );
 }
-async function publicTrack(data: any): Promise<ArtistTrack> {
-  const { audioPath, ...track } = data;
-  if (audioPath) {
-    const [url] = await bucket()
-      .file(audioPath)
-      .getSignedUrl({ action: "read", expires: Date.now() + 60 * 60 * 1000 });
-    track.audioBlobUrl = url;
-  }
-  return track;
-}
 async function editProfile(
   uid: string,
   edit: (p: UserJudgeProfile) => UserJudgeProfile,
@@ -252,7 +243,7 @@ judgementRouter.get("/tracks", async (_req, res) => {
       .limit(100)
       .get();
     res.json(
-      await Promise.all(snapshot.docs.map((d) => publicTrack(d.data()))),
+      snapshot.docs.map((d) => visibleTrack(d.data() as ArtistTrack, res.locals.identity.uid)),
     );
   } catch {
     res.status(503).json({ error: "Tracks could not be loaded." });
@@ -309,7 +300,7 @@ judgementRouter.post("/tracks", async (req, res) => {
       .save(audio.bytes, { resumable: false, contentType: audio.mimeType });
     data.audioPath = path;
     data.audioBytes = audio.bytes.length;
-    const visible = await publicTrack(data);
+    const visible = visibleTrack(data, data.ownerId);
     await db().runTransaction(async (t) => {
       const ref = profiles().doc(data.ownerId);
       const doc = await t.get(ref);
@@ -355,6 +346,25 @@ judgementRouter.post("/tracks", async (req, res) => {
     });
   }
 });
+// Never expose bucket object names (legacy paths contain owner UIDs).
+judgementRouter.get("/tracks/:id/audio", async (req, res) => {
+  try {
+    const doc = await tracks().doc(safeId(req.params.id)).get();
+    if (!doc.exists || !doc.data()?.audioPath) { res.sendStatus(404); return; }
+    const file = bucket().file(doc.data()!.audioPath);
+    const [metadata] = await file.getMetadata();
+    const size = Number(metadata.size);
+    if (!Number.isSafeInteger(size) || size <= 0 || size > 15 * 1024 * 1024) throw new Error('Invalid audio size.');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', /^audio\/(mpeg|mp3|wav|x-wav|ogg|webm|mp4|aac|flac)$/.test(metadata.contentType || '') ? metadata.contentType! : 'application/octet-stream');
+    res.setHeader('Content-Length', size);
+    const stream = file.createReadStream();
+    res.on('close', () => stream.destroy());
+    stream.on('error', () => { if (!res.headersSent) res.sendStatus(503); else res.destroy(); });
+    stream.pipe(res);
+  } catch { if (!res.headersSent) res.status(503).json({ error: 'Audio unavailable.' }); }
+});
 judgementRouter.post("/tracks/:id/listen", async (req, res) => {
   try {
     const id = safeId(req.params.id),
@@ -399,7 +409,7 @@ judgementRouter.post("/tracks/:id/reviews", async (req, res) => {
       return result;
     });
     await awardReviewCoins(uid).catch(() => {});
-    res.status(201).json({ ...result, track: await publicTrack(result.track) });
+    res.status(201).json({ ...result, track: visibleTrack(result.track, uid) });
   } catch (e: any) {
     res.status(409).json({
       error: [
