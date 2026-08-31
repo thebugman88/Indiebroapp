@@ -1,6 +1,7 @@
 import { startSecurityReview, securityReviewStatus } from './server/securityReview';
 import { httpProtection } from './server/httpProtection';
 import { durableSecurityGuard, blockAccount, unblockAccount, securityEvents, isBlocked } from './server/securityGuard';
+import {communityRouter,referralsRouter} from './server/referrals';
 import { validateDualLyrics, rememberOriginalLyrics, lyricInput } from './server/lyricQuality';
 import { browserKeys, assertEncryptionConfigured } from './server/dataProtection';
 import { economyRouter, usageMiddleware, economyDb } from './server/economy';
@@ -99,6 +100,8 @@ app.use('/api/stripe', createBillingRouter(getStripeClient));
 app.use(usageMiddleware);
 app.get('/api/legal/terms',(_req,res)=>res.type('text/plain').send('IndieBrotherhood — Purchase Terms and AI Disclosure\n\n'+PURCHASE_POLICY));
 app.use('/api/economy',economyRouter);
+app.use('/api/community',communityRouter);
+app.use('/api/referrals',referralsRouter);
 app.use(semanticRouter);
 app.use(extraAiRouter);
 app.use('/api/dm', createMessagingRouter());

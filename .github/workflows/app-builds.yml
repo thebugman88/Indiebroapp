@@ -3,7 +3,7 @@ name: App build matrix
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, feat/usage-economy]
   workflow_dispatch:
 
 permissions:

@@ -73,18 +73,19 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       const request = ++revision;
       setProfile(cancelProSubscription());
       try {
-        const response = await authenticatedFetch('/api/stripe/subscription');
+        const response = await authenticatedFetch('/api/economy/wallet');
         const status = await response.json();
-        if (request === revision && response.ok && status.valid === true && status.expiresAt > Date.now()) {
-          setProfile(activateProSubscription(status.expiresAt));
+        if (request === revision && response.ok && status.tier === 'pro' && status.proExpiresAt > Date.now()) {
+          setProfile(activateProSubscription(status.proExpiresAt));
         }
       } catch { /* No trusted status means free access. */ }
     };
     void refresh();
     window.addEventListener('ib_auth_changed', refresh);
     window.addEventListener('focus', refresh);
+    window.addEventListener('ib_community_changed',refresh);
     const timer = window.setInterval(refresh, 60000);
-    return () => { revision++; clearInterval(timer); window.removeEventListener('ib_auth_changed', refresh); window.removeEventListener('focus', refresh); };
+    return () => { revision++; clearInterval(timer); window.removeEventListener('ib_auth_changed', refresh); window.removeEventListener('focus', refresh); window.removeEventListener('ib_community_changed',refresh); };
   }, []);
 
   // Check URL for stripe payment redirect params on mount

@@ -76,6 +76,14 @@ const config = {
 export const isAuthConfigured = Object.values(config).every(Boolean);
 const app = isAuthConfigured
   ? getApps().find(a => a.name === 'suite-auth') || initializeApp(config, 'suite-auth') : null;
+let referralAppCheck: Promise<import('firebase/app-check').AppCheck>|undefined;
+async function referralAttestation() {
+  const siteKey=import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
+  if(!app||!siteKey)throw new Error('Referral security is not configured yet. Your other tools remain available.');
+  const sdk=await import('firebase/app-check');
+  referralAppCheck??=Promise.resolve(sdk.initializeAppCheck(app,{provider:new sdk.ReCaptchaEnterpriseProvider(siteKey),isTokenAutoRefreshEnabled:false}));
+  return (await sdk.getLimitedUseToken(await referralAppCheck)).token;
+}
 let reusedAuth=false;
 const auth = app ? (()=>{
   try{return initializeAuth(app,{persistence:inMemoryPersistence});}
@@ -234,7 +242,9 @@ export async function authenticatedFetch(input: string, init: RequestInit = {}) 
     headers.set('x-coin-consent', String(action.cost));
   }
   headers.set('Authorization', `Bearer ${await inSession(()=>user.getIdToken())}`);
-  return inSession(()=>fetch(target, { ...init, headers, cache: 'no-store', credentials: 'omit', redirect:'error' }));
+  const referralMutation=target.pathname.startsWith('/api/referrals/')&&!target.pathname.startsWith('/api/referrals/admin/')&&(init.method||'GET').toUpperCase()==='POST';
+  if(referralMutation)headers.set('X-Firebase-AppCheck',await inSession(referralAttestation));
+  return inSession(()=>fetch(target, { ...init, headers, cache: 'no-store', credentials: referralMutation?'same-origin':'omit', redirect:'error' }));
 }
 
 export const STUDIO_AURAS: {
@@ -263,5 +273,7 @@ async function unlockForUser(user: User) {
 }
 export async function retryPrivateUnlock() {
   if (!auth?.currentUser) return;
-  await syncUser(auth.currentUser);
+  const user=auth.currentUser;
+  try {await user.reload();await user.getIdToken(true);if(auth.currentUser===user)await syncUser(user);}
+  catch {if(auth.currentUser===user)failPrivateStorage();}
 }

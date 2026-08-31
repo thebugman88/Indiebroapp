@@ -135,6 +135,7 @@ export function PlanAndCoins({ compact = false }: { compact?: boolean }) {
           {wallet && (
             <div className="rounded-xl bg-zinc-900 p-4 space-y-2">
               <p className="text-2xl font-bold">{wallet.total} BC available</p>
+              {wallet.proSource==='referral'&&<p className="text-amber-300">Earned Pro active until {new Date(wallet.promoProUntil).toLocaleString()}. No subscription or automatic renewal. Promotional Coins were granted once when activated.</p>}
               <p>
                 {wallet.monthly} included / earned · {wallet.purchased}{" "}
                 non-expiring

@@ -100,14 +100,88 @@
     }
   ],
   "fieldOverrides": [
-    { "collectionGroup": "judgeProfilesV2", "fieldPath": "private", "indexes": [] },
-    { "collectionGroup": "judgeTracksV2", "fieldPath": "private", "indexes": [] },
-    { "collectionGroup": "dmConversations", "fieldPath": "private", "indexes": [] },
-    { "collectionGroup": "messages", "fieldPath": "private", "indexes": [] },
-    { "collectionGroup": "usageJobs", "fieldPath": "encryptedResponse", "indexes": [] },
-    { "collectionGroup": "lyricOriginality", "fieldPath": "private", "indexes": [] },
-    { "collectionGroup": "securityEvents", "fieldPath": "private", "indexes": [] },
-    { "collectionGroup": "lyricOriginality", "fieldPath": "deleteAfter", "ttl": true, "indexes": [] },
-    { "collectionGroup": "securityEvents", "fieldPath": "deleteAfter", "ttl": true, "indexes": [] }
+    {
+      "collectionGroup": "judgeProfilesV2",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "judgeTracksV2",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dmConversations",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "usageJobs",
+      "fieldPath": "encryptedResponse",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "lyricOriginality",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityEvents",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "lyricOriginality",
+      "fieldPath": "deleteAfter",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityEvents",
+      "fieldPath": "deleteAfter",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "communityProfiles",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "referralAccounts",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "referralClaims",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "referralActivity",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "referralRewards",
+      "fieldPath": "private",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "referralClaims",
+      "fieldPath": "review",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "referralRateLimits",
+      "fieldPath": "deleteAfter",
+      "ttl": true,
+      "indexes": []
+    }
   ]
 }

@@ -16,7 +16,10 @@ if (selected.some(dir => !apps.includes(dir))) throw new Error('Unknown app dire
 if (!process.env.npm_execpath) throw new Error('Run through npm run check:apps -- [app-directory].');
 const sentinel = 'IB_BUILD_ONLY_SECRET_SENTINEL_8e7bf045';
 const env = { ...process.env, GEMINI_API_KEY: sentinel, VITE_GEMINI_API_KEY: sentinel,
-  VITE_STRIPE_SECRET_KEY: sentinel, STRIPE_SECRET_KEY: sentinel };
+  VITE_STRIPE_SECRET_KEY: sentinel, STRIPE_SECRET_KEY: sentinel,
+  PRIVATE_DATA_KEYS_JSON:sentinel, REFERRAL_ABUSE_HMAC_KEY:sentinel,
+  VITE_REFERRAL_ABUSE_HMAC_KEY:sentinel,
+  VITE_FIREBASE_APPCHECK_SITE_KEY:'CI_PUBLIC_APPCHECK_SITE_KEY' };
 async function inspect(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);

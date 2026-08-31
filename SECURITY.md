@@ -11,3 +11,5 @@ On suspected exposure: pause the affected operation, preserve redacted evidence,
 See `SECURITY-ROLLOUT.md` for staging, admin claims, rules and rollback; `ECONOMY-ROLLOUT.md` for payment recovery. Live IAM/rules, browser flows, provider calls, backup restoration, contact ownership and incident response drills remain launch gates.
 
 See `PRIVACY-HARDENING.md` for the encryption threat model, runtime keyring, explicit legacy-data migration, lyric retention, bounded security restrictions and the unresolved Cloud Run recovery decision. Application encryption is not end-to-end encryption and does not make a compromised runtime safe.
+
+See `REFERRALS.md` for server-verified referral qualifications, App Check and privacy setup, manual review, reward limits and promotional Pro accounting. Referral rewards and automatic payouts are disabled by default; browser XP and profile fields never authorize these rewards.

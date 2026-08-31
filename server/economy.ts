@@ -1,5 +1,6 @@
 import { sealPrivate, openPrivate } from './dataProtection';
 import { decodeJudgeProfile } from './profileProtection';
+import {advanceReferralActivity, REFERRAL_TOOL_PATHS, type ReferralActivity} from '../shared/referrals';
 import { createHash, randomUUID } from "node:crypto";
 import { getFirestore, FieldValue, type Transaction } from "firebase-admin/firestore";
 import express from "express";
@@ -27,11 +28,12 @@ export interface Wallet {
   extraStorageBytes: number;
   daily: Record<string, number>;
   day: string;
+  promoProUntil: number;
 }
 export function refreshWallet(
   old: Partial<Wallet> | undefined,
   pro: boolean,
-  now = new Date(),
+  now = new Date(Date.now()),
 ): Wallet {
   const month = now.toISOString().slice(0, 7),
     day = now.toISOString().slice(0, 10),
@@ -47,6 +49,7 @@ export function refreshWallet(
     extraStorageBytes: 0,
     day,
     daily: {},
+    promoProUntil: 0,
     ...old,
   };
   if (w.month !== month) {
@@ -77,7 +80,7 @@ export function spend(w: Wallet, cost: number) {
 }
 export async function withWallet<T>(
   uid: string,
-  fn: (w: Wallet, t: Transaction, pro: boolean, hasOpenSubscription: boolean) => Promise<T>,
+  fn: (w: Wallet, t: Transaction, pro: boolean, hasOpenSubscription: boolean, paidPro: boolean, paidUntil:number) => Promise<T>,
 ): Promise<T> {
   const db = economyDb();
   return db.runTransaction(async (t) => {
@@ -86,7 +89,7 @@ export async function withWallet<T>(
       t.get(ref),
       t.get(db.collection("billingSubscriptions").where("uid", "==", uid)),
     ]);
-    const pro = subs.docs.some((d) => {
+    const paidPro = subs.docs.some((d) => {
       const s = d.data();
       return (
         s.status === "active" &&
@@ -97,18 +100,24 @@ export async function withWallet<T>(
         )
       );
     });
-    const w = refreshWallet(wallet.data(), pro);
+    const paidUntil=Math.max(0,...subs.docs.flatMap(d=>d.data().status==='active'?(d.data().items||[]).filter((i:any)=>i.priceId===process.env.STRIPE_PRICE_ID_PRO&&Number.isFinite(i.expiresAt)).map((i:any)=>i.expiresAt):[]));
+    // Promotional time has its own one-time prorated Coin grant. It must not
+    // unlock another full monthly refill each time a short reward is activated.
+    const w = refreshWallet(wallet.data(), paidPro);
+    const pro=paidPro||w.promoProUntil>Date.now();
     const hasOpenSubscription = subs.docs.some(d => !["canceled", "incomplete_expired"].includes(d.data().status));
-    const result = await fn(w, t, pro, hasOpenSubscription);
+    const result = await fn(w, t, pro, hasOpenSubscription, paidPro, paidUntil);
     t.set(ref, w);
     return result;
   });
 }
 export const walletSnapshot = (uid: string) =>
-  withWallet(uid, async (w, _t, pro) => ({
+  withWallet(uid, async (w, _t, pro, _hasOpenSubscription, paidPro, paidUntil) => ({
     ...w,
     total: w.monthly + w.purchased,
     tier: pro ? "pro" : "free",
+    proSource:paidPro?'subscription':pro?'referral':null,
+    proExpiresAt:pro?Math.max(w.promoProUntil,paidUntil):null,
     storageLimitBytes:
       STORAGE_GB[pro ? "pro" : "free"] * GB + w.extraStorageBytes,
     economyVersion: ECONOMY_VERSION,
@@ -168,6 +177,15 @@ export async function settleUsage(
     if (j.status !== "reserved") return j;
     if (success && Buffer.byteLength(JSON.stringify(response)) > 600000)
       throw new Error("Result too large to persist safely.");
+    let activityWrite:{ref:any;value:any}|undefined;
+    if(success&&process.env.REFERRALS_ENABLED==='true'&&REFERRAL_TOOL_PATHS[j.path]) {
+      const claim=await t.get(economyDb().doc(`referralClaims/${uid}`));
+      if(claim.exists&&['pending','awaiting_review'].includes(claim.data()!.status)&&j.createdAt>=claim.data()!.claimedAt) {
+        const activityRef=economyDb().doc(`referralActivity/${uid}`),old=await t.get(activityRef);
+        const previous=old.exists?openPrivate<ReferralActivity>(old.data()!.private,`referral-activity:${uid}`):undefined;
+        activityWrite={ref:activityRef,value:{private:sealPrivate(advanceReferralActivity(previous,{...j,status:'delivered'},claim.data()!.claimedAt),`referral-activity:${uid}`)}};
+      }
+    }
     if (!success) {
       if (j.day === w.day && AI_ACTIONS[j.path]?.daily)
         w.daily[j.path] = Math.max(0, (w.daily[j.path] || 0) - 1);
@@ -193,6 +211,7 @@ export async function settleUsage(
       updatedAt: Date.now(),
       ...(success ? { encryptedResponse: sealPrivate(response, `usage:${uid}:${id}`, Date.now() + 86400000), responseExpiresAt: new Date(Date.now() + 86400000) } : {}),
     };
+    if(activityWrite)t.set(activityWrite.ref,activityWrite.value);
     t.set(ref, result);
     return result;
   });

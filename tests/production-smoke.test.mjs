@@ -23,12 +23,12 @@ test('production server blocks audit exploits without configured credentials', {
   const base = `http://127.0.0.1:${port}`;
   for (const route of ['/api/admin/broadcast', '/api/admin/kick', '/api/admin/blacklist',
     '/api/security/pause-account', '/api/security/unpause-account', '/api/security/remediate',
-    '/api/stripe/create-checkout-session', '/api/stripe/verify-session', '/api/analyze', '/api/dm/bob', '/api/judgement/tracks', '/api/synthesize', '/api/ai/strategy-plan']) {
+    '/api/referrals/enroll', '/api/referrals/claim', '/api/referrals/qualify', '/api/referrals/activate-pro', '/api/referrals/admin/victim/review', '/api/stripe/create-checkout-session', '/api/stripe/verify-session', '/api/analyze', '/api/dm/bob', '/api/judgement/tracks', '/api/synthesize', '/api/ai/strategy-plan']) {
     const response = await fetch(base + route, { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ sessionId: 'sim_session_invented', isAdmin: true, userId: 'admin_christopher_ray' }) });
     assert.equal(response.status, 401, route);
   }
-  for (const route of ['/api/privacy/key', '/api/security/events', '/api/security/assessment', '/api/audit/transactions', '/api/security/logs', '/api/stripe/subscription', '/api/economy/wallet', '/api/economy/history', '/api/stripe/orders']) {
+  for (const route of ['/api/community/profile', '/api/referrals/status', '/api/referrals/admin/reviews', '/api/privacy/key', '/api/security/events', '/api/security/assessment', '/api/audit/transactions', '/api/security/logs', '/api/stripe/subscription', '/api/economy/wallet', '/api/economy/history', '/api/stripe/orders']) {
     assert.equal((await fetch(base + route)).status, 401, route);
   }
   assert.equal((await fetch(base + '/api/health')).status, 200);

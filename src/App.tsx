@@ -41,6 +41,7 @@ import { DailyQuestsWidget } from './components/DailyQuestsWidget';
 import { AchievementGallery } from './components/AchievementGallery';
 import { LandingPage } from './components/LandingPage';
 import { AuthModal } from './components/AuthModal';
+import {CommunityProgressPrompt,ReferralCenter} from './components/ReferralCenter';
 import { ArtistProfilePage } from './components/ArtistProfilePage';
 import { DirectMessagesModal } from './components/DirectMessagesModal';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -288,6 +289,7 @@ function SuiteApp() {
 
   const [currentUser, setCurrentUser] = useState<RegisteredUser>(getCurrentAuthUser);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isReferralOpen,setIsReferralOpen]=useState(false);
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
   const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [unreadDms, setUnreadDms] = useState<number>(0);
@@ -512,6 +514,7 @@ function SuiteApp() {
             )}
 
             {/* Login / Profile Switcher Button */}
+            {currentUser.id!=='guest'&&<button onClick={()=>setIsReferralOpen(true)} className="rounded-xl border border-amber-500/30 px-2 py-1.5 text-xs font-bold text-amber-300" title="Profile completion and verified referral rewards">Invite & Earn</button>}
             <button
               onClick={() => setIsAuthModalOpen(true)}
               className={`p-1.5 sm:p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
@@ -814,6 +817,7 @@ function SuiteApp() {
           </aside>
         )}
 
+        {currentUser.id!=='guest'&&['hub','artist-profile'].includes(activeApp)&&<CommunityProgressPrompt key={currentUser.id} onOpen={()=>setIsReferralOpen(true)}/>}
         <PrivateWorkspaceGate><Suspense
           fallback={
             <div className="flex-1 flex items-center justify-center min-h-[60vh]">
@@ -1058,6 +1062,7 @@ function SuiteApp() {
       </div>
 
       {/* GLOBAL TOAST & MODAL OVERLAYS */}
+      {isReferralOpen&&currentUser.id!=='guest'&&<PrivateWorkspaceGate><ReferralCenter onClose={()=>setIsReferralOpen(false)}/></PrivateWorkspaceGate>}
       <AchievementToast />
       <GamificationModal />
       <PurchaseDialog />

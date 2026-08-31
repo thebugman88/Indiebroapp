@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import {inviteFromUrl,rememberReferralInvite} from '../../shared/referralInvite';
 import { X } from 'lucide-react';
 import { RegisteredUser, loginUser, registerUser, recoverAccount, logoutUser, resendVerification, getCurrentAuthUser, isAuthConfigured } from '../services/authService';
 interface Props { isOpen: boolean; onClose: () => void; onSuccess: (user: RegisteredUser) => void; initialTab?: 'admin' | 'signin' | 'signup' | 'recover'; }
@@ -7,6 +8,7 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [referralCode,setReferralCode]=useState(inviteFromUrl);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   if (!isOpen) return null;
@@ -18,7 +20,7 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
         setMessage(result.message || result.error || 'Please try again.');
       } else {
         const result = tab === 'signup' ? await registerUser({ email, password, displayName }) : await loginUser(email, password);
-        if (result.success && result.user) { setPassword(''); onSuccess(result.user); setMessage('Signed in. Check your email if verification is pending.'); onClose(); }
+        if (result.success && result.user) { if(tab==='signup')rememberReferralInvite(result.user.id,referralCode);setPassword(''); onSuccess(result.user); setMessage('Signed in. Check your email if verification is pending.'); onClose(); }
         else setMessage(result.error || 'Unable to sign in.');
       }
     } finally { setBusy(false); }
@@ -38,6 +40,7 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
       <p className="text-sm text-slate-300 mb-4">For shared-device privacy, your session and encryption keys stay in memory. Refreshing or closing this page requires signing in again. Download work you want to keep.</p>
       <form onSubmit={submit} className="space-y-4">
         {tab === 'signup' && <label className="block">Artist name<input required value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="nickname" className={fieldClass} /></label>}
+        {tab==='signup'&&<label className="block text-sm">Referral code (optional)<input className={fieldClass} value={referralCode} maxLength={24} pattern="[A-Fa-f0-9]{24}" onChange={e=>setReferralCode(e.target.value.toUpperCase())}/><span className="mt-1 block text-xs text-slate-400">After verifying your email, open Invite & Earn to attach it and complete the checklist. Save this code if you close the page.</span></label>}
         <label className="block">Email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" className={fieldClass} /></label>
         {tab !== 'recover' && <label className="block">Password<input required type="password" minLength={tab === 'signup' ? 8 : undefined} value={password} onChange={e => setPassword(e.target.value)} autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} className={fieldClass} /></label>}
         <button disabled={busy || !isAuthConfigured} className="w-full rounded-xl bg-amber-400 text-slate-950 p-3 font-bold disabled:opacity-50">{busy ? 'Please wait…' : tab === 'recover' ? 'Send reset email' : tab === 'signup' ? 'Create account' : 'Sign in'}</button>

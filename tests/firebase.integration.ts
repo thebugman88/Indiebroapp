@@ -1,4 +1,7 @@
 import {testEncryptionKeys} from './private-fixture';
+import {enrollReferral,claimReferral,qualifyReferral,activateReferralPro,referralStatus,saveCommunityProfile} from '../server/referrals';
+import {sealPrivate} from '../server/dataProtection';
+import {DAY_MS} from '../shared/referrals';
 import {openPrivate} from '../server/dataProtection';
 import {decodeStoredTrack,encodeStoredTrack} from '../server/judgement';
 testEncryptionKeys();
@@ -202,6 +205,14 @@ test("repository rule file denies all direct browser access, including forged ad
     "usageJobs/browser-forgery",
     "storageReservations/browser-forgery",
     "coinRewards/browser-forgery",
+    "communityProfiles/browser-forgery",
+    "referralAccounts/browser-forgery",
+    "referralClaims/browser-forgery",
+    "referralActivity/browser-forgery",
+    "referralRewards/browser-forgery",
+    "referralEmailClaims/browser-forgery",
+    "referralCodes/browser-forgery",
+    "referralProActivations/browser-forgery",
     "tracks/legacy",
     "userProfiles/alice",
     "judgeTracksV2/track",
@@ -815,3 +826,116 @@ test("Pro purchase bonuses come from live server entitlements, and expired entit
   );
 });
 import {encodeJudgeProfile,decodeJudgeProfile} from '../server/profileProtection';
+
+const referralProfile={displayName:'Test Artist',handle:'test_artist',role:'artist',genre:'Hip-Hop',bio:'Independent artist writing original songs and learning production.',goal:'Release a carefully produced original EP.'};
+async function referralMember(uid:string,device:string,email=`${uid}@example.test`) {
+  await auth.createUser({uid,email,password:'EmulatorOnly-Referral-123',emailVerified:true});
+  await saveCommunityProfile(uid,referralProfile);
+  return enrollReferral(uid,device);
+}
+function referralTestConfig(t:any) {
+  const old={enabled:process.env.REFERRALS_ENABLED,automatic:process.env.REFERRALS_AUTOMATIC_REWARDS,key:process.env.REFERRAL_ABUSE_HMAC_KEY};
+  Object.assign(process.env,{REFERRALS_ENABLED:'true',REFERRALS_AUTOMATIC_REWARDS:'true',REFERRAL_ABUSE_HMAC_KEY:Buffer.alloc(32,82).toString('base64')});
+  t.after(()=>{for(const [key,value] of Object.entries({REFERRALS_ENABLED:old.enabled,REFERRALS_AUTOMATIC_REWARDS:old.automatic,REFERRAL_ABUSE_HMAC_KEY:old.key}))if(value===undefined)delete process.env[key];else process.env[key]=value;});
+}
+test('real referral transactions enforce activity, award both accounts once, cap milestones and activate banked Pro without monthly farming',async t=>{
+  referralTestConfig(t);
+  const parent='referral-parent',invite=await referralMember(parent,'parent-device');
+  const members=Array.from({length:11},(_,i)=>`referral-member-${i}`);
+  for(const uid of members){const own=await referralMember(uid,`device-${uid}`);assert.notEqual(own.code,invite.code);await claimReferral(uid,invite.code);}
+  await assert.rejects(()=>claimReferral(members[0],'F'.repeat(24)),/cannot be changed/);
+  const beginning=Date.now()+60000;let now=beginning;
+  t.mock.method(Date,'now',()=>now);
+  for(const uid of members){const j=await reserveUsage(uid,'referral-lyric-1','/api/generate-lyrics');await settleUsage(j.id,uid,true,{text:'Synthetic complete output'});await settleUsage(j.id,uid,true,{text:'Ignored replay'});}
+  assert.equal((await qualifyReferral(members[0])).status,'pending');
+  now=beginning+DAY_MS;
+  for(const uid of members){const j=await reserveUsage(uid,'referral-quiz-1','/api/quiz/generate');await settleUsage(j.id,uid,true,{quiz:'Synthetic quiz'});}
+  assert.equal((await qualifyReferral(members[0])).status,'pending','must still wait 48 hours');
+  const evidence=(await db.doc(`referralActivity/${members[0]}`).get()).data()!;
+  assert.equal(JSON.stringify(evidence).includes('lyric-pro'),false,'activity summary is encrypted');
+  now=beginning+2*DAY_MS;
+  for(let i=0;i<10;i++) {
+    if(i&&i%2===0)now+=DAY_MS;
+    const before=(await walletSnapshot(members[i])).purchased;
+    const results=await Promise.all([qualifyReferral(members[i]),qualifyReferral(members[i])]);
+    assert(results.every(r=>r.status==='qualified'));
+    assert.equal((await walletSnapshot(members[i])).purchased,before+20);
+    if(i===1)assert.equal((await qualifyReferral(members[2])).status,'daily_limit');
+  }
+  assert.equal((await qualifyReferral(members[10])).status,'capped');
+  const status=await referralStatus(parent);
+  assert.equal(status.qualified,10);assert.equal(status.points,1400);assert.equal(status.coins,325);assert.equal(status.proDaysAvailable,51);
+  assert(status.badges['Brotherhood Ambassador']);
+  assert.equal(JSON.stringify(status).includes(members[0]),false,'inviter receives no identities or task details');
+  const before=await walletSnapshot(parent);
+  const activations=await Promise.allSettled([activateReferralPro(parent),activateReferralPro(parent)]);
+  assert.equal(activations.filter(r=>r.status==='fulfilled').length,1);
+  const pro=await walletSnapshot(parent);
+  assert.equal(pro.tier,'pro');assert.equal(pro.proSource,'referral');assert.equal(pro.monthly,before.monthly);
+  assert.equal(pro.purchased,before.purchased+2295);assert.equal(pro.storageLimitBytes,10_000_000_000);
+  assert.equal((await referralStatus(parent)).proDaysAvailable,0);
+  await assert.rejects(()=>initializePayment(parent,'cannot-buy-during-promo','pro',0));
+  now=pro.promoProUntil+1;
+  const expired=await walletSnapshot(parent);
+  assert.equal(expired.tier,'free');assert.equal(expired.monthly,150);assert.equal(expired.purchased,pro.purchased);
+  assert.equal(expired.storageLimitBytes,1_000_000_000);
+});
+test('shared-device referrals wait for review; disabled accounts, duplicate aliases and fabricated activity cannot claim rewards',async t=>{
+  referralTestConfig(t);
+  const parent='review-parent',child='review-child';
+  const invite=await referralMember(parent,'shared-device');await referralMember(child,'shared-device');await claimReferral(child,invite.code);
+  let now=Date.now()+60000;t.mock.method(Date,'now',()=>now);
+  let job=await reserveUsage(child,'review-failed-ai','/api/analyze');await settleUsage(job.id,child,false);
+  assert.equal((await referralStatus(child)).progress.spent,0);
+  job=await reserveUsage(child,'review-lyric-ai','/api/generate-lyrics');await settleUsage(job.id,child,true,{text:'Synthetic'});
+  now+=DAY_MS;job=await reserveUsage(child,'review-quiz-ai','/api/quiz/generate');await settleUsage(job.id,child,true,{quiz:'Synthetic'});
+  now+=DAY_MS;
+  assert.equal((await qualifyReferral(child)).status,'awaiting_review');
+  assert.equal((await referralStatus(parent)).qualified,0);
+  await db.doc(`securityBlocks/${child}`).set({until:now+DAY_MS});
+  await assert.rejects(()=>qualifyReferral(child,{actor:'admin',reason:'Reviewed separate artists'}),/restricted account/);
+  await db.doc(`securityBlocks/${child}`).delete();
+  await auth.updateUser(child,{disabled:true});await assert.rejects(()=>qualifyReferral(child,{actor:'admin',reason:'Reviewed external evidence'}));
+  await auth.updateUser(child,{disabled:false});
+  assert.equal((await qualifyReferral(child,{actor:'admin',reason:'Verified separate artists sharing this device'})).status,'qualified');
+  assert.equal((await referralStatus(parent)).qualified,1);
+  const first=await referralMember('alias-one','alias-device-one','referral.member+one@gmail.com');assert(first.code);
+  await assert.rejects(()=>referralMember('alias-two','alias-device-two','referralmember+two@googlemail.com'),/already registered/);
+});
+test('earned Pro waits for subscriptions or pending checkouts and cannot double grant on retries',async t=>{
+  referralTestConfig(t);
+  const uid='pro-bank-member';await referralMember(uid,'pro-bank-device');
+  const ref=db.doc(`referralAccounts/${uid}`),doc=await ref.get(),a=openPrivate(doc.data()!.private,`referral-account:${uid}`);a.proDaysAvailable=7;
+  await ref.set({private:sealPrivate(a,`referral-account:${uid}`)});
+  await db.doc('billingSubscriptions/referral-bank-sub').set({uid,status:'past_due',items:[]});
+  await assert.rejects(()=>activateReferralPro(uid),/existing Pro access/);
+  assert.equal((await referralStatus(uid)).proDaysAvailable,7);
+  await db.doc('billingSubscriptions/referral-bank-sub').update({status:'canceled'});
+  const order=await initializePayment(uid,'pending-pro-bank-order','pro',0);
+  await assert.rejects(()=>activateReferralPro(uid),/existing Pro access/);
+  await db.doc(`paymentOrders/${order.id}`).update({status:'failed'});
+  const before=(await walletSnapshot(uid)).purchased;
+  const result=await activateReferralPro(uid);assert.equal(result.days,7);assert.equal(result.coins,315);
+  await assert.rejects(()=>activateReferralPro(uid));
+  assert.equal((await walletSnapshot(uid)).purchased,before+315);
+});
+test('retroactive invitations, self-referrals, approval before activity and program budget exhaustion cannot mint rewards',async t=>{
+  referralTestConfig(t);
+  const old='old-referral-member';await referralMember(old,'old-referral-device');
+  const parent='late-referral-parent',invite=await referralMember(parent,'late-parent-device');
+  await assert.rejects(()=>claimReferral(old,invite.code),/before this new account/);
+  await assert.rejects(()=>claimReferral(parent,invite.code),/cannot be attached/);
+  const child='budget-referral-member';await referralMember(child,'budget-referral-device');await claimReferral(child,invite.code);
+  assert.equal((await qualifyReferral(child,{actor:'admin',reason:'Cannot bypass activity qualification'})).status,'pending');
+  let now=Date.now()+60000;t.mock.method(Date,'now',()=>now);
+  let job=await reserveUsage(child,'budget-lyrics','/api/generate-lyrics');await settleUsage(job.id,child,true,{text:'Synthetic'});
+  now+=DAY_MS;job=await reserveUsage(child,'budget-quiz','/api/quiz/generate');await settleUsage(job.id,child,true,{quiz:'Synthetic'});
+  now+=DAY_MS;
+  const day=new Date(now).toISOString().slice(0,10),ref=db.doc(`referralDailyBudget/${day}`),previous=await ref.get();
+  await ref.set({count:25});
+  assert.equal((await qualifyReferral(child)).status,'daily_limit');assert.equal((await referralStatus(parent)).qualified,0);
+  if(previous.exists)await ref.set(previous.data()!);else await ref.delete();
+  process.env.REFERRALS_AUTOMATIC_REWARDS='false';
+  assert.equal((await qualifyReferral(child)).status,'awaiting_review','default manual approval also applies to unflagged accounts');
+  assert.equal((await qualifyReferral(child,{actor:'admin',reason:'Independently verified eligible participants'})).status,'qualified');
+});

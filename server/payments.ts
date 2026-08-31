@@ -26,7 +26,7 @@ export async function initializePayment(
 ) {
   return withWallet(uid, async (_w, t, pro, hasOpenSubscription) => {
     const product = PRODUCTS[productId];
-    if (productId === "pro" && hasOpenSubscription)
+    if (productId === "pro" && (hasOpenSubscription||pro))
       throw new Error("Artist Pro is already active.");
     const coins = pro ? product.proCoins : product.coins;
     if (expectedCoins !== coins)
