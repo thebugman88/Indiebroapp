@@ -26,6 +26,8 @@ Every qualified new member receives **20 BC and a Welcome to the Brotherhood bad
 
 Activity advances only inside the transaction that marks an AI usage job delivered. Reserved, failed, refunded, pre-attachment and duplicate settlement attempts do not count. Only a bounded encrypted summary of tool families, two activity dates and the 10-BC threshold is retained; referral logic never copies lyrics or prompts. Reads do not award money. The qualification transaction credits both wallets, records the milestone, updates badges/points and changes the claim together. Concurrent/retried requests cannot mint another payout.
 
+Firebase Admin exposes account creation with second precision, so the invitation-versus-birth comparison uses seconds rather than incorrectly comparing a rounded birth time with milliseconds. Strict inviter-before-member enrollment ordering independently prevents referral cycles and rejects already-enrolled accounts. Current email identity ownership is checked again inside the payout transaction; admin review cannot override another account's existing email identity claim.
+
 ## Pro and Coin accounting
 
 Earned time is banked until explicitly activated. Activation consumes all banked days atomically and cannot overlap active Pro, a nonterminal subscription or a pending Pro checkout. Existing subscribers keep the banked days; this implementation does **not** pause, extend, cancel, refund or otherwise alter Stripe billing. Pro activation cannot automatically convert into a subscription.

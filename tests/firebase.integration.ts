@@ -901,6 +901,13 @@ test('shared-device referrals wait for review; disabled accounts, duplicate alia
   assert.equal((await referralStatus(parent)).qualified,1);
   const first=await referralMember('alias-one','alias-device-one','referral.member+one@gmail.com');assert(first.code);
   await assert.rejects(()=>referralMember('alias-two','alias-device-two','referralmember+two@googlemail.com'),/already registered/);
+  const changed='changed-email-member';await referralMember(changed,'changed-email-device');await claimReferral(changed,invite.code);
+  job=await reserveUsage(changed,'changed-email-lyrics','/api/generate-lyrics');await settleUsage(job.id,changed,true,{text:'Synthetic'});
+  now+=DAY_MS;job=await reserveUsage(changed,'changed-email-quiz','/api/quiz/generate');await settleUsage(job.id,changed,true,{quiz:'Synthetic'});
+  now+=DAY_MS;
+  await auth.updateUser(changed,{email:'referral.member+changed@googlemail.com',emailVerified:true});
+  await assert.rejects(()=>qualifyReferral(changed,{actor:'admin',reason:'Approval cannot override a duplicate email identity'}),/already registered to another account/);
+  assert.equal((await referralStatus(parent)).qualified,1);
 });
 test('earned Pro waits for subscriptions or pending checkouts and cannot double grant on retries',async t=>{
   referralTestConfig(t);

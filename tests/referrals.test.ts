@@ -13,6 +13,7 @@ import {
   validateCommunityProfile,
   referralsRouter,
   communityRouter,
+  validReferralOrder,
 } from "../server/referrals";
 import {
   advanceReferralActivity,
@@ -46,6 +47,49 @@ test("referral milestones are capped and award the promised Pro durations once",
   assert.equal(
     REFERRAL_MILESTONES.reduce((s, m) => s + m.proDays, 0),
     51,
+  );
+});
+test("referral order accounts for Firebase timestamp precision without admitting cycles or older members", () => {
+  const second = Date.UTC(2026, 7, 31, 12);
+  assert.equal(
+    validReferralOrder(
+      second + 100,
+      second,
+      second,
+      second + 100,
+      second + 200,
+    ),
+    true,
+  );
+  assert.equal(
+    validReferralOrder(
+      second + 1000,
+      second,
+      second,
+      second + 100,
+      second + 200,
+    ),
+    false,
+  );
+  assert.equal(
+    validReferralOrder(
+      second + 100,
+      second,
+      second,
+      second + 200,
+      second + 100,
+    ),
+    false,
+  );
+  assert.equal(
+    validReferralOrder(
+      second + 100,
+      second,
+      second + 1000,
+      second + 100,
+      second + 200,
+    ),
+    false,
   );
 });
 test("profile validation rejects forged rewards and requires meaningful bounded fields", () => {

@@ -118,6 +118,22 @@ const createdAt = (u: UserRecord) => {
     throw new Error("Account age could not be verified.");
   return time;
 };
+export function validReferralOrder(
+  invitationAt: number,
+  birth: number,
+  inviterBirth: number,
+  inviterEnrollment: number,
+  memberEnrollment: number,
+) {
+  // Firebase Admin's UTC creationTime string has second precision. Comparing
+  // its truncated value to a millisecond invitation rejects valid fast signups.
+  // Strict enrollment ordering remains an independent cycle-prevention rule.
+  return (
+    Math.floor(invitationAt / 1000) <= Math.floor(birth / 1000) &&
+    inviterBirth <= birth &&
+    inviterEnrollment < memberEnrollment
+  );
+}
 export async function enrollReferral(uid: string, deviceHash: string) {
   const user = await verifiedUser(uid),
     emailHash = abuseHash("email", canonicalEmail(user.email!)),
@@ -216,13 +232,25 @@ export async function claimReferral(uid: string, input: string) {
       throw new Error("This referral cannot be attached.");
     const parent = invitation.data()!.uid;
     const parentDoc = await t.get(accountRef(parent));
-    if (!parentDoc.exists || invitation.data()!.createdAt > birth)
+    if (!parentDoc.exists)
       throw new Error(
         "Use an invitation created before this new account was registered.",
       );
     const member = readAccount(uid, memberDoc.data()),
       inviter = readAccount(parent, parentDoc.data());
-    if (inviter.createdAt >= birth || member.emailHash === inviter.emailHash)
+    if (
+      !validReferralOrder(
+        invitation.data()!.createdAt,
+        birth,
+        inviter.createdAt,
+        inviter.enrolledAt,
+        member.enrolledAt,
+      )
+    )
+      throw new Error(
+        "Use an invitation created before this new account was registered.",
+      );
+    if (member.emailHash === inviter.emailHash)
       throw new Error("Self-referrals and referral loops are not eligible.");
     if (
       inviter.qualified >= REFERRAL_RULES.maxQualified ||
@@ -370,6 +398,19 @@ export async function qualifyReferral(
       parentEmail = abuseHash("email", canonicalEmail(parentUser.email!));
     if (email === parentEmail)
       throw new Error("Self-referrals are not eligible.");
+    const emailRef = db.doc(`referralEmailClaims/${email}`),
+      parentEmailRef = db.doc(`referralEmailClaims/${parentEmail}`);
+    const [emailOwner, parentEmailOwner] = await Promise.all([
+      t.get(emailRef),
+      t.get(parentEmailRef),
+    ]);
+    if (
+      (emailOwner.exists && emailOwner.data()!.uid !== uid) ||
+      (parentEmailOwner.exists && parentEmailOwner.data()!.uid !== parent)
+    )
+      throw new Error(
+        "This reward identity is already registered to another account.",
+      );
     const details = openPrivate(c.private, `referral-claim:${uid}`);
     const risk =
       details.sharedDevice ||
@@ -421,6 +462,8 @@ export async function qualifyReferral(
     mw.purchased += REFERRAL_RULES.newMemberCoins;
     pw.purchased += milestone.coins;
     member.coins += REFERRAL_RULES.newMemberCoins;
+    member.emailHash = email;
+    inviter.emailHash = parentEmail;
     member.badges["Welcome to the Brotherhood"] = now;
     inviter.qualified++;
     inviter.pending = Math.max(0, inviter.pending - 1);
@@ -430,6 +473,8 @@ export async function qualifyReferral(
     inviter.rewardDay = day;
     inviter.rewardsToday = used + 1;
     if (milestone.badge) inviter.badges[milestone.badge] = now;
+    if (!emailOwner.exists) t.create(emailRef, { uid });
+    if (!parentEmailOwner.exists) t.create(parentEmailRef, { uid: parent });
     t.set(db.doc(`wallets/${uid}`), mw);
     t.set(db.doc(`wallets/${parent}`), pw);
     t.set(accountRef(uid), accountData(member));
