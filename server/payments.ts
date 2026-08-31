@@ -6,6 +6,7 @@ import {
   keyFor,
   walletSnapshot,
   recoverExpiredUsage,
+  purgeExpiredPrivateResults,
 } from "./economy";
 import {
   PRODUCTS,
@@ -23,9 +24,9 @@ export async function initializePayment(
   productId: ProductId,
   expectedCoins: number,
 ) {
-  return withWallet(uid, async (_w, t, pro) => {
+  return withWallet(uid, async (_w, t, pro, hasOpenSubscription) => {
     const product = PRODUCTS[productId];
-    if (productId === "pro" && pro)
+    if (productId === "pro" && hasOpenSubscription)
       throw new Error("Artist Pro is already active.");
     const coins = pro ? product.proCoins : product.coins;
     if (expectedCoins !== coins)
@@ -342,6 +343,7 @@ export function startPaymentMonitor(getStripe: () => Stripe | null) {
     if (busy) return;
     busy = true;
     try {
+      await purgeExpiredPrivateResults().catch(()=>console.warn('[Privacy cleanup] Cleanup unavailable; expired content remains inaccessible.'));
       const stripe = getStripe();
       if (stripe) await reconcilePayments(stripe);
       else {

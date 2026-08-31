@@ -28,12 +28,16 @@ test('production server blocks audit exploits without configured credentials', {
       body: JSON.stringify({ sessionId: 'sim_session_invented', isAdmin: true, userId: 'admin_christopher_ray' }) });
     assert.equal(response.status, 401, route);
   }
-  for (const route of ['/api/audit/transactions', '/api/security/logs', '/api/stripe/subscription', '/api/economy/wallet', '/api/economy/history', '/api/stripe/orders']) {
+  for (const route of ['/api/privacy/key', '/api/security/events', '/api/security/assessment', '/api/audit/transactions', '/api/security/logs', '/api/stripe/subscription', '/api/economy/wallet', '/api/economy/history', '/api/stripe/orders']) {
     assert.equal((await fetch(base + route)).status, 401, route);
   }
   assert.equal((await fetch(base + '/api/health')).status, 200);
   const terms=await fetch(base+'/api/legal/terms');assert.equal(terms.status,200);assert.match(await terms.text(),/AI can make mistakes/);
-  assert.equal((await fetch(base + '/')).status, 200);
+  const page=await fetch(base+'/');assert.equal(page.status,200);
+  assert.equal(page.headers.get('x-content-type-options'),'nosniff');
+  assert.equal(page.headers.get('x-frame-options'),'DENY');
+  assert.match(page.headers.get('content-security-policy'),/script-src 'self' 'wasm-unsafe-eval'/);
+  assert.equal((await fetch(base+'/api/privacy/key')).headers.get('cache-control'),'private, no-store');
   for (const route of ['/server.cjs', '/server.cjs.map']) assert.equal((await fetch(base + route)).status, 404, route);
   assert.equal((await fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 503);
   await new Promise((resolve, reject) => {

@@ -1,3 +1,4 @@
+import {testEncryptionKeys} from './private-fixture';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -7,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 test('rate limits expire, cancellation stays reachable, and unblocks survive restart', async t => {
+  testEncryptionKeys();
   const cwd = process.cwd(), dir = mkdtempSync(join(tmpdir(), 'ib-sentinel-test-'));
   const moduleUrl = pathToFileURL(resolve('server/codeSentinel.ts')).href;
   const loader = resolve('node_modules/tsx/dist/loader.mjs');

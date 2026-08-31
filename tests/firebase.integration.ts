@@ -1,3 +1,7 @@
+import {testEncryptionKeys} from './private-fixture';
+import {openPrivate} from '../server/dataProtection';
+import {decodeStoredTrack,encodeStoredTrack} from '../server/judgement';
+testEncryptionKeys();
 import {
   walletSnapshot,
   refreshWallet,
@@ -7,6 +11,7 @@ import {
   finishStorage,
   economyRouter,
   usageMiddleware,
+  purgeExpiredPrivateResults,
   keyFor,
   awardReviewCoins,
   awardProfileCoins,
@@ -112,7 +117,7 @@ async function request(
   });
 }
 async function seedTrack(id: string, uid = "alice", remaining = 20) {
-  await db.doc(`judgeTracksV2/${id}`).set({
+  await db.doc(`judgeTracksV2/${id}`).set(encodeStoredTrack({
     id,
     ownerId: "owner",
     title: "Original track",
@@ -120,12 +125,12 @@ async function seedTrack(id: string, uid = "alice", remaining = 20) {
     durationSeconds: 60,
     reviews: [],
     uploadedAt: new Date().toISOString(),
-  });
-  await db.doc(`judgeProfilesV2/${uid}`).set({
+  } as any));
+  await db.doc(`judgeProfilesV2/${uid}`).set(encodeJudgeProfile({
     ...freshJudge(uid),
     termsAccepted: true,
     dailyAuditsRemaining: remaining,
-  });
+  }));
   await db
     .doc(`judgeTracksV2/${id}/listens/${uid}`)
     .set({ startedAt: Date.now() - 61000 });
@@ -231,6 +236,7 @@ test("repository rule file denies all direct browser access, including forged ad
       await assertFails(deleteDoc(ref));
     }
   }
+  await Promise.all(paths.map(path=>db.doc(path).delete()));
 });
 
 test("real Auth emulator tokens enforce verified email, admin claims, disabled and anonymous rejection", async () => {
@@ -259,8 +265,8 @@ test("concurrent duplicate reviews commit exactly once and award XP once", async
     ),
   );
   assert.deepEqual(responses.map((r) => r.status).sort(), [201, 409, 409, 409]);
-  const track = (await db.doc("judgeTracksV2/duplicate").get()).data()!,
-    profile = (await db.doc("judgeProfilesV2/alice").get()).data()!;
+  const track = decodeStoredTrack((await db.doc("judgeTracksV2/duplicate").get()).data()!),
+    profile = decodeJudgeProfile('alice',(await db.doc("judgeProfilesV2/alice").get()).data()!);
   assert.equal(track.ownerId, "owner");
   assert.equal(track.reviews.length, 1);
   assert.equal(track.reviews[0].judgeId, "alice");
@@ -278,7 +284,7 @@ test("concurrent reviews on different tracks cannot overspend the last daily rev
     ),
   );
   assert.deepEqual(responses.map((r) => r.status).sort(), [201, 409]);
-  const profile = (await db.doc("judgeProfilesV2/bob").get()).data()!;
+  const profile = decodeJudgeProfile('bob',(await db.doc("judgeProfilesV2/bob").get()).data()!);
   assert.equal(profile.dailyAuditsRemaining, 0);
   assert.equal(profile.judgeXp, 50);
 });
@@ -286,7 +292,7 @@ test("concurrent reviews on different tracks cannot overspend the last daily rev
 test("profile edits cannot forge XP, quotas, identity or submitted-track ownership", async () => {
   await db
     .doc("judgeProfilesV2/carol")
-    .set({ ...freshJudge("carol"), termsAccepted: true });
+    .set(encodeJudgeProfile({ ...freshJudge("carol"), termsAccepted: true }));
   const response = await request("/judgement/profile", "carol", "PATCH", {
     name: "Carol",
     id: "admin",
@@ -381,6 +387,7 @@ test("real Firestore transactions deduplicate billing events and resist stale re
 let providerCalls = 0;
 let checkoutParams: any, checkoutOptions: any;
 const fakeStripe = {
+  subscriptions:{retrieve:async(id:string)=>{const data=(await db.doc(`billingSubscriptions/${id}`).get()).data();if(!data)throw new Error('Missing test subscription.');return {id,...data,metadata:{firebaseUid:data.uid}};}},
   prices: {
     retrieve: async (id: string) => ({
       id,
@@ -407,6 +414,34 @@ const fakeStripe = {
     },
   },
 } as unknown as Stripe;
+
+test('past-due subscriptions block real transactional Pro purchases and the authenticated checkout route',async()=>{
+  process.env.STRIPE_PRICE_ID_PRO='price_pro';process.env.STRIPE_WEBHOOK_SECRET='whsec_emulator_only';process.env.APP_PUBLIC_URL='https://suite.example';
+  const ref=db.doc('billingSubscriptions/sub_due');
+  await ref.set({uid:'alice',status:'past_due',items:[{priceId:'price_pro',expiresAt:Date.now()-1}]});
+  try {
+    await assert.rejects(()=>initializePayment('alice','past-due-request','pro',0));
+    const response=await request('/billing/create-checkout-session','alice','POST',{productId:'pro',clientCustomKey:'past-due-request',expectedCoins:0,accepted:true,finalConfirmed:true,termsVersion:TERMS_VERSION});
+    assert.equal(response.status,409);assert.equal((await response.json()).code,'MANAGE_EXISTING_SUBSCRIPTION');
+  }finally{await ref.delete();}
+});
+
+test('lyric replay keeps five encrypted pairs and cleanup preserves billing idempotency',async()=>{
+  const uid='retention-artist',ids:string[]=[];
+  for(let i=0;i<6;i++) {
+    const job=await reserveUsage(uid,`retention-request-${i}`,'/api/generate-lyrics','fixture-input');ids.push(job.id);
+    await settleUsage(job.id,uid,true,{text:`PRIVATE RETENTION ${i}`});
+  }
+  let jobs=await Promise.all(ids.map(id=>db.doc(`usageJobs/${id}`).get()));
+  assert.equal(jobs.filter(j=>j.data()!.encryptedResponse).length,5);
+  assert(!JSON.stringify(jobs.map(j=>j.data())).includes('PRIVATE RETENTION'));
+  for(const job of jobs)if(job.data()!.encryptedResponse)await job.ref.update({responseExpiresAt:new Date(Date.now()-1)});
+  await purgeExpiredPrivateResults();
+  jobs=await Promise.all(ids.map(id=>db.doc(`usageJobs/${id}`).get()));
+  assert(jobs.every(j=>j.exists&&j.data()!.status==='delivered'&&!j.data()!.encryptedResponse));
+  assert.equal((await reserveUsage(uid,'retention-request-0','/api/generate-lyrics','fixture-input')).replayed,true);
+  assert.equal((await walletSnapshot(uid)).total,90);
+});
 
 test("wallet reservations prevent concurrent overspending and duplicate charges; failures refund exactly once", async () => {
   const uid = "wallet-concurrency";
@@ -518,21 +553,20 @@ test("storage buys once per request, survives downgrade and upload reservations 
 });
 test("profile and validated review rewards are deduplicated and monthly capped", async () => {
   const uid = "reward-artist";
-  await db.doc(`judgeProfilesV2/${uid}`).set({
+  await db.doc(`judgeProfilesV2/${uid}`).set(encodeJudgeProfile({
     ...freshJudge(uid),
     name: "Artist",
     termsAccepted: true,
-    tasteProfile: { preferredGenres: ["rap"] },
+    tasteProfile: {...freshJudge(uid).tasteProfile, preferredGenres: ["Hip-Hop / BoomBap"] },
     auditsCompletedTotal: 5,
-  });
+  }));
   assert.equal(await awardProfileCoins(uid), 5);
   assert.equal(await awardProfileCoins(uid), 0);
   assert.equal(await awardReviewCoins(uid), 5);
   assert.equal(await awardReviewCoins(uid), 0);
   for (let n = 2; n <= 12; n++) {
-    await db
-      .doc(`judgeProfilesV2/${uid}`)
-      .update({ auditsCompletedTotal: n * 5 });
+    const ref=db.doc(`judgeProfilesV2/${uid}`);
+    await ref.set(encodeJudgeProfile({...decodeJudgeProfile(uid,(await ref.get()).data()),auditsCompletedTotal:n*5}));
     await awardReviewCoins(uid);
   }
   const w = await walletSnapshot(uid);
@@ -780,3 +814,4 @@ test("Pro purchase bonuses come from live server entitlements, and expired entit
     250,
   );
 });
+import {encodeJudgeProfile,decodeJudgeProfile} from '../server/profileProtection';

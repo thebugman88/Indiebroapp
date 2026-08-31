@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../../shared/PrivateWorkspaceGate';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   FileText, 
@@ -38,6 +39,7 @@ export const LyricScratchpad: React.FC<LyricScratchpadProps> = ({
   onToggleAutoSave,
   lastSaved,
 }) => {
+  const localStorage = usePrivateStorage();
   const [lyrics, setLyrics] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('indie_scratchpad_lyrics');
@@ -57,6 +59,7 @@ export const LyricScratchpad: React.FC<LyricScratchpadProps> = ({
   // Smart Assistant state
   const [smartCandidates, setSmartCandidates] = useState<{ word: string; numSyllables: number; type: 'exact' | 'near' }[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [onlineRhymes,setOnlineRhymes]=useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -162,6 +165,7 @@ export const LyricScratchpad: React.FC<LyricScratchpadProps> = ({
       setIsListening(false);
     } else {
       try {
+        if(!window.confirm('Voice dictation may send your audio to your browser’s speech provider. Continue?'))return;
         recognitionRef.current.start();
         setIsListening(true);
       } catch (err) {
@@ -177,8 +181,9 @@ export const LyricScratchpad: React.FC<LyricScratchpadProps> = ({
 
   useEffect(() => {
     let isCancelled = false;
-    if (!targetRhymeWord) {
+    if (!targetRhymeWord || !onlineRhymes || mode !== 'guided') {
       setSmartCandidates([]);
+      setIsSuggesting(false);
       return;
     }
 
@@ -210,7 +215,7 @@ export const LyricScratchpad: React.FC<LyricScratchpadProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [targetRhymeWord]);
+  }, [targetRhymeWord,onlineRhymes,mode]);
 
   // Insert suggested word into lyrics
   const handleInsertCandidate = (word: string) => {
@@ -510,6 +515,7 @@ export const LyricScratchpad: React.FC<LyricScratchpadProps> = ({
         {/* Right / Smart Assistant Column (Active in Guided Mode) */}
         {mode === 'guided' && (
           <div className="lg:col-span-4 space-y-4">
+            <label className="flex gap-2 text-xs text-white/70"><input type="checkbox" checked={onlineRhymes} onChange={e=>setOnlineRhymes(e.target.checked)}/>Enable online rhyme suggestions. This sends the current line’s last word to Datamuse; it is off by default.</label>
             <div className="bg-[#111] border border-white/5 rounded-2xl p-5 space-y-4 shadow-xl">
               <div className="flex items-center justify-between border-b border-white/5 pb-3">
                 <div className="flex items-center gap-2 text-xs font-mono font-bold text-white uppercase tracking-wider">

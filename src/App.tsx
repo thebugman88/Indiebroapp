@@ -1,3 +1,4 @@
+import { PrivateWorkspaceGate } from '../shared/PrivateWorkspaceGate';
 import { PurchaseDialog } from './components/PurchaseDialog';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import {
@@ -813,7 +814,7 @@ function SuiteApp() {
           </aside>
         )}
 
-        <Suspense
+        <PrivateWorkspaceGate><Suspense
           fallback={
             <div className="flex-1 flex items-center justify-center min-h-[60vh]">
               <div className="text-center space-y-3 font-mono">
@@ -1053,7 +1054,7 @@ function SuiteApp() {
 
           {/* 10. ROYALTYOPS */}
           {activeApp === 'royaltyops' && <RoyaltyExtractorApp />}
-        </Suspense>
+        </Suspense></PrivateWorkspaceGate>
       </div>
 
       {/* GLOBAL TOAST & MODAL OVERLAYS */}

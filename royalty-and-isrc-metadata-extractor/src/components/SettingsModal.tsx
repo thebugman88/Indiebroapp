@@ -176,7 +176,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </span>
               </label>
               <p className="text-[11px] text-slate-500 pl-6">
-                Automatically queries MusicBrainz and Deezer to fetch official release titles, recording dates, album covers, and ISWCs upon statement parsing.
+                Off by default. Turning this on sends extracted ISRC identifiers to MusicBrainz and Deezer. Statement images, royalty amounts, and account details are not sent by this lookup.
               </p>
             </div>
           </div>

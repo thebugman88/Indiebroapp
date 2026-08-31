@@ -14,7 +14,7 @@ function fixture() {
   return { records, storage, switchTo: (next: string) => { uid = next; },
     vault: () => createLyricVault(uid, () => uid, () => storage) };
 }
-const draft = [{ id: 'private-draft', setA: { content: 'Unreleased song' } }] as SavedLyricEntry[];
+const draft = [{ id: 'private-draft', timestamp: Date.now(), setA: { content: 'Unreleased song' } }] as SavedLyricEntry[];
 
 test('different accounts cannot load or clear each other’s lyric vault or guidelines', () => {
   const f = fixture();

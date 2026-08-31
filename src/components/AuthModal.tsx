@@ -35,6 +35,7 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
       <h2 id="auth-title" className="text-xl font-bold mb-4">Your IndieBrotherhood account</h2>
       <div className="flex gap-3 mb-5">{(['signin', 'signup', 'recover'] as const).map(value => <button key={value} onClick={() => { setTab(value); setMessage(''); setPassword(''); }} className={tab === value ? 'text-amber-400' : 'text-slate-400'}>{value === 'signin' ? 'Sign in' : value === 'signup' ? 'Create account' : 'Reset password'}</button>)}</div>
       {!isAuthConfigured && <p className="text-amber-300 mb-4">Account sign-in is not configured yet. Creative tools can still be explored as a guest.</p>}
+      <p className="text-sm text-slate-300 mb-4">For shared-device privacy, your session and encryption keys stay in memory. Refreshing or closing this page requires signing in again. Download work you want to keep.</p>
       <form onSubmit={submit} className="space-y-4">
         {tab === 'signup' && <label className="block">Artist name<input required value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="nickname" className={fieldClass} /></label>}
         <label className="block">Email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" className={fieldClass} /></label>

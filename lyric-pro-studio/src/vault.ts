@@ -1,6 +1,7 @@
+import { retainLyricPairs } from '../../shared/lyricRetention';
 import type { SavedLyricEntry } from './types';
 
-// Browser separation only: not encryption or protection from someone with device access.
+// The production storage adapter encrypts this account-scoped temporary cache.
 export function createLyricVault(
   uid: string,
   currentUid: () => string,
@@ -21,13 +22,17 @@ export function createLyricVault(
       if (!uid || uid === 'guest') return [];
       const entries = JSON.parse(storage().getItem(key) || '[]');
       if (!Array.isArray(entries)) throw new Error('Saved vault is damaged.');
-      return entries;
+      const retained = retainLyricPairs(entries);
+      if (retained.length !== entries.length) storage().setItem(key, JSON.stringify(retained));
+      return retained;
     },
     save(entries: SavedLyricEntry[]) {
       writable();
-      storage().setItem(key, JSON.stringify(entries));
+      storage().setItem(key, JSON.stringify(retainLyricPairs(entries)));
     },
     clear() { writable(); storage().removeItem(key); },
+    noticeSuppressed() { check(); return uid !== "guest" && storage().getItem(`${key}:notice`) === "true"; },
+    suppressNotice() { writable(); storage().setItem(`${key}:notice`, "true"); },
     acceptedTerms() {
       check();
       return uid !== 'guest' && !!uid && storage().getItem(termsKey) === 'true';

@@ -1,3 +1,4 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
 import { createArtistCatalog } from '../services/artistCatalog';
 import { authenticatedFetch } from '../services/authService';
 import React, { useState, useEffect, useRef } from 'react';
@@ -76,7 +77,7 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
     window.addEventListener('ib_auth_changed', changed);
     return () => { active.current = false; window.removeEventListener('ib_auth_changed', changed); };
   }, [uid]);
-  const [vault] = useState(() => createArtistCatalog(uid, isCurrent, () => window.localStorage));
+  const [vault] = useState(() => createArtistCatalog(uid, isCurrent, () => currentPrivateStorage()));
   const [initial] = useState(() => { try { return { data: vault.load(), error: '' }; } catch { return { data: { artist: null, tracks: [] }, error: 'Saved catalog could not be read. Reopen after checking browser storage; existing data has not been replaced.' }; } });
   const [catalogError, setCatalogError] = useState(initial.error);
 
@@ -103,7 +104,7 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
   const [editDaw, setEditDaw] = useState(currentUser.dawSetup || 'Ableton Live 12 Suite');
   const [editPro, setEditPro] = useState(currentUser.proAffiliation || 'ASCAP / Independent');
   const [editDistro, setEditDistro] = useState(currentUser.labelDistributor || 'indiebrotherhood Records');
-  const [editIsrc, setEditIsrc] = useState(currentUser.isrcPrefix || 'US-IBH-2026');
+  const [editIsrc, setEditIsrc] = useState(currentUser.isrcPrefix || '');
   const [editAura, setEditAura] = useState<RegisteredUser['studioAura']>(currentUser.studioAura || 'gold');
   const [editAvatarUrl, setEditAvatarUrl] = useState(currentUser.avatarUrl || '');
 
@@ -258,12 +259,12 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
       collectionName: newAlbumName.trim() || 'Unreleased Master Singles',
       artistName: verifiedArtist?.artistName || currentUser.displayName,
       releaseDate: newReleaseDate,
-      trackTimeMillis: 195000,
+      trackTimeMillis: 0, // Unknown until measured from an uploaded file.
       previewUrl: '',
       artworkUrl: verifiedArtist?.artworkUrl || currentUser.avatarUrl || '',
       primaryGenreName: newGenre,
       priceUsd: 'Unreleased',
-      isrc: `${editIsrc}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      isrc: '', // Only a user-supplied or verified registry ISRC is valid.
     };
 
     let updated: CatalogTrack[];
@@ -284,11 +285,11 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
   const currentAuraConfig = STUDIO_AURAS.find((a) => a.id === currentUser.studioAura) || STUDIO_AURAS[0];
 
   // Catalog Metrics Calculation
-  const totalCatalogSeconds = catalog.reduce((acc, t) => acc + (t.trackTimeMillis || 180000) / 1000, 0);
+  const totalCatalogSeconds = catalog.reduce((acc, t) => acc + (t.trackTimeMillis || 0) / 1000, 0);
   const totalMinutes = Math.floor(totalCatalogSeconds / 60);
   const hours = Math.floor(totalMinutes / 60);
   const remainingMinutes = totalMinutes % 60;
-  const playtimeString = hours > 0 ? `${hours}h ${remainingMinutes}m` : `${totalMinutes} mins`;
+  const playtimeString = `${hours > 0 ? `${hours}h ${remainingMinutes}m` : `${totalMinutes} mins`}${catalog.some(t=>!t.trackTimeMillis)?' (known durations only)':''}`;
 
   if (catalogError) return <p role="alert" className="p-6 text-red-300">{catalogError}</p>;
 
@@ -626,9 +627,9 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
                   <tbody className="divide-y divide-slate-800/60 font-medium">
                     {catalog.map((track, idx) => {
                       const isPlaying = playingTrackId === track.trackId;
-                      const mins = Math.floor((track.trackTimeMillis || 180000) / 60000);
-                      const secs = Math.floor(((track.trackTimeMillis || 180000) % 60000) / 1000);
-                      const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                      const mins = Math.floor((track.trackTimeMillis || 0) / 60000);
+                      const secs = Math.floor(((track.trackTimeMillis || 0) % 60000) / 1000);
+                      const timeStr = track.trackTimeMillis > 0 ? `${mins}:${secs < 10 ? '0' : ''}${secs}` : 'Duration unknown';
 
                       return (
                         <tr key={idx} className="hover:bg-slate-950/60 transition group">
@@ -686,7 +687,7 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
                           <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">{track.releaseDate}</td>
 
                           {/* ISRC */}
-                          <td className="py-3 px-3 font-mono text-[11px] text-cyan-400">{track.isrc || 'US-IBH-AUTO'}</td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-cyan-400">{track.isrc || 'Not provided'}</td>
 
                           {/* Studio Action Shortcuts */}
                           <td className="py-3 px-3 text-right">

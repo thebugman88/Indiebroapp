@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../../shared/PrivateWorkspaceGate';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Activity, 
@@ -43,6 +44,7 @@ const GENRE_SUGGESTIONS = [
 ];
 
 export const BpmCounter: React.FC<BpmCounterProps> = () => {
+  const localStorage = usePrivateStorage();
   const [bpm, setBpm] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('indie_last_bpm');

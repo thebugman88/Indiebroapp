@@ -170,6 +170,19 @@ export function createBillingRouter(
           });
           return;
         }
+        if (productId === "pro") {
+          // Entitlement expiry is not subscription cancellation. Reconcile with
+          // Stripe before permitting any second recurring purchase.
+          const ids = await loadSubscriptionIds(identity.uid);
+          for (const id of ids) {
+            const sub = await stripe.subscriptions.retrieve(id);
+            if (sub.metadata.firebaseUid !== identity.uid) throw new Error("Subscription owner mismatch.");
+            if (!["canceled", "incomplete_expired"].includes(sub.status)) {
+              res.status(409).json({ error: "An existing subscription needs billing management. Recover or cancel it before starting another.", code: "MANAGE_EXISTING_SUBSCRIPTION" });
+              return;
+            }
+          }
+        }
         order = await initializePayment(
           identity.uid,
           key,

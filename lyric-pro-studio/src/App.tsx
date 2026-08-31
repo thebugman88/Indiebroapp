@@ -1,3 +1,6 @@
+import { retainLyricPairs } from '../../shared/lyricRetention';
+import { flushPrivateStorage } from '../../shared/privateStorage';
+import { currentPrivateStorage } from '../../shared/privateStorage';
 import { createLyricVault } from './vault';
 import { authenticatedFetch, getCurrentAuthUser } from '../../src/services/authService';
 import React, { useState, useEffect, useRef } from 'react';
@@ -37,8 +40,8 @@ import {
   SecurityState 
 } from './types';
 import { GENRE_STRUCTURES } from './data/structures';
-import { generateAlgorithmicLyrics } from './data/lyricTemplates';
-import { generateNativeLyrics } from '../../src/services/nativeBrowserAi';
+
+
 
 export default function App() {
   const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
@@ -61,8 +64,11 @@ function LyricStudio({ accountId }: { accountId: string }) {
     return () => { active.current = false; };
   }, []);
   const isCurrentSession = () => active.current && getCurrentAuthUser().id === accountId;
-  const vault = createLyricVault(accountId, () => getCurrentAuthUser().id, () => window.localStorage);
+  const vault = createLyricVault(accountId, () => getCurrentAuthUser().id, () => currentPrivateStorage());
   const [vaultError, setVaultError] = useState('');
+  const [retentionNotice, setRetentionNotice] = useState(false);
+  const [suppressNotice, setSuppressNotice] = useState(false);
+  const generatedAt = useRef(0);
   // ACCOUNT & SECURITY SENTINEL STATE
   const [securityState, setSecurityState] = useState<SecurityState>({
     status: 'ACTIVE',
@@ -275,75 +281,54 @@ function LyricStudio({ accountId }: { accountId: string }) {
         setSetA(data.setA);
         setSetB(data.setB);
         setIsAiGenerated(data.isAiGenerated);
+        generatedAt.current = data.timestamp;
+        const entry: SavedLyricEntry = {id: String(data.timestamp), timestamp:data.timestamp,genre:activeCustomGenre||activeGenre,vibe:activeCustomVibe||activeVibe,explicit,mode,setA:data.setA,setB:data.setB};
+        const next = retainLyricPairs([entry,...vault.load()]);
+        try { vault.save(next); await flushPrivateStorage(); if(!isCurrentSession())return; setSavedEntries(next);setCurrentEntrySaved(true);setVaultError(''); }
+        catch { setVaultError('Lyrics are visible but could not be saved. Download both sets now.'); }
+        setRetentionNotice(!vault.noticeSuppressed());
         if (data._telemetry?.trustScore !== undefined) {
           setSecurityState((s) => ({ ...s, trustScore: data._telemetry?.trustScore }));
         }
         setIsGenerating(false);
         return;
       }
-    } catch (err) {
-      console.debug('[Lyric Pro] Cloud API offline/keyless, trying native browser AI:', err);
-    }
-
-    if (!isCurrentSession()) return;
-    try {
-      // Step 2: Try Native Browser AI (Chrome Prompt API / Gemini Nano)
-      const nativeResult = await generateNativeLyrics({
-        genre: activeCustomGenre || activeGenre,
-        vibe: activeCustomVibe || activeVibe,
-        explicit,
-        mode: isAutoMode ? 'full_song' : mode,
-        structure,
-        starterType,
-        userLyrics,
-        userLyricsOption,
-      });
-
-      if (!isCurrentSession()) return;
-      if (nativeResult) {
-        setSetA(nativeResult.setA);
-        setSetB(nativeResult.setB);
-        setIsAiGenerated(true);
-        setIsGenerating(false);
-        return;
-      }
-    } catch (browserAiErr) {
-      console.debug('[Lyric Pro] Browser AI fallback to algorithmic:', browserAiErr);
-    }
-
-    if (!isCurrentSession()) return;
-    // Step 3: High-precision client-side Algorithmic Lyric Synthesis (Zero-Cost, Keyless)
-    try {
-      const algoResult = generateAlgorithmicLyrics({
-        genre: activeGenre,
-        customGenre: activeCustomGenre,
-        vibe: activeVibe,
-        customVibe: activeCustomVibe,
-        explicit,
-        mode: isAutoMode ? 'full_song' : mode,
-        starterType,
-        structure,
-        userLyrics,
-        userLyricsOption
-      });
-
-      setSetA(algoResult.setA);
-      setSetB(algoResult.setB);
-      setIsAiGenerated(false);
-    } catch (algoErr) {
-      console.error('Lyrical synthesis error:', algoErr);
-    } finally {
-      setIsGenerating(false);
-    }
+    } catch { /* The server returns no unvalidated or recycled fallback. */ }
+    if(isCurrentSession()) {setVaultError('Generation did not deliver two validated songs. Please try again.');setIsGenerating(false);}
   };
 
+  useEffect(() => {
+    const sweep = () => {
+      try { setSavedEntries(vault.load()); } catch {}
+      if(generatedAt.current && generatedAt.current + 86400000 <= Date.now()) {
+        setSetA(null);setSetB(null);setCurrentEntrySaved(false);
+      }
+    };
+    const timer=setInterval(sweep,30000);
+    window.addEventListener('focus',sweep);
+    return()=>{clearInterval(timer);window.removeEventListener('focus',sweep);};
+  },[]);
+
+  useEffect(()=>{
+    if(!setA||!generatedAt.current)return;
+    const timer=setTimeout(()=>{setSetA(null);setSetB(null);setCurrentEntrySaved(false);},Math.max(0,generatedAt.current+86400000-Date.now()));
+    return()=>clearTimeout(timer);
+  },[setA,setB]);
+
+  useEffect(()=>{
+    if(!savedEntries.length)return;
+    const nextExpiry=Math.min(...savedEntries.map(entry=>entry.timestamp+86400000));
+    const timer=setTimeout(()=>{try{setSavedEntries(vault.load());}catch{}},Math.max(0,nextExpiry-Date.now()));
+    return()=>clearTimeout(timer);
+  },[savedEntries]);
+
   // SAVE CURRENT DUAL SET TO VAULT
-  const handleSaveBothSets = () => {
+  const handleSaveBothSets = async () => {
     if (!setA || !setB) return;
 
     const newEntry: SavedLyricEntry = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
+      id: String(generatedAt.current),
+      timestamp: generatedAt.current,
       genre: customGenre || selectedGenre,
       vibe: customVibe || selectedVibe,
       explicit,
@@ -352,9 +337,9 @@ function LyricStudio({ accountId }: { accountId: string }) {
       setB
     };
 
-    const updated = [newEntry, ...savedEntries];
+    const updated = retainLyricPairs([newEntry, ...savedEntries]);
     if (!isCurrentSession()) return;
-    try { vault.save(updated); } catch (error) {
+    try { vault.save(updated); await flushPrivateStorage(); } catch (error) {
       setVaultError(error instanceof Error ? error.message : 'Could not save this vault.');
       return;
     }
@@ -382,6 +367,8 @@ function LyricStudio({ accountId }: { accountId: string }) {
   };
 
   const handleLoadSavedEntry = (entry: SavedLyricEntry) => {
+    if(!retainLyricPairs([entry]).length)return;
+    generatedAt.current = entry.timestamp;
     setSetA(entry.setA);
     setSetB(entry.setB);
     setSelectedGenre(entry.genre as GenreOption);
@@ -396,6 +383,16 @@ function LyricStudio({ accountId }: { accountId: string }) {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-400 selection:text-zinc-950 relative overflow-x-hidden">
+      {retentionNotice && <div role="dialog" aria-modal="true" aria-labelledby="retention-title" className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
+        <div className="max-w-lg rounded-2xl bg-zinc-950 border border-amber-500 p-6 space-y-4 text-zinc-100">
+          <h2 id="retention-title" className="font-bold text-lg">Download your songs now</h2>
+          <p>Your encrypted temporary history keeps up to 10 songs (5 pairs), for at most 24 hours from generation. Older songs expire or are replaced sooner when the history fills. Downloads remain on your device; shared copies have their own lifetime.</p>
+          <p className="text-sm">We check that the two sets differ and don’t repeat recent output. No automated check can guarantee copyright clearance; review before releasing.</p>
+          <label className="flex gap-2"><input type="checkbox" checked={suppressNotice} onChange={e=>setSuppressNotice(e.target.checked)}/>Don’t show this reminder again for my account</label>
+          <button className="bg-amber-400 text-black rounded px-4 py-2" onClick={()=>{if(suppressNotice){try{vault.suppressNotice();}catch{setVaultError('Reminder preference could not be saved.');}}setRetentionNotice(false);}}>Continue to downloads</button>
+        </div>
+      </div>}
+
       
       {/* 3D STUDIO LIGHTING / AMBIENT ATMOSPHERE */}
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -414,7 +411,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
       {/* HEADER */}
       <Header
         onOpenTos={() => setIsTosOpen(true)}
-        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenHistory={() => {try{setSavedEntries(vault.load());}catch{setVaultError('History could not be loaded.');}setIsHistoryOpen(true);}}
         tosAccepted={tosAccepted}
         historyCount={savedEntries.length}
       />

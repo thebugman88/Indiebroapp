@@ -1,3 +1,5 @@
+import { sealPrivate, openPrivate, sealBytes, openBytes } from './dataProtection';
+import { encodeJudgeProfile, decodeJudgeProfile } from './profileProtection';
 import { visibleTrack } from './judgementPrivacy';
 import {
   reserveStorage,
@@ -159,10 +161,10 @@ async function editProfile(
     const ref = profiles().doc(uid);
     const doc = await t.get(ref);
     const p = checkAndRefreshDailyCycle(
-      doc.exists ? (doc.data() as UserJudgeProfile) : freshJudge(uid),
+      doc.exists ? decodeJudgeProfile(uid, doc.data()) : freshJudge(uid),
     );
     const result = edit(p);
-    t.set(ref, result);
+    t.set(ref, encodeJudgeProfile(result));
     return result;
   });
 }
@@ -243,7 +245,7 @@ judgementRouter.get("/tracks", async (_req, res) => {
       .limit(100)
       .get();
     res.json(
-      snapshot.docs.map((d) => visibleTrack(d.data() as ArtistTrack, res.locals.identity.uid)),
+      snapshot.docs.map((d) => visibleTrack(decodeStoredTrack(d.data()), res.locals.identity.uid)),
     );
   } catch {
     res.status(503).json({ error: "Tracks could not be loaded." });
@@ -297,7 +299,8 @@ judgementRouter.post("/tracks", async (req, res) => {
     await reserveStorage(data.ownerId, data.id, audio.bytes.length);
     await bucket()
       .file(path)
-      .save(audio.bytes, { resumable: false, contentType: audio.mimeType });
+      .save(Buffer.from(JSON.stringify(sealBytes(audio.bytes, `audio:${data.id}`))), { resumable: false, contentType: 'application/octet-stream' });
+    data.audioMimeType = audio.mimeType;
     data.audioPath = path;
     data.audioBytes = audio.bytes.length;
     const visible = visibleTrack(data, data.ownerId);
@@ -313,7 +316,7 @@ judgementRouter.post("/tracks", async (req, res) => {
       if (storage.data()?.status !== "reserved" || !wallet.exists)
         throw new Error("Upload reservation missing.");
       const p = doc.exists
-        ? (doc.data() as UserJudgeProfile)
+        ? decodeJudgeProfile(data.ownerId, doc.data())
         : freshJudge(data.ownerId);
       if (!p.termsAccepted) throw new Error("Accept terms first.");
       if (p.submittedTrackIds.length >= 1000)
@@ -323,11 +326,11 @@ judgementRouter.post("/tracks", async (req, res) => {
         storageBytes: wallet.data()!.storageBytes + audio.bytes.length,
       });
       t.update(storageRef, { status: "stored", updatedAt: Date.now() });
-      t.create(tracks().doc(data.id), data);
-      t.set(ref, {
+      t.create(tracks().doc(data.id), encodeStoredTrack(data));
+      t.set(ref, encodeJudgeProfile({
         ...p,
         submittedTrackIds: [data.id, ...p.submittedTrackIds],
-      });
+      }));
     });
 
     res.status(201).json(visible);
@@ -351,18 +354,18 @@ judgementRouter.get("/tracks/:id/audio", async (req, res) => {
   try {
     const doc = await tracks().doc(safeId(req.params.id)).get();
     if (!doc.exists || !doc.data()?.audioPath) { res.sendStatus(404); return; }
-    const file = bucket().file(doc.data()!.audioPath);
+    const track=decodeStoredTrack(doc.data());
+    if(!track.audioPath)throw new Error('Audio path unavailable.');
+    const file = bucket().file(track.audioPath);
     const [metadata] = await file.getMetadata();
-    const size = Number(metadata.size);
-    if (!Number.isSafeInteger(size) || size <= 0 || size > 15 * 1024 * 1024) throw new Error('Invalid audio size.');
-    res.setHeader('Cache-Control', 'private, no-store');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Type', /^audio\/(mpeg|mp3|wav|x-wav|ogg|webm|mp4|aac|flac)$/.test(metadata.contentType || '') ? metadata.contentType! : 'application/octet-stream');
-    res.setHeader('Content-Length', size);
-    const stream = file.createReadStream();
-    res.on('close', () => stream.destroy());
-    stream.on('error', () => { if (!res.headersSent) res.sendStatus(503); else res.destroy(); });
-    stream.pipe(res);
+    const size=Number(metadata.size);
+    if(!Number.isSafeInteger(size)||size<=0||size>22*1024*1024)throw new Error('Invalid audio size.');
+    const [encrypted]=await file.download();
+    const audio=openBytes(JSON.parse(encrypted.toString('utf8')),`audio:${doc.id}`);
+    res.setHeader('Cache-Control','private, no-store');
+    res.setHeader('X-Content-Type-Options','nosniff');
+    res.type(track.audioMimeType||'application/octet-stream');
+    res.send(audio);
   } catch { if (!res.headersSent) res.status(503).json({ error: 'Audio unavailable.' }); }
 });
 judgementRouter.post("/tracks/:id/listen", async (req, res) => {
@@ -395,17 +398,17 @@ judgementRouter.post("/tracks/:id/reviews", async (req, res) => {
       ]);
       if (!track.exists) throw new Error("Track missing.");
       const result = reviewMutation(
-        track.data() as ArtistTrack,
+        decodeStoredTrack(track.data()),
         checkAndRefreshDailyCycle(
           profile.exists
-            ? (profile.data() as UserJudgeProfile)
+            ? decodeJudgeProfile(uid, profile.data())
             : freshJudge(uid),
         ),
         req.body,
         listen.data()?.startedAt,
       );
-      t.set(tr, result.track);
-      t.set(pr, result.profile);
+      t.set(tr, encodeStoredTrack(result.track));
+      t.set(pr, encodeJudgeProfile(result.profile));
       return result;
     });
     await awardReviewCoins(uid).catch(() => {});
@@ -471,7 +474,7 @@ judgementRouter.get("/my-uploads", async (_req, res) => {
     res.json(
       docs.docs.map((d) => ({
         id: d.id,
-        title: d.data().title,
+        title: decodeStoredTrack(d.data()).title,
         bytes: d.data().audioBytes || 0,
       })),
     );
@@ -489,28 +492,34 @@ judgementRouter.delete("/tracks/:id", async (req, res) => {
       res.json({ success: true });
       return;
     }
-    if (doc.data()!.ownerId !== uid) {
+    const ownedTrack=decodeStoredTrack(doc.data());
+    if (ownedTrack.ownerId !== uid) {
       res.sendStatus(404);
       return;
     }
-    await bucket().file(doc.data()!.audioPath).delete({ ignoreNotFound: true });
+    if(!ownedTrack.audioPath)throw new Error('Audio path unavailable.');
+    await bucket().file(ownedTrack.audioPath).delete({ ignoreNotFound: true });
     await withWallet(uid, async (w, t) => {
       const current = await t.get(ref);
       const profileRef = profiles().doc(uid),
         profile = await t.get(profileRef);
       if (!current.exists) return;
-      if (current.data()!.ownerId !== uid) throw new Error();
+      const currentTrack=decodeStoredTrack(current.data());
+      if (currentTrack.ownerId !== uid) throw new Error();
       w.storageBytes = Math.max(
         0,
-        w.storageBytes - (current.data()!.audioBytes || 0),
+        w.storageBytes - (currentTrack.audioBytes || 0),
       );
       t.delete(ref);
-      if (profile.exists)
-        t.update(profileRef, {
-          submittedTrackIds: (profile.data()!.submittedTrackIds || []).filter(
+      if (profile.exists) {
+        const privateProfile=decodeJudgeProfile(uid,profile.data());
+        t.set(profileRef, encodeJudgeProfile({
+          ...privateProfile,
+          submittedTrackIds: (privateProfile.submittedTrackIds || []).filter(
             (x: string) => x !== id,
           ),
-        });
+        }));
+      }
     });
     res.json({ success: true });
   } catch {
@@ -541,4 +550,15 @@ async function accountLegacyUploads(uid: string) {
       t.update(doc.ref, { audioBytes: bytes });
     });
   }
+}
+
+export function encodeStoredTrack(track: ArtistTrack & {audioPath?:string;audioBytes?:number;audioMimeType?:string}) {
+  return {id:track.id,ownerId:track.ownerId,status:track.status,uploadedAt:track.uploadedAt,
+    ...(track.audioPath?{audioPath:track.audioPath,audioBytes:track.audioBytes}:{}),
+    private:sealPrivate(track,`judgement:${track.id}`)};
+}
+export function decodeStoredTrack(data:any): ArtistTrack & {audioMimeType?:string;audioPath?:string;audioBytes?:number} {
+  const track=openPrivate<ArtistTrack & {audioMimeType?:string;audioPath?:string;audioBytes?:number}>(data.private,`judgement:${data.id}`);
+  if(track.id!==data.id||track.ownerId!==data.ownerId)throw new Error('Track integrity check failed.');
+  return track;
 }

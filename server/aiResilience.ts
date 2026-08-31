@@ -1,3 +1,4 @@
+import { cancellableAttempt, CancellationUnconfirmed, ProviderDeadline } from './aiCancellation';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ResilientAiOptions {
@@ -10,6 +11,8 @@ export interface ResilientAiOptions {
   maxRetriesPerModel?: number;
   temperature?: number;
   timeoutMs?: number;
+  signal?: AbortSignal;
+  maxOutputTokens?: number;
 }
 
 export interface AttemptLog {
@@ -132,6 +135,7 @@ export async function executeResilientAi<T = any>(
         }
 
         const config: any = {};
+        if(options.maxOutputTokens)config.maxOutputTokens=options.maxOutputTokens;
         if (options.responseMimeType) {
           config.responseMimeType = options.responseMimeType;
         }
@@ -146,19 +150,12 @@ export async function executeResilientAi<T = any>(
         }
 
         // Run with timeout wrapper
-        const aiPromise = client.models.generateContent({
+        const response: any = await cancellableAttempt(signal => client.models.generateContent({
           model: currentModel,
           contents: contentParts.length === 1 && typeof contentParts[0].text === 'string' && !options.parts
-            ? contentParts[0].text
-            : { parts: contentParts },
-          config: Object.keys(config).length > 0 ? config : undefined,
-        });
-
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms on model ${currentModel}`)), timeoutMs)
-        );
-
-        const response: any = await Promise.race([aiPromise, timeoutPromise]);
+            ? contentParts[0].text : { parts: contentParts },
+          config: { ...config, abortSignal: signal },
+        }), timeoutMs, options.signal);
         const rawText = response.text || '';
         const attemptDuration = Date.now() - attemptStart;
 
@@ -184,6 +181,7 @@ export async function executeResilientAi<T = any>(
           totalDurationMs: Date.now() - startTime,
         };
       } catch (err: any) {
+        if (err instanceof CancellationUnconfirmed || err instanceof ProviderDeadline || options.signal?.aborted) throw new Error("AI request canceled or timed out; no fallback started.");
         const attemptDuration = Date.now() - attemptStart;
         const errMsg = err?.message || String(err);
         const errStatus = err?.status || err?.statusCode || 500;
@@ -192,6 +190,7 @@ export async function executeResilientAi<T = any>(
         const is429 = errStatus === 429 || errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate');
         const is503 = errStatus === 503 || errMsg.includes('503') || errMsg.toLowerCase().includes('overloaded') || errMsg.toLowerCase().includes('unavailable');
         const isTimeout = errMsg.toLowerCase().includes('timeout') || errStatus === 504;
+        if(isTimeout)throw new Error('AI provider timed out; no additional generation started.');
 
         if (is429) statusType = 'RATE_LIMITED_429';
         else if (is503) statusType = 'UNAVAILABLE_503';

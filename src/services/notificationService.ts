@@ -1,3 +1,4 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
 import { authenticatedFetch } from './authService';
 /**
  * Universal In-App Notification Service
@@ -27,7 +28,7 @@ const NOTIFICATION_SOUND_ENABLED_KEY = 'ib_notification_sound_enabled';
 export function playNotificationSound(type: 'info' | 'success' | 'warning' | 'urgent' | 'admin' = 'info') {
   if (typeof window === 'undefined') return;
   try {
-    const soundEnabled = localStorage.getItem(NOTIFICATION_SOUND_ENABLED_KEY) !== 'false';
+    const soundEnabled = currentPrivateStorage().getItem(NOTIFICATION_SOUND_ENABLED_KEY) !== 'false';
     if (!soundEnabled) return;
 
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -129,7 +130,7 @@ export function playNotificationSound(type: 'info' | 'success' | 'warning' | 'ur
 export function getNotifications(): AppNotification[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const raw = currentPrivateStorage().getItem(NOTIFICATIONS_STORAGE_KEY);
     if (raw) {
       const list = JSON.parse(raw);
       return Array.isArray(list) ? list : [];
@@ -143,11 +144,11 @@ export function getNotifications(): AppNotification[] {
 
   try {
     // If legacy dummy notification exists, remove it
-    const legacyRaw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const legacyRaw = currentPrivateStorage().getItem(NOTIFICATIONS_STORAGE_KEY);
     if (legacyRaw && legacyRaw.includes('notif_init_2')) {
       const list = JSON.parse(legacyRaw);
       const filtered = Array.isArray(list) ? list.filter((n: any) => n.id !== 'notif_init_2' && n.title !== 'Assembly Meeting Room Ready') : [];
-      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(filtered));
+      currentPrivateStorage().setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(filtered));
       return filtered;
     }
   } catch {}
@@ -161,7 +162,7 @@ export function getNotifications(): AppNotification[] {
 function saveNotifications(list: AppNotification[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(list));
+    currentPrivateStorage().setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(list));
     window.dispatchEvent(new CustomEvent('ib_notifications_changed', { detail: list }));
   } catch (e) {
     console.error('Error saving notifications:', e);
@@ -241,12 +242,12 @@ export function getUnreadNotificationCount(): number {
  */
 export function isNotificationSoundEnabled(): boolean {
   if (typeof window === 'undefined') return true;
-  return localStorage.getItem(NOTIFICATION_SOUND_ENABLED_KEY) !== 'false';
+  return currentPrivateStorage().getItem(NOTIFICATION_SOUND_ENABLED_KEY) !== 'false';
 }
 
 export function setNotificationSoundEnabled(enabled: boolean): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(NOTIFICATION_SOUND_ENABLED_KEY, enabled ? 'true' : 'false');
+  currentPrivateStorage().setItem(NOTIFICATION_SOUND_ENABLED_KEY, enabled ? 'true' : 'false');
 }
 
 /**

@@ -1,3 +1,5 @@
+import {testEncryptionKeys} from './private-fixture';
+import {encodeStoredTrack} from '../server/judgement';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { visibleTrack } from '../server/judgementPrivacy';
@@ -41,9 +43,10 @@ test('actual track API ignores forged viewer parameters and requires authenticat
   const { Query } = await import('firebase-admin/firestore');
   const { judgementRouter } = await import('../server/judgement');
   const { createAuthMiddleware } = await import('../server/auth');
+  testEncryptionKeys();
   const previous = process.env.FIREBASE_PROJECT_ID;
   process.env.FIREBASE_PROJECT_ID = 'demo-indiebro-audit';
-  t.mock.method(Query.prototype, 'get', async () => ({docs:[{data:()=>reviewed}]}));
+  t.mock.method(Query.prototype, 'get', async () => ({docs:[{data:()=>encodeStoredTrack(reviewed)}]}));
   const app = express();
   app.use(createAuthMiddleware(async token => ({uid: token, email_verified: token !== 'unverified'})));
   app.use('/api/judgement',judgementRouter);

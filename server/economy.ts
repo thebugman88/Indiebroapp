@@ -1,5 +1,7 @@
+import { sealPrivate, openPrivate } from './dataProtection';
+import { decodeJudgeProfile } from './profileProtection';
 import { createHash, randomUUID } from "node:crypto";
-import { getFirestore, type Transaction } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, type Transaction } from "firebase-admin/firestore";
 import express from "express";
 import { getFirebaseAdminApp, requireVerifiedEmail } from "./auth";
 import {
@@ -75,7 +77,7 @@ export function spend(w: Wallet, cost: number) {
 }
 export async function withWallet<T>(
   uid: string,
-  fn: (w: Wallet, t: Transaction, pro: boolean) => Promise<T>,
+  fn: (w: Wallet, t: Transaction, pro: boolean, hasOpenSubscription: boolean) => Promise<T>,
 ): Promise<T> {
   const db = economyDb();
   return db.runTransaction(async (t) => {
@@ -96,7 +98,8 @@ export async function withWallet<T>(
       );
     });
     const w = refreshWallet(wallet.data(), pro);
-    const result = await fn(w, t, pro);
+    const hasOpenSubscription = subs.docs.some(d => !["canceled", "incomplete_expired"].includes(d.data().status));
+    const result = await fn(w, t, pro, hasOpenSubscription);
     t.set(ref, w);
     return result;
   });
@@ -172,11 +175,23 @@ export async function settleUsage(
       else w.purchased += j.debit.monthly;
       w.purchased += j.debit.purchased;
     }
+    if (success && j.path === '/api/generate-lyrics') {
+      const retentionRef=economyDb().doc(`lyricRetention/${uid}`);
+      const retention=await t.get(retentionRef);
+      const old:Array<{id:string;expiresAt:number}>=retention.data()?.entries||[];
+      const keep=old.filter(x=>x.expiresAt>Date.now()&&x.id!==id).slice(-4);
+      const removed=old.filter(x=>!keep.some(k=>k.id===x.id)&&x.id!==id);
+      const previous=await Promise.all(removed.map(x=>t.get(economyDb().doc(`usageJobs/${x.id}`))));
+      for(const previousDoc of previous) if(previousDoc.exists&&previousDoc.data()!.uid===uid) {
+        t.update(previousDoc.ref,{encryptedResponse:FieldValue.delete(),response:FieldValue.delete(),responseExpiresAt:FieldValue.delete()});
+      }
+      t.set(retentionRef,{entries:[...keep,{id,expiresAt:Date.now()+86400000}]});
+    }
     const result = {
       ...j,
       status: success ? "delivered" : "credited",
       updatedAt: Date.now(),
-      ...(success ? { response } : {}),
+      ...(success ? { encryptedResponse: sealPrivate(response, `usage:${uid}:${id}`, Date.now() + 86400000), responseExpiresAt: new Date(Date.now() + 86400000) } : {}),
     };
     t.set(ref, result);
     return result;
@@ -227,7 +242,8 @@ export const usageMiddleware: express.RequestHandler = async (
   }
   if (job.replayed) {
     if (job.status === "delivered") {
-      res.json(job.response);
+      try { res.json(openPrivate(job.encryptedResponse, `usage:${uid}:${job.id}`)); }
+      catch { res.status(410).json({ error: 'This saved result expired or is unavailable. Use your downloaded copy; a new generation is a separate action.' }); }
       return;
     }
     res.status(409).json({
@@ -328,7 +344,7 @@ export async function finishStorage(uid: string, id: string, success: boolean) {
 export async function awardReviewCoins(uid: string) {
   return withWallet(uid, async (w, t) => {
     const profile = await t.get(economyDb().doc(`judgeProfilesV2/${uid}`));
-    const count = profile.data()?.auditsCompletedTotal || 0;
+    const count = profile.exists ? decodeJudgeProfile(uid, profile.data()).auditsCompletedTotal : 0;
     const milestone = Math.floor(count / 5);
     if (milestone < 1) return 0;
     const ref = economyDb().doc(
@@ -370,7 +386,7 @@ economyRouter.get("/history", async (_req, res) => {
       .get();
     res.json(
       jobs.docs.map((d) => {
-        const { response, ...j } = d.data();
+        const { response, encryptedResponse, ...j } = d.data();
         return { id: d.id, ...j };
       }),
     );
@@ -435,7 +451,11 @@ economyRouter.get("/jobs/:id", async (req, res) => {
       res.sendStatus(404);
       return;
     }
-    res.json(doc.data());
+    const {response: _legacy,encryptedResponse,...job}=doc.data()!;
+    if(job.status==='delivered') {
+      try {res.json({...job,response:openPrivate(encryptedResponse,`usage:${res.locals.identity.uid}:${req.params.id}`)});}
+      catch {res.status(410).json({...job,error:'Saved output has expired or is unavailable. Accounting records remain.'});}
+    } else res.json(job);
   } catch {
     res.sendStatus(503);
   }
@@ -443,9 +463,10 @@ economyRouter.get("/jobs/:id", async (req, res) => {
 
 export async function awardProfileCoins(uid: string) {
   return withWallet(uid, async (w, t) => {
-    const profile = (
+    const storedProfile = (
       await t.get(economyDb().doc(`judgeProfilesV2/${uid}`))
     ).data();
+    const profile=storedProfile?decodeJudgeProfile(uid,storedProfile):undefined;
     const ref = economyDb().doc(`coinRewards/${keyFor(uid, "profile")}`);
     if (
       (await t.get(ref)).exists ||
@@ -468,4 +489,13 @@ export async function awardProfileCoins(uid: string) {
     });
     return amount;
   });
+}
+
+// Accounting/idempotency tombstones remain; private output bodies do not.
+export async function purgeExpiredPrivateResults() {
+  const docs=await economyDb().collection('usageJobs').where('responseExpiresAt','<=',new Date()).limit(100).get();
+  if(docs.empty)return;
+  const batch=economyDb().batch();
+  for(const doc of docs.docs)batch.update(doc.ref,{encryptedResponse:FieldValue.delete(),response:FieldValue.delete(),responseExpiresAt:FieldValue.delete()});
+  await batch.commit();
 }

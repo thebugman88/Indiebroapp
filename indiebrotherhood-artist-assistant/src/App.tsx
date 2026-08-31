@@ -1,3 +1,4 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
 import React, { useState, useEffect, useRef } from "react";
 import {
   Music,
@@ -59,7 +60,7 @@ function CareerWorkspace({ uid }: { uid: string }) {
     window.addEventListener('ib_auth_changed', changed);
     return () => { active.current = false; window.removeEventListener('ib_auth_changed', changed); };
   }, [uid]);
-  const [vault] = useState(() => createCareerVault(uid, isCurrent, () => window.localStorage));
+  const [vault] = useState(() => createCareerVault(uid, isCurrent, () => currentPrivateStorage()));
   const [initial] = useState(() => {
     try { return { data: vault.load(), error: '' }; }
     catch { return { data: emptyCareerSnapshot(), error: 'Saved workspace could not be read. It has not been overwritten. Check browser storage, then reopen this tool.' }; }

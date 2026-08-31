@@ -1,3 +1,4 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
 import { decodeAudioBuffer } from '../../src/services/webAudioEngine';
 import { authenticatedFetch } from '../../src/services/authService';
 import React, { useState, useEffect } from 'react';
@@ -51,7 +52,7 @@ export default function App() {
 
   // Load persistent lyric reminder preference from localStorage
   useEffect(() => {
-    const savedHidePref = localStorage.getItem('hit_analyzer_hide_lyric_reminder');
+    const savedHidePref = currentPrivateStorage().getItem('hit_analyzer_hide_lyric_reminder');
     if (savedHidePref === 'true') {
       setHideReminderPermanently(true);
     }
@@ -140,9 +141,9 @@ export default function App() {
   const handleDontShowAgainToggle = (dontShow: boolean) => {
     setHideReminderPermanently(dontShow);
     if (dontShow) {
-      localStorage.setItem('hit_analyzer_hide_lyric_reminder', 'true');
+      currentPrivateStorage().setItem('hit_analyzer_hide_lyric_reminder', 'true');
     } else {
-      localStorage.removeItem('hit_analyzer_hide_lyric_reminder');
+      currentPrivateStorage().removeItem('hit_analyzer_hide_lyric_reminder');
     }
   };
 

@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../../shared/PrivateWorkspaceGate';
 import React, { useState } from 'react';
 import {
   Share2,
@@ -53,6 +54,7 @@ const INITIAL_SMART_LINK: SmartLinkData = {
 };
 
 export const SmartLinkGenerator: React.FC<SmartLinkGeneratorProps> = ({ isAutoSaveOn }) => {
+  const localStorage = usePrivateStorage();
   const [data, setData] = useState<SmartLinkData>(() => {
     try {
       const saved = localStorage.getItem('indie_smart_link_data');

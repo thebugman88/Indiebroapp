@@ -9,3 +9,5 @@ Report suspected exposure privately to the repository owner. Do not include toke
 On suspected exposure: pause the affected operation, preserve redacted evidence, revoke/rotate the credential at its provider, inspect access and billing history, deploy the fix in staging, then verify before re-enabling it. Do not let AI repair processes change permissions, mint Coins or publish billing code autonomously.
 
 See `SECURITY-ROLLOUT.md` for staging, admin claims, rules and rollback; `ECONOMY-ROLLOUT.md` for payment recovery. Live IAM/rules, browser flows, provider calls, backup restoration, contact ownership and incident response drills remain launch gates.
+
+See `PRIVACY-HARDENING.md` for the encryption threat model, runtime keyring, explicit legacy-data migration, lyric retention, bounded security restrictions and the unresolved Cloud Run recovery decision. Application encryption is not end-to-end encryption and does not make a compromised runtime safe.
