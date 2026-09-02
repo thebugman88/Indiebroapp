@@ -79,6 +79,12 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Live 24h Quota and Skips Indicator */}
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <div className="flex items-center gap-1.5 text-zinc-300 bg-zinc-900/90 px-2.5 py-0.5 rounded-lg border border-zinc-800">
+            <Gavel className="w-3 h-3 text-amber-400" />
+            <span>Review credits:</span>
+            <strong className="text-amber-400">{userProfile.judgementCredits}</strong>
+            <span className="text-zinc-500">(3 needed)</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-zinc-300 bg-zinc-900/90 px-2.5 py-0.5 rounded-lg border border-zinc-800">
             <Clock className="w-3 h-3 text-amber-400" />
             <span>24h Quota:</span>
             <strong className={userProfile.dailyAuditsRemaining > 3 ? 'text-emerald-400' : 'text-amber-400'}>
@@ -98,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Navigation & Brand Area */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col lg:flex-row items-center justify-between gap-4">
         {/* Brand Logo & Tag */}
         <div className="flex items-center justify-between w-full md:w-auto">
           <div
@@ -217,7 +223,7 @@ export const Header: React.FC<HeaderProps> = ({
         </nav>
 
         {/* Right Action: Judge Tier & Reputation Hub */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden lg:flex items-center gap-3">
           <button
             id="header-judge-tier-btn"
             onClick={onOpenTiers}

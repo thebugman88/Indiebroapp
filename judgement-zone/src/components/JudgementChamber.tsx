@@ -1,4 +1,4 @@
-import { startListening } from '../utils/storage';
+import { flagTrack, startListening } from '../utils/storage';
 import React, { useState, useEffect } from 'react';
 import {
   Play,
@@ -22,10 +22,11 @@ import {
   FileText,
   Music,
   ArrowRight,
-  Info
+  Info,
+  Flag
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ArtistTrack, JudgeReview, ScoreBreakdown, TrackVerdict, UserJudgeProfile } from '../types';
+import { ArtistTrack, JudgeReview, MusicCreationType, ScoreBreakdown, TrackFlagReason, TrackVerdict, UserJudgeProfile } from '../types';
 import { audioEngine } from '../utils/audioEngine';
 import { AudioWaveform } from './AudioWaveform';
 import { calculateReviewReward, calculateSonicDrift, JUDGE_TIERS } from '../utils/matchmaker';
@@ -58,6 +59,9 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
   const [volume, setVolume] = useState(0.85);
   const [isMuted, setIsMuted] = useState(false);
   const [seekWarning, setSeekWarning] = useState<string | null>(null);
+  const [activeRoom, setActiveRoom] = useState<MusicCreationType>('human-created');
+  const [flaggedTrackIds, setFlaggedTrackIds] = useState<string[]>([]);
+  const [isFlagging, setIsFlagging] = useState(false);
 
   // Rubric State
   const [scores, setScores] = useState<ScoreBreakdown>({
@@ -76,7 +80,11 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
   const [showLyricsModal, setShowLyricsModal] = useState(false);
 
   // Filter available queue for blind chamber
-  const candidateTracks = tracks.filter(t => t.ownerId!==userProfile.id && (!userProfile.savedVaultTrackIds.includes(t.id) || isRevealed));
+  const candidateTracks = tracks.filter(t =>
+    t.status === 'evaluating' && t.creationType === activeRoom &&
+    t.ownerId !== userProfile.id && !flaggedTrackIds.includes(t.id) &&
+    (!t.reviews.some(review => review.judgeId === userProfile.id) || isRevealed)
+  );
   const currentTrack = candidateTracks[currentTrackIndex] || candidateTracks[0];
 
   const sonicMatchScore = currentTrack ? calculateSonicDrift(userProfile.tasteProfile, currentTrack) : 75;
@@ -227,11 +235,50 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
     setCurrentTrackIndex((prev) => (prev + 1) % Math.max(1, candidateTracks.length));
   };
 
+  const handleFlagTrack = async (reason: TrackFlagReason) => {
+    if (maxListenedTime < 30) {
+      setSeekWarning('Listen for at least 30 seconds before flagging a track.');
+      return;
+    }
+    setIsFlagging(true);
+    try {
+      const result = await flagTrack(currentTrack.id, reason);
+      setFlaggedTrackIds(old => [...old, currentTrack.id]);
+      setSeekWarning(result.returned
+        ? 'This was the fifth matching flag. The track was returned to its owner.'
+        : `Flag recorded (${result.count}/5 matching flags).`);
+      audioEngine.stop();
+      setIsPlaying(false);
+      setCurrentTrackIndex(0);
+    } catch (e: any) {
+      setSeekWarning(e.message);
+    } finally {
+      setIsFlagging(false);
+      setTimeout(() => setSeekWarning(null), 4500);
+    }
+  };
+
+  const roomSelector = (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-2xl bg-zinc-900/70 border border-zinc-800 p-2">
+        {([
+          ['human-created', 'Human-Created Chamber'],
+          ['ai-assisted', 'AI-Assisted Chamber'],
+        ] as const).map(([value, label]) => (
+          <button key={value} type="button" onClick={() => { setActiveRoom(value); setCurrentTrackIndex(0); setIsRevealed(false); }} className={`rounded-xl px-4 py-3 text-sm font-bold transition ${activeRoom === value ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950' : 'bg-zinc-950 text-zinc-300 hover:bg-zinc-800'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-center text-xs text-zinc-500">Three validated judgments earn the credits needed to activate one submission.</p>
+    </div>
+  );
+
   const isSavedInVault = userProfile.savedVaultTrackIds.includes(currentTrack?.id);
 
   if (!currentTrack) {
     return (
-      <div className="max-w-4xl mx-auto py-16 px-4 text-center">
+      <>{roomSelector}<div className="max-w-4xl mx-auto py-16 px-4 text-center">
         <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-4 text-amber-400">
           <Sparkles className="w-8 h-8" />
         </div>
@@ -255,12 +302,12 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
             Adjust Sonic Drift
           </button>
         </div>
-      </div>
+      </div></>
     );
   }
 
   return (
-    <div id="judgement-chamber-root" className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-fadeIn">
+    <>{roomSelector}<div id="judgement-chamber-root" className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-fadeIn">
       {/* Toast Alert for Seek Locking / Gate Warnings */}
       {seekWarning && (
         <div className="fixed bottom-6 right-6 z-50 bg-amber-950/95 border border-amber-500 text-amber-200 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 max-w-md animate-bounce">
@@ -291,6 +338,7 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
                 ? 'The blind veil has lifted. You may now inspect artist identity and save to your vault.'
                 : 'Evaluating blindly. Artist identity and song title will unlock upon submitting verdict.'}
             </p>
+            <p className="text-[11px] text-amber-300 mt-1">{activeRoom === 'ai-assisted' ? 'AI-Assisted Music Pool' : 'Human-Created Music Pool'}</p>
           </div>
         </div>
 
@@ -469,6 +517,17 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
                 <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-300 leading-relaxed">
                   {currentTrack.lyricsText}
                 </pre>
+              </div>
+            )}
+
+            {!isRevealed && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-zinc-200"><Flag className="w-4 h-4 text-amber-400" /> Flag this submission</div>
+                <p className="mt-1 text-[11px] text-zinc-500">Available after 30 seconds. Five unique matching flags return the track to its owner.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" disabled={isFlagging || maxListenedTime < 30} onClick={() => handleFlagTrack('bad-quality')} className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 disabled:opacity-40">Bad or unreviewable audio quality</button>
+                  {activeRoom === 'human-created' && <button type="button" disabled={isFlagging || maxListenedTime < 30} onClick={() => handleFlagTrack('wrong-ai-room')} className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 disabled:opacity-40">AI-assisted track in wrong room</button>}
+                </div>
               </div>
             )}
           </div>
@@ -765,6 +824,6 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </div></>
   );
 };

@@ -18,6 +18,8 @@ import { decodeAudioDataUrl, safeId, textField } from "./media";
 import type {
   ArtistTrack,
   JudgeReview,
+  MusicCreationType,
+  TrackFlagReason,
   UserJudgeProfile,
   ScoreBreakdown,
 } from "../judgement-zone/src/types";
@@ -51,6 +53,7 @@ export function freshJudge(uid: string): UserJudgeProfile {
     submittedTrackIds: [],
     songsJudgedGoodCount: 0,
     termsAccepted: false,
+    judgementCredits: 3,
   };
 }
 export function reviewMutation(
@@ -140,7 +143,33 @@ export function reviewMutation(
       judgeTierLevel: next.level,
       auditsCompletedTotal: profile.auditsCompletedTotal + 1,
       dailyAuditsRemaining: profile.dailyAuditsRemaining - 1,
+      judgementCredits: profile.judgementCredits + 1,
     },
+  };
+}
+export function consumeSubmissionCredits(profile: UserJudgeProfile) {
+  if (!Number.isSafeInteger(profile.judgementCredits) || profile.judgementCredits < 3)
+    throw new Error("Complete three valid judgments before submitting another track.");
+  return { ...profile, judgementCredits: profile.judgementCredits - 3 };
+}
+export function flagMutation(track: ArtistTrack, reason: TrackFlagReason, now = Date.now()) {
+  if (!(["bad-quality", "wrong-ai-room"] as TrackFlagReason[]).includes(reason))
+    throw new Error("Invalid flag reason.");
+  if (track.status !== "evaluating") throw new Error("This track cannot be flagged.");
+  const counts = { "bad-quality": 0, "wrong-ai-room": 0, ...(track.flagCounts || {}) };
+  counts[reason] += 1;
+  const returned = counts[reason] >= 5;
+  return {
+    track: {
+      ...track,
+      flagCounts: counts,
+      ...(returned ? {
+        status: "returned" as const,
+        returnedReason: reason,
+        returnedAt: new Date(now).toISOString(),
+      } : {}),
+    } as ArtistTrack,
+    count: counts[reason], returned, reason,
   };
 }
 const db = () => getFirestore(getFirebaseAdminApp());
@@ -244,9 +273,11 @@ judgementRouter.get("/tracks", async (_req, res) => {
       .orderBy("uploadedAt", "desc")
       .limit(100)
       .get();
-    res.json(
-      snapshot.docs.map((d) => visibleTrack(decodeStoredTrack(d.data()), res.locals.identity.uid)),
-    );
+    const uid = res.locals.identity.uid;
+    res.json(snapshot.docs
+      .map((d) => decodeStoredTrack(d.data()))
+      .filter((track) => track.ownerId === uid || track.status === "evaluating")
+      .map((track) => visibleTrack(track, uid)));
   } catch {
     res.status(503).json({ error: "Tracks could not be loaded." });
   }
@@ -257,6 +288,8 @@ judgementRouter.post("/tracks", async (req, res) => {
     const b = req.body || {};
     audio = decodeAudioDataUrl(b.audioData);
     if (b.ownershipConfirmed !== true) throw new Error("Confirm ownership.");
+    if (!(["human-created", "ai-assisted"] as MusicCreationType[]).includes(b.creationType))
+      throw new Error("Choose the correct music creation chamber.");
     if (
       typeof b.durationSeconds !== "number" ||
       !Number.isFinite(b.durationSeconds) ||
@@ -278,7 +311,9 @@ judgementRouter.post("/tracks", async (req, res) => {
       isUserSubmission: true,
       ownershipConfirmed: true,
       rightsHolderSignature: textField(b.rightsHolderSignature, 100),
+      creationType: b.creationType,
       status: "evaluating",
+      flagCounts: { "bad-quality": 0, "wrong-ai-room": 0 },
       targetJudges: 10,
       reviews: [],
       aggregatedScores: recalculateTrackScores([]),
@@ -319,6 +354,7 @@ judgementRouter.post("/tracks", async (req, res) => {
         ? decodeJudgeProfile(data.ownerId, doc.data())
         : freshJudge(data.ownerId);
       if (!p.termsAccepted) throw new Error("Accept terms first.");
+      const chargedProfile = consumeSubmissionCredits(p);
       if (p.submittedTrackIds.length >= 1000)
         throw new Error("Track limit reached.");
       t.update(walletRef, {
@@ -328,13 +364,13 @@ judgementRouter.post("/tracks", async (req, res) => {
       t.update(storageRef, { status: "stored", updatedAt: Date.now() });
       t.create(tracks().doc(data.id), encodeStoredTrack(data));
       t.set(ref, encodeJudgeProfile({
-        ...p,
+        ...chargedProfile,
         submittedTrackIds: [data.id, ...p.submittedTrackIds],
       }));
     });
 
     res.status(201).json(visible);
-  } catch {
+  } catch (e: any) {
     try {
       const saved = await tracks().doc(data.id).get();
       if (!saved.exists) {
@@ -344,9 +380,10 @@ judgementRouter.post("/tracks", async (req, res) => {
     } catch {
       /* Retain reservation until recovery can verify storage. */
     }
-    res.status(503).json({
-      error: "Upload was not confirmed. Check your dossier before retrying.",
-    });
+    const creditError = e?.message === "Complete three valid judgments before submitting another track.";
+    res.status(creditError ? 409 : 503).json({ error: creditError
+      ? e.message
+      : "Upload was not confirmed. Check your dossier before retrying." });
   }
 });
 // Never expose bucket object names (legacy paths contain owner UIDs).
@@ -425,6 +462,43 @@ judgementRouter.post("/tracks/:id/reviews", async (req, res) => {
       ].includes(e.message)
         ? e.message
         : "Review was not confirmed. Reload before retrying.",
+    });
+  }
+});
+
+const FLAG_REASONS: TrackFlagReason[] = ["bad-quality", "wrong-ai-room"];
+judgementRouter.post("/tracks/:id/flags", async (req, res) => {
+  try {
+    const id = safeId(req.params.id), uid = res.locals.identity.uid;
+    const reason = req.body?.reason as TrackFlagReason;
+    if (!FLAG_REASONS.includes(reason)) throw new Error("Invalid flag reason.");
+    const result = await db().runTransaction(async (t) => {
+      const trackRef = tracks().doc(id);
+      const [storedTrack, listen, existingFlag] = await Promise.all([
+        t.get(trackRef),
+        t.get(trackRef.collection("listens").doc(uid)),
+        t.get(trackRef.collection("flags").doc(uid)),
+      ]);
+      if (!storedTrack.exists) throw new Error("Track missing.");
+      const track = decodeStoredTrack(storedTrack.data());
+      if (track.ownerId === uid || track.status !== "evaluating")
+        throw new Error("This track cannot be flagged.");
+      if (existingFlag.exists) throw new Error("You already flagged this track.");
+      if (!listen.exists || Date.now() - Number(listen.data()?.startedAt || 0) < 30_000)
+        throw new Error("Listen for at least 30 seconds before flagging.");
+      const result = flagMutation(track, reason);
+      t.create(trackRef.collection("flags").doc(uid), { reason, createdAt: Date.now() });
+      t.set(trackRef, encodeStoredTrack(result.track));
+      return { count: result.count, returned: result.returned, reason };
+    });
+    res.status(201).json(result);
+  } catch (e: any) {
+    const known = [
+      "Invalid flag reason.", "Track missing.", "This track cannot be flagged.",
+      "You already flagged this track.", "Listen for at least 30 seconds before flagging.",
+    ];
+    res.status(known.includes(e.message) ? 409 : 503).json({
+      error: known.includes(e.message) ? e.message : "Flag was not confirmed. Reload before retrying.",
     });
   }
 });

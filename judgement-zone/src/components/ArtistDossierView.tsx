@@ -178,6 +178,17 @@ export const ArtistDossierView: React.FC<ArtistDossierViewProps> = ({
       </div>
 
       {/* Main Track Dossier Report Card */}
+      {selectedTrack.status === 'returned' && (
+        <div role="alert" className="rounded-2xl border border-rose-500/50 bg-rose-950/40 p-5 text-sm text-rose-100">
+          <p className="font-black">Submission returned from the Judgment pool</p>
+          <p className="mt-1 text-xs text-rose-200">
+            {selectedTrack.returnedReason === 'wrong-ai-room'
+              ? 'Five different judges flagged this track as AI-assisted music in the Human-Created room. Review the disclosure and submit it to the AI-Assisted Chamber if appropriate.'
+              : 'Five different judges flagged the audio as too low-quality or damaged to judge fairly. Check the exported file, volume, clipping, silence, and playback before submitting a corrected version.'}
+          </p>
+          <p className="mt-2 text-[11px] text-zinc-400">A flag threshold is community feedback, not proof of AI use or a rights violation.</p>
+        </div>
+      )}
       <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
         {/* Track Identity & Audio Player strip */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-zinc-800">
@@ -214,6 +225,15 @@ export const ArtistDossierView: React.FC<ArtistDossierViewProps> = ({
               {isPlayingPreview ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-amber-400" />}
               <span>{isPlayingPreview ? 'Pause Audio' : 'Play Master'}</span>
             </button>
+
+            <span className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-mono text-zinc-400">
+              Quality flags: {selectedTrack.flagCounts?.['bad-quality'] || 0}/5
+            </span>
+            {selectedTrack.creationType === 'human-created' && (
+              <span className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-[10px] font-mono text-zinc-400">
+                Wrong-room flags: {selectedTrack.flagCounts?.['wrong-ai-room'] || 0}/5
+              </span>
+            )}
 
           </div>
         </div>

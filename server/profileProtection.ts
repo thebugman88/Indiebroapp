@@ -14,5 +14,11 @@ export function decodeJudgeProfile(uid: string, stored: any): UserJudgeProfile {
   );
   if (profile.id !== uid || stored.id !== uid)
     throw new Error("Profile integrity check failed.");
-  return profile;
+  return {
+    ...profile,
+    // Existing accounts receive the same one-time starter submission as new accounts.
+    judgementCredits: Number.isSafeInteger(profile.judgementCredits)
+      ? Math.max(0, profile.judgementCredits)
+      : 3,
+  };
 }

@@ -456,7 +456,7 @@ function SuiteApp() {
     <div className="min-h-screen bg-[#06080d] text-zinc-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-white">
       {/* 1. MASTER TOP SUITE DOCK */}
       <header className="sticky top-0 z-50 bg-[#0a0d14]/95 backdrop-blur-xl border-b border-zinc-800/80">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-3">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 xl:px-6 min-h-14 flex items-center justify-between gap-2 sm:gap-3 overflow-hidden">
           {/* Logo & Suite Brand */}
           <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <button
@@ -469,7 +469,7 @@ function SuiteApp() {
                   <Sparkles className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
                 </div>
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <div className="flex items-center gap-1.5 leading-none">
                   <span className="font-extrabold tracking-tight text-white text-xs sm:text-sm">INDIEBROTHERHOOD</span>
                   <span className="text-[9px] sm:text-[10px] font-mono px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
@@ -482,7 +482,7 @@ function SuiteApp() {
           </div>
 
           {/* Suite Right Controls: Command Search, Universal Profile Badge & App Menu */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2 min-w-0 overflow-x-auto scrollbar-none">
             {/* Live Universal Notification Center */}
             <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
 
@@ -502,7 +502,7 @@ function SuiteApp() {
 
             <button
               onClick={() => setIsPaletteOpen(true)}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-2 transition cursor-pointer"
+              className="hidden lg:flex p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 items-center gap-2 transition cursor-pointer"
               title="Command Palette (Cmd + K)"
             >
               <Search className="w-3.5 h-3.5" />
@@ -513,7 +513,7 @@ function SuiteApp() {
             </button>
 
             {/* UNIVERSAL PERSISTENT PROFILE & XP COMPONENT */}
-            <div onClick={() => navigateTo('artist-profile')} className="cursor-pointer">
+            <div onClick={() => navigateTo('artist-profile')} className="hidden xl:block cursor-pointer">
               <ProfileBadge />
             </div>
 
@@ -523,7 +523,7 @@ function SuiteApp() {
                 type="button"
                 id="suite-master-admin-control-room-btn"
                 onClick={() => setIsAdminControlRoomOpen(true)}
-                className="hidden md:flex px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-black border border-amber-300 shadow-md shadow-amber-500/20 text-xs items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95"
+                className="hidden lg:flex px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-black border border-amber-300 shadow-md shadow-amber-500/20 text-xs items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95"
                 title="Founder Admin Control Room: Real User Logs, Live Kick/Whitelist/Blacklist & Universal Announcements"
               >
                 <Crown className="w-4 h-4 text-zinc-950 fill-zinc-950" />
@@ -532,7 +532,7 @@ function SuiteApp() {
             )}
 
             {/* Login / Profile Switcher Button */}
-            {currentUser.id!=='guest'&&<button onClick={()=>setIsReferralOpen(true)} className="rounded-xl border border-amber-500/30 px-2 py-1.5 text-xs font-bold text-amber-300" title="Profile completion and verified referral rewards">Invite & Earn</button>}
+            {currentUser.id!=='guest'&&<button onClick={()=>setIsReferralOpen(true)} className="hidden lg:block rounded-xl border border-amber-500/30 px-2 py-1.5 text-xs font-bold text-amber-300 whitespace-nowrap" title="Profile completion and verified referral rewards">Invite & Earn</button>}
             <button
               onClick={() => setIsAuthModalOpen(true)}
               className={`p-1.5 sm:p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
@@ -574,6 +574,14 @@ function SuiteApp() {
             </button>
           </div>
         </div>
+
+        {currentUser.id !== 'guest' && (
+          <div className="lg:hidden border-t border-zinc-800/70 bg-zinc-950/95 px-3 py-1.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
+            <button type="button" onClick={() => navigateTo('artist-profile')} className="shrink-0 rounded-lg border border-zinc-800 px-2.5 py-1 text-[11px] font-bold text-zinc-200">My Profile</button>
+            <button type="button" onClick={() => setIsReferralOpen(true)} className="shrink-0 rounded-lg border border-amber-500/30 px-2.5 py-1 text-[11px] font-bold text-amber-300">Invite & Earn</button>
+            {isMasterAdmin && <button type="button" onClick={() => setIsAdminControlRoomOpen(true)} className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-black text-zinc-950">Admin Room</button>}
+          </div>
+        )}
 
         {/* Dedicated Horizontal Scrolling Studio Navigation Ribbon */}
         <div className="border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur px-3 sm:px-6 py-1.5 overflow-x-auto scrollbar-none flex items-center gap-1.5 text-xs font-medium">
@@ -623,10 +631,10 @@ function SuiteApp() {
               <button
                 key={app.id}
                 onClick={() => navigateTo(app.id)}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
                   isSelected
-                    ? 'bg-zinc-100 text-zinc-950 font-bold shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    ? 'flex bg-zinc-100 text-zinc-950 font-bold shadow-sm'
+                    : 'hidden 2xl:flex text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
                 }`}
                 title={`${app.name} (Alt+${app.shortcut})`}
               >

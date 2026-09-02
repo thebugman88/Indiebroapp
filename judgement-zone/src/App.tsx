@@ -30,6 +30,7 @@ export default function App() {
     window.addEventListener('ib_auth_changed', sync); sync();
     return () => window.removeEventListener('ib_auth_changed', sync);
   }, []);
+
   // Late review/profile responses can only update the unmounted old workspace.
   return <JudgementWorkspace key={session.revision} />;
 }
@@ -51,6 +52,14 @@ function JudgementWorkspace() {
     refresh();window.addEventListener('ib_auth_changed',refresh);
     return()=>{version++;window.removeEventListener('ib_auth_changed',refresh);};
   }, []);
+
+  useEffect(() => {
+    let current = true;
+    if (activeTab === 'chamber' || activeTab === 'dossier') {
+      loadStoredTracks().then(list => { if (current) setTracks(list); }).catch(e => { if (current) setError(e.message); });
+    }
+    return () => { current = false; };
+  }, [activeTab]);
 
   const handleUpdateProfile = async (newProfile:UserJudgeProfile) => {
     try { setUserProfile(await saveProfile(newProfile));setError(''); } catch(e:any) {setError(e.message);}
@@ -130,7 +139,7 @@ function JudgementWorkspace() {
         userProfile={userProfile}
         onOpenTiers={() => setIsTierModalOpen(true)}
         onOpenTerms={() => setIsTermsOpen(true)}
-        queuedCount={tracks.filter((t) => !userProfile.savedVaultTrackIds.includes(t.id)).length}
+        queuedCount={tracks.filter((t) => t.status === 'evaluating' && t.ownerId !== userProfile.id && !t.reviews.some(r => r.judgeId === userProfile.id)).length}
       />
 
       {/* Main View Switcher */}

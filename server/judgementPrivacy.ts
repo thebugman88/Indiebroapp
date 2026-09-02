@@ -21,7 +21,10 @@ export function visibleTrack(data: ArtistTrack & { audioPath?: string }, uid: st
     durationSeconds: data.durationSeconds, lyricsText: revealed ? data.lyricsText : '',
     coverArt: '', uploadedAt: data.uploadedAt, isUserSubmission: true,
     ownershipConfirmed: data.ownershipConfirmed, rightsHolderSignature: owner ? data.rightsHolderSignature : '',
+    creationType: data.creationType || 'human-created',
     status: data.status, targetJudges: data.targetJudges, reviews,
+    flagCounts: owner ? (data.flagCounts || { 'bad-quality': 0, 'wrong-ai-room': 0 }) : { 'bad-quality': 0, 'wrong-ai-room': 0 },
+    ...(owner && data.returnedReason ? { returnedReason: data.returnedReason, returnedAt: data.returnedAt } : {}),
     aggregatedScores: revealed ? recalculateTrackScores(data.reviews) : { ...recalculateTrackScores([]), totalReviews: data.reviews.length },
     ...(data.audioPath ? { audioBlobUrl: `/api/judgement/tracks/${encodeURIComponent(data.id)}/audio` } : {}),
   };
