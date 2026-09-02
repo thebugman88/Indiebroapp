@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { resolve, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -14,6 +14,8 @@ for (const dir of projects) {
 const selected = process.argv[2] ? [process.argv[2]] : apps;
 if (selected.some(dir => !apps.includes(dir))) throw new Error('Unknown app directory.');
 if (!process.env.npm_execpath) throw new Error('Run through npm run check:apps -- [app-directory].');
+const packageManagerPath = process.env.npm_execpath;
+const packageManagerIsBun = /^bun(?:\.exe)?$/i.test(basename(packageManagerPath));
 const sentinel = 'IB_BUILD_ONLY_SECRET_SENTINEL_8e7bf045';
 const env = { ...process.env, GEMINI_API_KEY: sentinel, VITE_GEMINI_API_KEY: sentinel,
   VITE_STRIPE_SECRET_KEY: sentinel, STRIPE_SECRET_KEY: sentinel,
@@ -33,7 +35,9 @@ let failures = 0;
 for (const app of selected) {
   try {
     for (const script of ['lint', 'build']) {
-      const run = spawnSync(process.execPath, [process.env.npm_execpath, 'run', script], {
+      const executable = packageManagerIsBun ? packageManagerPath : process.execPath;
+      const args = packageManagerIsBun ? ['run', script] : [packageManagerPath, 'run', script];
+      const run = spawnSync(executable, args, {
         cwd: resolve(root, app), env, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024,
       });
       if (run.error || run.status !== 0) throw new Error(`${script} failed\n${run.stdout || ''}${run.stderr || ''}${run.error || ''}`);

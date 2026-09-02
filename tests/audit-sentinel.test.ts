@@ -11,7 +11,7 @@ test('rate limits expire, cancellation stays reachable, and unblocks survive res
   testEncryptionKeys();
   const cwd = process.cwd(), dir = mkdtempSync(join(tmpdir(), 'ib-sentinel-test-'));
   const moduleUrl = pathToFileURL(resolve('server/codeSentinel.ts')).href;
-  const loader = resolve('node_modules/tsx/dist/loader.mjs');
+  const loader = pathToFileURL(resolve('node_modules/tsx/dist/loader.mjs')).href;
   process.chdir(dir);
   try {
     const m = await import(moduleUrl);

@@ -31,7 +31,8 @@ import {
   X,
   Compass,
   Trophy,
-  Award
+  Award,
+  Lock
 } from 'lucide-react';
 import { GamificationProvider, useGamification } from './context/GamificationContext';
 import { ProfileBadge } from './components/ProfileBadge';
@@ -55,6 +56,7 @@ import {
   ADMIN_EMAIL,
 } from './services/authService';
 import { getUnreadDmCount } from './services/dmService';
+import { canMountMasteringSuite } from './masteringSuiteAccess';
 import { MessageSquare, Crown } from 'lucide-react';
 
 // Lazy load sub-applications for high-speed switching and performance
@@ -68,6 +70,7 @@ const SemanticLabApp = React.lazy(() => import('../indiebrotherhood-semantic-lab
 const ArtistAssistantApp = React.lazy(() => import('../indiebrotherhood-artist-assistant/src/App'));
 const MeetingRoomApp = React.lazy(() => import('../meeting-room/src/App'));
 const RoyaltyExtractorApp = React.lazy(() => import('../royalty-and-isrc-metadata-extractor/src/App'));
+const MasteringSuiteApp = React.lazy(() => import('../mastering-suite/src/App'));
 
 export type SuiteAppId =
   | 'landing'
@@ -82,6 +85,7 @@ export type SuiteAppId =
   | 'semantic-lab'
   | 'artist-assistant'
   | 'meeting-room'
+  | 'mastering-suite'
   | 'royaltyops';
 
 interface AppMeta {
@@ -217,6 +221,19 @@ const APPS: AppMeta[] = [
     features: ['Parliamentary Motions', 'Live Quorum & Voting', 'Interactive Agendas', 'Meeting Minutes Export']
   },
   {
+    id: 'mastering-suite',
+    name: 'Mastering Suite',
+    shortName: 'Mastering',
+    tagline: 'Browser-local mastering controls with 24-bit and 16-bit WAV export',
+    description: 'Load supported audio into volatile browser memory, adjust the mastering chain, edit optional release metadata, and export a WAV without uploading the session.',
+    category: 'Creation',
+    icon: AudioWaveform,
+    color: 'from-amber-500 to-yellow-600',
+    badge: 'Free • 0 Coins',
+    shortcut: 'M',
+    features: ['Browser-Local Processing', 'WAV 24-Bit Export', 'WAV 16-Bit Export', 'No Server Uploads']
+  },
+  {
     id: 'royaltyops',
     name: 'RoyaltyOps',
     shortName: 'RoyaltyOps',
@@ -268,6 +285,7 @@ export function resolveSuiteApp(rawInput: string): SuiteAppId | null {
   if (['semantic-lab', 'semanticlab', 'semantic'].includes(clean) || clean.startsWith('semantic-lab') || clean.startsWith('semanticlab')) return 'semantic-lab';
   if (['artist-assistant', 'artistassistant', 'assistant'].includes(clean) || clean.startsWith('artist-assistant') || clean.startsWith('artistassistant')) return 'artist-assistant';
   if (['meeting-room', 'meetingroom', 'assembly', 'meeting'].includes(clean) || clean.startsWith('meeting-room') || clean.startsWith('meetingroom')) return 'meeting-room';
+  if (['mastering-suite', 'masteringsuite', 'mastering'].includes(clean) || clean.startsWith('mastering-suite') || clean.startsWith('masteringsuite')) return 'mastering-suite';
   if (['royaltyops', 'royalty-ops', 'royalty', 'isrc'].includes(clean) || clean.startsWith('royaltyops') || clean.startsWith('royalty-ops')) return 'royaltyops';
 
   const exact = APPS.find((a) => a.id.toLowerCase() === clean);
@@ -851,7 +869,7 @@ function SuiteApp() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      <span>All 10 Studios Active & Synced</span>
+                      <span>All 11 Studios Active & Synced</span>
                     </div>
                   </div>
 
@@ -860,7 +878,7 @@ function SuiteApp() {
                       The Unified Operating System for Independent Music
                     </h1>
                     <p className="text-sm sm:text-base text-zinc-400 leading-relaxed">
-                      Ten synchronized intelligence tools, songwriting studios, business operations platforms, and live cypher chambers — fully unified with global creator XP progression.
+                      Eleven integrated intelligence tools, creation studios, business operations platforms, and community spaces — unified with creator XP progression.
                     </p>
                   </div>
 
@@ -868,7 +886,7 @@ function SuiteApp() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                     <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800">
                       <p className="text-[11px] font-mono text-zinc-400 uppercase">Total Tools</p>
-                      <p className="text-xl font-extrabold text-white mt-0.5">10 Studios</p>
+                      <p className="text-xl font-extrabold text-white mt-0.5">11 Studios</p>
                     </div>
                     <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800">
                       <p className="text-[11px] font-mono text-zinc-400 uppercase">AI Audio Models</p>
@@ -1055,6 +1073,28 @@ function SuiteApp() {
 
           {/* 9. MEETING ROOM */}
           {activeApp === 'meeting-room' && <MeetingRoomApp />}
+
+          {/* Mastering sessions require a real account and remount on identity changes. */}
+          {activeApp === 'mastering-suite' && (
+            canMountMasteringSuite(currentUser.id) ? (
+              <MasteringSuiteApp key={currentUser.id} />
+            ) : (
+              <div role="status" className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
+                <Lock className="h-10 w-10 text-amber-400" aria-hidden="true" />
+                <div>
+                  <h2 className="text-xl font-bold text-white">Sign in to use Mastering Suite</h2>
+                  <p className="mt-2 max-w-md text-sm text-zinc-400">Audio sessions are isolated to the currently authenticated account and remain in this browser tab.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-400"
+                >
+                  Sign In
+                </button>
+              </div>
+            )
+          )}
 
           {/* 10. ROYALTYOPS */}
           {activeApp === 'royaltyops' && <RoyaltyExtractorApp />}
