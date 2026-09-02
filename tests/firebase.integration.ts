@@ -404,7 +404,7 @@ const fakeStripe = {
       id,
       active: true,
       currency: "usd",
-      unit_amount: id === "price_pro" ? 499 : 99,
+      unit_amount: id === "price_pro" ? 1499 : 99,
       recurring:
         id === "price_pro" ? { interval: "month", interval_count: 1 } : null,
     }),

@@ -245,7 +245,7 @@ export function createBillingRouter(
                 message:
                   "AI outputs may be inaccurate and satisfaction varies. Sales are final except as required by law. Eligible discretionary remedies are Brotherhood Coins; statutory and payment-provider rights remain. " +
                   (product.recurring
-                    ? "Renews at $4.99 USD/month until canceled in Plan & Coins."
+                    ? "Renews at $14.99 USD/month until canceled in Plan & Coins."
                     : "One-time Coin purchase; purchased Coins do not expire."),
               },
               terms_of_service_acceptance: {

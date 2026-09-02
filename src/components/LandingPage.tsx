@@ -153,12 +153,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
     },
     {
       quote:
-        'Having split sheets, ISRC extraction, cadence metering, and peer reviews unified under one $4.99 login is the biggest cheat code in independent music right now.',
+        'Having split sheets, ISRC extraction, cadence metering, and peer reviews unified under one $14.99 login is the biggest cheat code in independent music right now.',
       name: 'Tre Styles',
       role: 'Independent Hip-Hop Artist & MC',
       genre: 'Boom Bap & Drill',
       avatar: '⚡',
-      highlight: 'The $4.99 plan is unbeatable'
+      highlight: 'The $14.99 plan is unbeatable'
     },
     {
       quote:
@@ -200,7 +200,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
     {
       feature: 'Total Monthly Cost',
       others: '$120 - $180 / month across 8-10 fragmented subscriptions',
-      indiebrotherhood: '100% Free Forever or $4.99 / month for Pro Powerhouse'
+      indiebrotherhood: '100% Free Forever or $14.99 / month for Pro Powerhouse'
     }
   ];
 
@@ -248,7 +248,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
               href="#pricing"
               className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-700/80 text-zinc-200 font-bold text-base hover:text-white transition flex items-center justify-center gap-2"
             >
-              <span>See Free vs. $4.99 Plan</span>
+              <span>See Free vs. $14.99 Plan</span>
               <Crown className="w-4 h-4 text-amber-400" />
             </a>
           </div>
@@ -324,7 +324,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
               <h4 className="text-base font-extrabold text-white">Artist-First Economics</h4>
               <p className="text-xs text-zinc-400 leading-relaxed">
                 We believe working artists shouldn't be drained by high subscription fees. A comprehensive Free Tier for
-                everyone, and an all-inclusive Pro power plan for just $4.99 / month.
+                everyone, and an all-inclusive Pro power plan for just $14.99 / month.
               </p>
             </div>
           </div>

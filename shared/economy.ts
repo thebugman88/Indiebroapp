@@ -6,7 +6,7 @@ export const GB = 1_000_000_000;
 export const PRODUCTS = {
   pro: {
     name: "Artist Pro",
-    cents: 499,
+    cents: 1499,
     coins: 0,
     proCoins: 0,
     recurring: true,
@@ -61,6 +61,6 @@ export const PURCHASE_POLICY = [
   "AI can make mistakes. Outputs vary with input, context and individual taste; results and commercial success are not guaranteed. Subjective dissatisfaction alone does not qualify for a discretionary credit. This does not exclude remedies for non-delivery, duplicate or unauthorized charges, material misrepresentation, technical failure, or rights required by law or payment-provider rules.",
   "Technical failures are recorded and eligible Coin charges are restored. Verified paid-but-undelivered purchases are retried without charging again. Unresolved exceptions are referred for review. Statutory or payment-provider refunds, when required, go through the original payment method; Coins do not replace those rights.",
   "Purchased and service-credit Coins do not expire while your account remains open. They have no cash redemption value and cannot be transferred. Included Coins refill on the first day of each calendar month at 00:00 UTC and do not roll over. Spend included Coins first.",
-  "Artist Pro is $4.99 USD per month plus any disclosed tax and renews automatically until canceled. It includes all tools, 1,500 monthly Coins and 10 GB of uploaded-audio storage. Cancel future renewal in Plan & Coins; access continues through the paid period. Free includes all tools, 150 monthly Coins and 1 GB.",
+  "Artist Pro is $14.99 USD per month plus any disclosed tax and renews automatically until canceled. It includes all tools, 1,500 monthly Coins and 10 GB of uploaded-audio storage. Cancel future renewal in Plan & Coins; access continues through the paid period. Free includes all tools, 150 monthly Coins and 1 GB.",
   "Storage extensions purchased with Coins remain on your account. Downgrading reduces only base storage. Existing files are not automatically deleted for exceeding quota; further uploads pause until usage fits. Local drafts and browser-only files are not backed up by these storage allowances.",
 ].join("\n\n");

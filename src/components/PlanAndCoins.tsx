@@ -106,7 +106,7 @@ export function PlanAndCoins({ compact = false }: { compact?: boolean }) {
           </p>
         </article>
         <article className="rounded-2xl border border-amber-500 bg-zinc-900 p-5 space-y-3">
-          <h3 className="text-xl font-bold">Artist Pro · $4.99/month</h3>
+          <h3 className="text-xl font-bold">Artist Pro · $14.99/month</h3>
           <p className="text-3xl font-bold">
             1,500 BC<span className="text-sm font-normal"> / month</span>
           </p>

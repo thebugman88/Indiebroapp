@@ -235,8 +235,8 @@ app.get('/api/stripe/config', (_req, res) => {
     publishableKey,
     isConfigured,
     tier: 'pro',
-    priceId: process.env.STRIPE_PRICE_ID_PRO || 'price_indiebrotherhood_pro_499',
-    monthlyPriceUsd: 4.99,
+    priceId: process.env.STRIPE_PRICE_ID_PRO || 'price_indiebrotherhood_pro_1499',
+    monthlyPriceUsd: 14.99,
   });
 });
 

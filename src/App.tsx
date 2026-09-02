@@ -665,7 +665,7 @@ function SuiteApp() {
                   </div>
                   <div>
                     <h4 className="font-bold text-xs text-white">Why Us & Pricing</h4>
-                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">Manifesto & $4.99 Pro</p>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">Manifesto & $14.99 Pro</p>
                   </div>
                 </button>
 
@@ -757,7 +757,7 @@ function SuiteApp() {
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-white">Why indiebrotherhood (Manifesto & $4.99 Pro)</p>
+                    <p className="text-xs font-bold text-white">Why indiebrotherhood (Manifesto & $14.99 Pro)</p>
                     <p className="text-[11px] text-zinc-400">The story, 4 pillar features, and transparent pricing</p>
                   </div>
                 </div>

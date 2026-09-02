@@ -351,7 +351,7 @@ export const GamificationModal: React.FC = () => {
             }`}
           >
             <Crown className="w-4 h-4" />
-            <span>Plan & Billing ($4.99 Pro)</span>
+            <span>Plan & Billing ($14.99 Pro)</span>
           </button>
 
           <button
@@ -529,7 +529,7 @@ export const GamificationModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: BILLING & $4.99 PRO */}
+          {/* TAB 2: BILLING & $14.99 PRO */}
           {activeTab === 'billing' && <PlanAndCoins />}
 
           {/* TAB 3: BADGES GALLERY */}

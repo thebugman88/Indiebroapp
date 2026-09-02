@@ -109,7 +109,7 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
             setProfile(updated);
             awardXP({
               amount: 500,
-              actionTitle: 'Activated Artist Pro Powerhouse ($4.99/mo)',
+              actionTitle: 'Activated Artist Pro Powerhouse ($14.99/mo)',
               sourceApp: 'Stripe Checkout',
               badgeId: 'pipeline-perfect',
               badgeIncrement: 1
