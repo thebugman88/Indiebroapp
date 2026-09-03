@@ -35,10 +35,12 @@ export interface ResilientAiResult<T = any> {
 
 // Default multi-model fallback chain for indiebrotherhood
 export const DEFAULT_MODEL_CHAIN = [
-  'gemini-3.7-flash',
-  'gemini-3.1-pro-preview',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
+  // Verified against the Generative Language API for this deployment.
+  // Override explicitly for staged model migrations without editing code.
+  ...(process.env.GEMINI_MODEL_CHAIN || 'gemini-3.6-flash')
+    .split(',')
+    .map((model) => model.trim())
+    .filter(Boolean),
 ];
 
 /**
@@ -195,6 +197,15 @@ export async function executeResilientAi<T = any>(
         if (is429) statusType = 'RATE_LIMITED_429';
         else if (is503) statusType = 'UNAVAILABLE_503';
         else if (isTimeout) statusType = 'TIMEOUT';
+
+        // Log only operational metadata. Never log prompts, generated content, or credentials.
+        console.warn('[AI Gateway] Provider attempt failed.', {
+          model: currentModel,
+          attempt,
+          status: statusType,
+          httpStatus: Number.isFinite(Number(errStatus)) ? Number(errStatus) : 500,
+          durationMs: attemptDuration,
+        });
 
         attemptHistory.push({
           model: currentModel,
