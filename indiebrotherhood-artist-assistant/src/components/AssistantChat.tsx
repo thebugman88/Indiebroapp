@@ -137,6 +137,7 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
           artistProfile: profile,
           songCatalog: songs,
           enableSearch: useSearch,
+          legalInformationAcknowledged: isLegalInformationRequest(text) && acknowledgedForThisRequest,
           customApiKey: settings.customApiKey,
         }),
       });
