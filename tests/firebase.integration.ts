@@ -531,6 +531,26 @@ test("AI requests require price consent and bind idempotency to input; delivered
   assert.equal(r.status, 502);
   assert.equal((await walletSnapshot("bob")).total, before - 10);
 });
+test("verified administrators use cloud AI without spending Coins or consuming daily allowances", async () => {
+  const before = await walletSnapshot("admin");
+  const response = await fetch(base + "/api/generate-lyrics", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${tokens.admin}`,
+      "Content-Type": "application/json",
+      "x-request-id": "admin-unlimited-request",
+    },
+    body: JSON.stringify({ lyrics: "founder request" }),
+  });
+  assert.equal(response.status, 200);
+  const after = await walletSnapshot("admin");
+  assert.equal(after.total, before.total);
+  const job = await db.doc(`usageJobs/${keyFor("admin", "admin-unlimited-request")}`).get();
+  assert.equal(job.data()!.cost, 0);
+  assert.equal(job.data()!.listedCost, 10);
+  assert.equal(job.data()!.unlimited, true);
+  assert.deepEqual(job.data()!.debit, { monthly: 0, purchased: 0, month: before.month });
+});
 test("storage buys once per request, survives downgrade and upload reservations cannot exceed quota", async () => {
   await db
     .doc("wallets/carol")

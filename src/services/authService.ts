@@ -224,6 +224,18 @@ export async function getSuiteIdToken(): Promise<string> {
   if (!client.currentUser || client.currentUser.isAnonymous) throw new Error('Sign in to continue.');
   return client.currentUser.getIdToken();
 }
+async function aiRequestStorageKey(uid: string, path: string, body: BodyInit | null | undefined) {
+  const value = typeof body === 'string' ? body : '';
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(JSON.stringify([uid, path, value])),
+  );
+  return `ib-ai-request:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+function closeAiRequest(storageKey: string | null) {
+  if (!storageKey) return;
+  try { sessionStorage.removeItem(storageKey); } catch { /* Storage may be disabled. */ }
+}
 export async function authenticatedFetch(input: string, init: RequestInit = {}) {
   const client = requireAuthClient();
   await persistenceReady; await client.authStateReady();
@@ -235,16 +247,33 @@ export async function authenticatedFetch(input: string, init: RequestInit = {}) 
   if (target.origin !== window.location.origin) throw new Error('Authenticated requests must use the suite backend.');
   const headers = new Headers(init.headers);
   const action = AI_ACTIONS[target.pathname];
+  let aiStorageKey: string | null = null;
   if ((init.method || 'GET').toUpperCase() === 'POST' && action) {
-    if (action.cost > 0 && !window.confirm(`${action.name} costs ${action.cost} Brotherhood Coins. Included Coins are spent first. Failed cloud requests restore their Coins. Continue?`)) throw new Error('AI request canceled. No Coins spent.');
-    headers.set('x-request-id', crypto.randomUUID());
+    const unlimited = currentUser.id === user.uid && currentUser.isUnlimited === true;
+    if (!unlimited && action.cost > 0 && !window.confirm(`${action.name} costs ${action.cost} Brotherhood Coins. Included Coins are spent first. Failed cloud requests restore their Coins. Continue?`)) throw new Error('AI request canceled. No Coins spent.');
+    let requestId: string = crypto.randomUUID();
+    try {
+      aiStorageKey = await aiRequestStorageKey(user.uid, target.pathname, init.body);
+      requestId = sessionStorage.getItem(aiStorageKey) || requestId;
+      sessionStorage.setItem(aiStorageKey, requestId);
+    } catch { aiStorageKey = null; }
+    headers.set('x-request-id', requestId);
     headers.set('x-economy-version', ECONOMY_VERSION);
     headers.set('x-coin-consent', String(action.cost));
   }
   headers.set('Authorization', `Bearer ${await inSession(()=>user.getIdToken())}`);
   const referralMutation=target.pathname.startsWith('/api/referrals/')&&!target.pathname.startsWith('/api/referrals/admin/')&&(init.method||'GET').toUpperCase()==='POST';
   if(referralMutation)headers.set('X-Firebase-AppCheck',await inSession(referralAttestation));
-  return inSession(()=>fetch(target, { ...init, headers, cache: 'no-store', credentials: referralMutation?'same-origin':'omit', redirect:'error' }));
+  const response = await inSession(()=>fetch(target, { ...init, headers, cache: 'no-store', credentials: referralMutation?'same-origin':'omit', redirect:'error' }));
+  // Keep the ID only while delivery is genuinely uncertain. A conclusive
+  // response lets the next deliberate click start a separate paid action.
+  if (aiStorageKey) {
+    const body = await response.clone().json().catch(() => ({}));
+    const pending = response.status === 409 && String(body?.error || '').includes('still processing');
+    const deliveryUncertain = response.status === 503 && typeof body?.jobId === 'string';
+    if (!pending && !deliveryUncertain) closeAiRequest(aiStorageKey);
+  }
+  return response;
 }
 
 export const STUDIO_AURAS: {

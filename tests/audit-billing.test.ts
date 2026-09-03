@@ -5,6 +5,7 @@ import type Stripe from 'stripe';
 import { usageMiddleware } from '../server/economy';
 import { AI_ACTIONS, ECONOMY_VERSION } from '../shared/economy';
 import { createBillingRouter } from '../server/billing';
+import { readFile } from 'node:fs/promises';
 
 const servers: ReturnType<express.Express['listen']>[] = [];
 after(async () => { for (const s of servers) { s.closeAllConnections(); await new Promise<void>(r => s.close(() => r())); } });
@@ -28,6 +29,16 @@ test('all AI route aliases enforce verification, price consent and request IDs b
     }
   }
   assert.equal(reached, 0, 'no provider work is allowed without the billing preconditions');
+});
+
+test('browser retries retain one AI request ID until delivery is conclusive', async () => {
+  const source = await readFile('src/services/authService.ts', 'utf8');
+  assert.match(source, /aiRequestStorageKey\(user\.uid, target\.pathname, init\.body\)/);
+  assert.match(source, /sessionStorage\.getItem\(aiStorageKey\)/);
+  assert.match(source, /sessionStorage\.setItem\(aiStorageKey, requestId\)/);
+  assert.match(source, /deliveryUncertain/);
+  assert.match(source, /response\.status === 503/);
+  assert.match(source, /includes\('still processing'\)/);
 });
 
 test('cancellation checks live status for every mapped subscription and confirms provider results', async () => {

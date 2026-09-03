@@ -128,6 +128,7 @@ export async function reserveUsage(
   requestId: string,
   path: string,
   inputHash = "",
+  unlimited = false,
 ) {
   const action = AI_ACTIONS[path];
   if (!action) throw new Error("Unknown action.");
@@ -142,16 +143,20 @@ export async function reserveUsage(
       return { id, ...data, replayed: true } as any;
     }
     const count = w.daily[path] || 0;
-    if (action.daily && count >= action.daily)
+    if (!unlimited && action.daily && count >= action.daily)
       throw new Error("Daily free AI allowance reached. Try tomorrow (UTC).");
-    const debit = spend(w, action.cost);
-    if (action.daily) w.daily[path] = count + 1;
+    const debit = unlimited
+      ? { monthly: 0, purchased: 0, month: w.month }
+      : spend(w, action.cost);
+    if (!unlimited && action.daily) w.daily[path] = count + 1;
     const job = {
       uid,
       path,
       inputHash,
       day: w.day,
-      cost: action.cost,
+      cost: unlimited ? 0 : action.cost,
+      listedCost: action.cost,
+      unlimited,
       debit,
       status: "reserved",
       createdAt: Date.now(),
@@ -230,7 +235,9 @@ export const usageMiddleware: express.RequestHandler = async (
     res.status(403).json({ error: "Verify your email to use cloud AI." });
     return;
   }
+  const unlimited = res.locals.identity?.admin === true;
   if (
+    !unlimited &&
     action.cost > 0 &&
     (req.get("x-economy-version") !== ECONOMY_VERSION ||
       req.get("x-coin-consent") !== String(action.cost))
@@ -254,6 +261,7 @@ export const usageMiddleware: express.RequestHandler = async (
       requestId,
       path,
       keyFor(JSON.stringify(req.body ?? null)),
+      unlimited,
     );
   } catch (e: any) {
     res.status(409).json({ error: e.message });
