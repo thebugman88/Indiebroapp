@@ -692,8 +692,10 @@ Return strictly valid JSON matching the schema.`;
       responseMimeType: 'application/json',
       responseSchema: schema,
       temperature: 0.75,
-      timeoutMs: 90000,
+      timeoutMs: 55000,
+      maxRetriesPerModel: 1,
       maxOutputTokens: 12000,
+      thinkingBudget: 2048,
     });
 
     if (result.data) {
@@ -943,6 +945,9 @@ GUIDELINES:
       parts: conversationParts,
       systemInstruction,
       temperature: 0.6,
+      timeoutMs: 30000,
+      maxOutputTokens: 2500,
+      thinkingBudget: 1024,
     });
 
     return res.json({
