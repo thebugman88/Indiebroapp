@@ -13,6 +13,7 @@ export interface ResilientAiOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   maxOutputTokens?: number;
+  thinkingBudget?: number;
 }
 
 export interface AttemptLog {
@@ -140,6 +141,7 @@ export async function executeResilientAi<T = any>(
 
         const config: any = {};
         if(options.maxOutputTokens)config.maxOutputTokens=options.maxOutputTokens;
+        if (typeof options.thinkingBudget === 'number') config.thinkingConfig = { thinkingBudget: options.thinkingBudget };
         if (options.responseMimeType) {
           config.responseMimeType = options.responseMimeType;
         }
