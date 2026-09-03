@@ -897,10 +897,18 @@ app.post('/api/gemini/ai-bot-rap', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.post('/api/ai/chat', async (req: Request, res: Response) => {
   try {
-    const { message, history = [], artistProfile = {}, songCatalog = [], enableSearch } = req.body || {};
+    const { message, history = [], artistProfile = {}, songCatalog = [], enableSearch, legalInformationAcknowledged } = req.body || {};
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Message is required.' });
+    }
+    const requestsLegalInformation =
+      /\b(legal|lawyer|attorney|contract|agreement|split[- ]?sheet|copyright|trademark|infringement|license|licensing|clearance|ownership|master rights?|publishing rights?|royalt(?:y|ies) dispute|lawsuit|sue|terms of service)\b/i.test(message);
+    if (requestsLegalInformation && legalInformationAcknowledged !== true) {
+      return res.status(428).json({
+        error: 'Confirm that IndieBrotherhood provides general information only and is not a legal service.',
+        legalDisclaimerRequired: true,
+      });
     }
 
     const artistName = artistProfile.artistName || 'Independent Creator';
