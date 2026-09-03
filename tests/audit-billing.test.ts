@@ -74,3 +74,17 @@ test('cancellation checks live status for every mapped subscription and confirms
   ids = []; assert.equal((await cancel()).status, 409);
   assert.equal((await fetch(base + '/cancel', {method: 'POST', headers: {'x-test-unverified': 'true'}})).status, 403);
 });
+
+
+test('judging chamber requires an explicit session and tallies only confirmed reviews', async () => {
+  const source = await readFile('judgement-zone/src/components/JudgementChamber.tsx', 'utf8');
+  assert.match(source, /Start Judging/);
+  assert.match(source, /Judge Another/);
+  assert.match(source, /Quit Judging/);
+  assert.match(source, /Judging Session Complete/);
+  assert.match(source, /const confirmed=await onRecordReview/);
+  assert.match(source, /xp: old\.xp \+ confirmed\.xpEarned/);
+  assert.match(source, /credits: old\.credits \+ 1/);
+  assert.match(source, /handleNextTrack[\s\S]*setCurrentTrackIndex\(0\)/);
+  assert.match(source, /Your own uploads cannot be judged by your account/);
+});
