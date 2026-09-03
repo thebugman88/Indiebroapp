@@ -224,7 +224,7 @@ export async function executeResilientAi<T = any>(
         await new Promise((r) => setTimeout(r, backoffTime));
 
         // Rate limits should move to the next available model immediately.
-        // A confirmed high-demand responses get one bounded retry, then fall back.
+        // A confirmed high-demand response gets one bounded retry, then falls back.
         if (is429 || isTimeout || (is503 && attempt >= maxRetries)) {
           break;
         }
