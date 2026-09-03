@@ -129,3 +129,14 @@ test('AI screens bound provider thinking and never leave Lyric Pro loading indef
   assert.match(server, /thinkingBudget: 2048/);
   assert.match(server, /thinkingBudget: 1024/);
 });
+
+
+test('artist assistant refuses unrelated advice instead of forcing a music pivot', async () => {
+  const server = await readFile('server.ts', 'utf8');
+  assert.match(server, /Answer only questions directly concerning music creation careers/);
+  assert.match(server, /Do not answer vehicle or equipment repair/);
+  assert.match(server, /Never answer an unrelated question and then force a music analogy/);
+  assert.match(server, /I’m the IndieBrotherhood music-career assistant, so I can’t help with that topic/);
+  assert.match(server, /You are not a lawyer and do not create an attorney-client relationship/);
+  assert.doesNotMatch(server, /Music Career Assistant & Legal Advisor/);
+});
