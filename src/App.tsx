@@ -456,7 +456,7 @@ function SuiteApp() {
     <div className="min-h-screen bg-[#06080d] text-zinc-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-white">
       {/* 1. MASTER TOP SUITE DOCK */}
       <header className="sticky top-0 z-50 bg-[#0a0d14]/95 backdrop-blur-xl border-b border-zinc-800/80">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 xl:px-6 min-h-14 flex items-center justify-between gap-2 sm:gap-3 overflow-hidden">
+        <div className="mx-auto grid min-h-14 w-full max-w-[1600px] grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-2 sm:gap-3 sm:px-4 xl:px-6">
           {/* Logo & Suite Brand */}
           <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <button
@@ -482,9 +482,11 @@ function SuiteApp() {
           </div>
 
           {/* Suite Right Controls: Command Search, Universal Profile Badge & App Menu */}
-          <div className="flex items-center justify-end gap-1.5 sm:gap-2 min-w-0 overflow-x-auto scrollbar-none">
+          <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2 [&>button]:shrink-0">
             {/* Live Universal Notification Center */}
-            <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
+            <div className="hidden min-[360px]:block shrink-0">
+              <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
+            </div>
 
             {/* Direct Messages Trigger */}
             <button
@@ -513,7 +515,7 @@ function SuiteApp() {
             </button>
 
             {/* UNIVERSAL PERSISTENT PROFILE & XP COMPONENT */}
-            <div onClick={() => navigateTo('artist-profile')} className="hidden xl:block cursor-pointer">
+            <div onClick={() => navigateTo('artist-profile')} className="hidden min-[1700px]:block cursor-pointer">
               <ProfileBadge />
             </div>
 
@@ -584,7 +586,7 @@ function SuiteApp() {
         )}
 
         {/* Dedicated Horizontal Scrolling Studio Navigation Ribbon */}
-        <div className="border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur px-3 sm:px-6 py-1.5 overflow-x-auto scrollbar-none flex items-center gap-1.5 text-xs font-medium">
+        <div className="flex items-center gap-1.5 overflow-x-auto border-t border-zinc-800/80 bg-zinc-950/95 px-3 py-1.5 text-xs font-medium scrollbar-none overscroll-x-contain sm:px-6">
           <button
             onClick={() => navigateTo('landing')}
             className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
@@ -634,7 +636,7 @@ function SuiteApp() {
                 className={`px-2.5 py-1 rounded-lg items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
                   isSelected
                     ? 'flex bg-zinc-100 text-zinc-950 font-bold shadow-sm'
-                    : 'hidden 2xl:flex text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    : 'hidden min-[1800px]:flex text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
                 }`}
                 title={`${app.name} (Alt+${app.shortcut})`}
               >
