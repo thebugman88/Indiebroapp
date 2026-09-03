@@ -179,7 +179,6 @@ function LyricStudio({ accountId }: { accountId: string }) {
       const res = await authenticatedFetch('/api/security/unpause-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: requestController.signal,
         body: JSON.stringify({ accountId }),
       });
       if (res.ok && isCurrentSession()) {
@@ -251,6 +250,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
       const response = await authenticatedFetch('/api/generate-lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: requestController.signal,
         body: JSON.stringify({
           accountId,
           genre: activeGenre,
