@@ -309,10 +309,33 @@ function SuiteApp() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isReferralOpen,setIsReferralOpen]=useState(false);
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState('Something is broken');
+  const [feedbackDetails, setFeedbackDetails] = useState('');
   const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [unreadDms, setUnreadDms] = useState<number>(0);
 
   const isMasterAdmin = currentUser.isAdmin === true;
+
+  const sendTesterFeedback = () => {
+    const details = feedbackDetails.trim();
+    if (details.length < 10) return;
+    const subject = `[IndieBrotherhood Feedback] ${feedbackCategory} — ${currentMeta?.shortName || activeApp}`;
+    const body = [
+      `Category: ${feedbackCategory}`,
+      `Studio: ${currentMeta?.name || activeApp}`,
+      `Account: ${currentUser.email || 'Guest / not supplied'}`,
+      `Page: ${window.location.href}`,
+      '',
+      'Feedback:',
+      details,
+      '',
+      `Browser: ${navigator.userAgent}`,
+    ].join('\n');
+    window.location.href = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setIsFeedbackOpen(false);
+    setFeedbackDetails('');
+  };
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -487,6 +510,16 @@ function SuiteApp() {
             <div className="hidden min-[360px]:block shrink-0">
               <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsFeedbackOpen(true)}
+              className="relative shrink-0 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-300 transition hover:border-amber-500/40 hover:text-amber-400 sm:p-2"
+              title="Send tester feedback directly to the founder"
+              aria-label="Send feedback"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
 
             {/* Direct Messages Trigger */}
             <button
@@ -1138,6 +1171,55 @@ function SuiteApp() {
         onClose={() => setIsDmModalOpen(false)}
         currentUser={currentUser}
       />
+
+      {isFeedbackOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendTesterFeedback();
+            }}
+            className="w-full max-w-lg space-y-4 rounded-2xl border border-amber-500/30 bg-zinc-950 p-5 shadow-2xl sm:p-6"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="feedback-title" className="text-lg font-black text-white">Tell us what needs fixing</h2>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">Your email app will open with the studio, page, account email, and browser details filled in. Review the message before sending it directly to Christopher.</p>
+              </div>
+              <button type="button" onClick={() => setIsFeedbackOpen(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-white" aria-label="Close feedback">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <label className="block space-y-1.5 text-xs font-bold text-zinc-200">
+              <span>What kind of feedback?</span>
+              <select value={feedbackCategory} onChange={(event) => setFeedbackCategory(event.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400">
+                <option>Something is broken</option>
+                <option>Feature needs improvement</option>
+                <option>Mobile or layout problem</option>
+                <option>Suggestion or request</option>
+                <option>Other feedback</option>
+              </select>
+            </label>
+            <label className="block space-y-1.5 text-xs font-bold text-zinc-200">
+              <span>What happened, and what did you expect?</span>
+              <textarea
+                value={feedbackDetails}
+                onChange={(event) => setFeedbackDetails(event.target.value)}
+                minLength={10}
+                maxLength={2000}
+                rows={7}
+                required
+                placeholder="Tell Christopher what you clicked, what happened, and what you expected instead."
+                className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400"
+              />
+              <span className="block text-right font-mono text-[10px] text-zinc-500">{feedbackDetails.length}/2000</span>
+            </label>
+            <button type="submit" disabled={feedbackDetails.trim().length < 10} className="w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-black text-zinc-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500">
+              Open email to Christopher
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
