@@ -166,3 +166,16 @@ test('suite header keeps essential controls visible without breakpoint overflow'
   assert.match(app, /overscroll-x-contain/);
   assert.doesNotMatch(app, /justify-between gap-2 sm:gap-3 overflow-hidden/);
 });
+
+
+test('tester feedback opens a bounded pre-addressed diagnostic email', async () => {
+  const app = await readFile('src/App.tsx', 'utf8');
+  assert.match(app, /Tell us what needs fixing/);
+  assert.match(app, /mailto:\$\{ADMIN_EMAIL\}/);
+  assert.match(app, /Something is broken/);
+  assert.match(app, /Studio: \$\{currentMeta\?\.name \|\| activeApp\}/);
+  assert.match(app, /Page: \$\{window\.location\.href\}/);
+  assert.match(app, /Browser: \$\{navigator\.userAgent\}/);
+  assert.match(app, /maxLength=\{2000\}/);
+  assert.match(app, /Review the message before sending it directly to Christopher/);
+});
