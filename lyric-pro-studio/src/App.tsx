@@ -179,6 +179,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
       const res = await authenticatedFetch('/api/security/unpause-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: requestController.signal,
         body: JSON.stringify({ accountId }),
       });
       if (res.ok && isCurrentSession()) {
@@ -239,6 +240,12 @@ function LyricStudio({ accountId }: { accountId: string }) {
 
     setIsGenerating(true);
     setCurrentEntrySaved(false);
+    setVaultError('');
+    const requestController = new AbortController();
+    const requestTimer = window.setTimeout(
+      () => requestController.abort(new Error('Lyric generation timed out.')),
+      125000,
+    );
 
     try {
       const response = await authenticatedFetch('/api/generate-lyrics', {
@@ -292,11 +299,24 @@ function LyricStudio({ accountId }: { accountId: string }) {
         if (data._telemetry?.trustScore !== undefined) {
           setSecurityState((s) => ({ ...s, trustScore: data._telemetry?.trustScore }));
         }
-        setIsGenerating(false);
         return;
       }
-    } catch { /* The server returns no unvalidated or recycled fallback. */ }
-    if(isCurrentSession()) {setVaultError('Generation did not deliver two validated songs. Please try again.');setIsGenerating(false);}
+      const failure = await response.json().catch(() => ({}));
+      if (isCurrentSession()) {
+        setVaultError(failure?.error || 'Generation did not deliver two validated songs. Please try again.');
+      }
+    } catch (error) {
+      if (isCurrentSession()) {
+        setVaultError(
+          requestController.signal.aborted
+            ? 'Lyric generation took too long. No result was delivered. Retry uses the same protected request ID so Coins are not charged twice.'
+            : error instanceof Error ? error.message : 'Generation did not deliver two validated songs. Please try again.',
+        );
+      }
+    } finally {
+      window.clearTimeout(requestTimer);
+      if (isCurrentSession()) setIsGenerating(false);
+    }
   };
 
   useEffect(() => {
