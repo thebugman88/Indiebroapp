@@ -140,3 +140,18 @@ test('artist assistant refuses unrelated advice instead of forcing a music pivot
   assert.match(server, /You are not a lawyer and do not create an attorney-client relationship/);
   assert.doesNotMatch(server, /Music Career Assistant & Legal Advisor/);
 });
+
+
+test('legal-information assistant requests require a fresh visible acknowledgment', async () => {
+  const [assistant, server] = await Promise.all([
+    readFile('indiebrotherhood-artist-assistant/src/components/AssistantChat.tsx', '8'),
+    readFileFile('server.ts', 'utf8'),
+  ]);
+  assert.match(assistant, /IndieBrotherhood is not a legal service or law firm/);
+  assert.match(assistant, /qualified attorney or other appropriate legal professional outside this app/);
+  assert.match(assistant, /setLegalAcknowledged\(false\)/);
+  assert.match(assistant, /I understand — continue/);
+  assert.match(assistant, /legalInformationAcknowledged: isLegalInformationRequest\(text\) && acknowledgedForThisRequest/);
+  assert.match(server, /requestsLegalInformation && legalInformationAcknowledged !== true/);
+  assert.match(server, /legalDisclaimerRequired: true/);
+});
