@@ -37,7 +37,7 @@ export interface ResilientAiResult<T = any> {
 export const DEFAULT_MODEL_CHAIN = [
   // Verified against the Generative Language API for this deployment.
   // Override explicitly for staged model migrations without editing code.
-  ...(process.env.GEMINI_MODEL_CHAIN || 'gemini-3.6-flash')
+  ...(process.env.GEMINI_MODEL_CHAIN || 'gemini-3.6-flash,gemini-flash-latest')
     .split(',')
     .map((model) => model.trim())
     .filter(Boolean),
@@ -115,7 +115,9 @@ export async function executeResilientAi<T = any>(
     ? options.models
     : DEFAULT_MODEL_CHAIN;
 
-  const maxRetries = options.maxRetriesPerModel ?? 1;
+  // Retry one explicit provider-capacity failure before moving to the next
+  // verified model. Billing remains bound to the caller's stable request ID.
+  const maxRetries = options.maxRetriesPerModel ?? 2;
   const timeoutMs = options.timeoutMs ?? 25000;
   const attemptHistory: AttemptLog[] = [];
 
@@ -221,8 +223,9 @@ export async function executeResilientAi<T = any>(
         const backoffTime = Math.min(200 * Math.pow(2, attempt) + Math.random() * 100, 1500);
         await new Promise((r) => setTimeout(r, backoffTime));
 
-        // If rate limited or unavailable, immediately break to next model tier
-        if (is429 || is503 || isTimeout) {
+        // Rate limits should move to the next available model immediately.
+        // A confirmed high-demand responses get one bounded retry, then fall back.
+        if (is429 || isTimeout || (is503 && attempt >= maxRetries)) {
           break;
         }
       }
