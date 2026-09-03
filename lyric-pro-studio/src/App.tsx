@@ -89,6 +89,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
   const [structure, setStructure] = useState<string>(GENRE_STRUCTURES['Hip-Hop'][0]);
   const [userLyrics, setUserLyrics] = useState<string>('');
   const [userLyricsOption, setUserLyricsOption] = useState<UserLyricsOption>('finish_lyrics');
+  const [creativePrompt, setCreativePrompt] = useState<string>('');
 
   // OUTPUT STATE
   const [setA, setSetA] = useState<LyricSet | null>(null);
@@ -255,7 +256,8 @@ function LyricStudio({ accountId }: { accountId: string }) {
           structure,
           autoRandomize: isAutoMode,
           userLyrics,
-          userLyricsOption
+          userLyricsOption,
+          creativePrompt: !isAutoMode && mode === 'full_song' ? creativePrompt : ''
         })
       });
 
@@ -282,7 +284,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
         setSetB(data.setB);
         setIsAiGenerated(data.isAiGenerated);
         generatedAt.current = data.timestamp;
-        const entry: SavedLyricEntry = {id: String(data.timestamp), timestamp:data.timestamp,genre:activeCustomGenre||activeGenre,vibe:activeCustomVibe||activeVibe,explicit,mode,setA:data.setA,setB:data.setB};
+        const entry: SavedLyricEntry = {id: String(data.timestamp), timestamp:data.timestamp,genre:activeCustomGenre||activeGenre,vibe:activeCustomVibe||activeVibe,explicit,mode,creativePrompt: !isAutoMode && mode === 'full_song' ? creativePrompt : '',setA:data.setA,setB:data.setB};
         const next = retainLyricPairs([entry,...vault.load()]);
         try { vault.save(next); await flushPrivateStorage(); if(!isCurrentSession())return; setSavedEntries(next);setCurrentEntrySaved(true);setVaultError(''); }
         catch { setVaultError('Lyrics are visible but could not be saved. Download both sets now.'); }
@@ -333,6 +335,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
       vibe: customVibe || selectedVibe,
       explicit,
       mode,
+      creativePrompt: mode === 'full_song' ? creativePrompt : '',
       setA,
       setB
     };
@@ -375,6 +378,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
     setSelectedVibe(entry.vibe as VibeOption);
     setExplicit(entry.explicit);
     setMode(entry.mode);
+    setCreativePrompt(entry.creativePrompt || '');
     setIsAiGenerated(true);
     setCurrentEntrySaved(true);
   };
@@ -463,7 +467,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
             <div className="flex items-center space-x-3 text-amber-300 text-xs">
               <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
               <span>
-                <strong>Startup Security Guidelines & Agreement Required:</strong> You must review and accept the Studio Rules & Anti-Bot Sentinel to unlock Gemini 3.7 lyric synthesis.
+                <strong>Startup Security Guidelines & Agreement Required:</strong> You must review and accept the Studio Rules & Anti-Bot Sentinel to unlock Gemini-powered lyric synthesis.
               </span>
             </div>
             <button
@@ -495,7 +499,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
                   {securityState.trustScore ?? 100}%
                 </span>
                 <span className="text-zinc-600">|</span>
-                <span className="text-amber-400 font-semibold">Gemini 3.7 Ghostwriter</span>
+                <span className="text-amber-400 font-semibold">Gemini Ghostwriter</span>
               </div>
             </div>
 
@@ -523,6 +527,29 @@ function LyricStudio({ accountId }: { accountId: string }) {
               onUserLyricsChange={setUserLyrics}
               onUserLyricsOptionChange={setUserLyricsOption}
             />
+
+            {mode === 'full_song' && (
+              <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="creative-song-direction" className="text-sm font-black text-white">
+                    Direct the whole song
+                  </label>
+                  <span className="text-[10px] font-mono text-zinc-500">{creativePrompt.length}/2000</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-zinc-400">
+                  Give the AI your story, scene, names, perspective, emotions, or must-use details. Be specific—the result will follow this creative brief while still obeying the safety rules.
+                </p>
+                <textarea
+                  id="creative-song-direction"
+                  value={creativePrompt}
+                  onChange={(event) => setCreativePrompt(event.target.value)}
+                  maxLength={2000}
+                  rows={5}
+                  placeholder="Example: A sad late-night song about rain on Friday, Lyra breaking my heart, and me driving past the place where we first met. First person, vivid details, restrained verses, unforgettable hook."
+                  className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950/80 px-3.5 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10"
+                />
+              </section>
+            )}
 
             <StructureSelector
               selectedGenre={selectedGenre}
@@ -629,7 +656,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
               </div>
               <div>
                 <div className="text-[11px] font-black text-white uppercase tracking-wider">ELITE GHOSTWRITER</div>
-                <div className="text-[10px] text-zinc-400 font-mono">GEMINI 3.7 POWERED</div>
+                <div className="text-[10px] text-zinc-400 font-mono">GEMINI POWERED</div>
               </div>
             </div>
 
