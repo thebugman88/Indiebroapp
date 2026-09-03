@@ -62,6 +62,9 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
   const [activeRoom, setActiveRoom] = useState<MusicCreationType>('human-created');
   const [flaggedTrackIds, setFlaggedTrackIds] = useState<string[]>([]);
   const [isFlagging, setIsFlagging] = useState(false);
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  const [hasCompletedSession, setHasCompletedSession] = useState(false);
+  const [sessionTotals, setSessionTotals] = useState({ reviews: 0, xp: 0, credits: 0 });
 
   // Rubric State
   const [scores, setScores] = useState<ScoreBreakdown>({
@@ -221,6 +224,11 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
       };
 
       const confirmed=await onRecordReview(newReview, currentTrack.id, rewardPreview.xp);
+      setSessionTotals((old) => ({
+        reviews: old.reviews + 1,
+        xp: old.xp + confirmed.xpEarned,
+        credits: old.credits + 1,
+      }));
       setRevealedReview(confirmed);
       confetti({particleCount:80,spread:70,origin:{y:0.6}});
       setIsRevealed(true);
@@ -229,10 +237,35 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
     }catch(e:any){setSeekWarning(e.message);}finally{setIsSubmitting(false);}
   };
 
-  const handleNextTrack = () => {
+  const handleStartSession = () => {
+    audioEngine.stop();
+    setIsPlaying(false);
+    setCurrentTrackIndex(0);
     setIsRevealed(false);
     setRevealedReview(null);
-    setCurrentTrackIndex((prev) => (prev + 1) % Math.max(1, candidateTracks.length));
+    setSessionTotals({ reviews: 0, xp: 0, credits: 0 });
+    setHasCompletedSession(false);
+    setIsSessionActive(true);
+  };
+
+  const handleNextTrack = () => {
+    audioEngine.stop();
+    setIsPlaying(false);
+    setIsRevealed(false);
+    setRevealedReview(null);
+    // The completed track disappears from the eligible list after reveal closes.
+    // Index zero is therefore the next unreviewed track and cannot skip a candidate.
+    setCurrentTrackIndex(0);
+  };
+
+  const handleQuitJudging = () => {
+    audioEngine.stop();
+    setIsPlaying(false);
+    setIsRevealed(false);
+    setRevealedReview(null);
+    setHasCompletedSession(true);
+    setIsSessionActive(false);
+    setCurrentTrackIndex(0);
   };
 
   const handleFlagTrack = async (reason: TrackFlagReason) => {
@@ -265,7 +298,7 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
           ['human-created', 'Human-Created Chamber'],
           ['ai-assisted', 'AI-Assisted Chamber'],
         ] as const).map(([value, label]) => (
-          <button key={value} type="button" onClick={() => { setActiveRoom(value); setCurrentTrackIndex(0); setIsRevealed(false); }} className={`rounded-xl px-4 py-3 text-sm font-bold transition ${activeRoom === value ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950' : 'bg-zinc-950 text-zinc-300 hover:bg-zinc-800'}`}>
+          <button key={value} type="button" onClick={() => { setActiveRoom(value); setCurrentTrackIndex(0); setIsRevealed(false); setHasCompletedSession(false); }} className={`rounded-xl px-4 py-3 text-sm font-bold transition ${activeRoom === value ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950' : 'bg-zinc-950 text-zinc-300 hover:bg-zinc-800'}`}>
             {label}
           </button>
         ))}
@@ -275,6 +308,47 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
   );
 
   const isSavedInVault = userProfile.savedVaultTrackIds.includes(currentTrack?.id);
+
+  if (!isSessionActive) {
+    return (
+      <>{roomSelector}<div className="max-w-4xl mx-auto py-10 px-4">
+        <div className="rounded-3xl border border-amber-500/30 bg-zinc-950 p-6 sm:p-8 text-center shadow-2xl">
+          <Gavel className="mx-auto h-10 w-10 text-amber-400" />
+          <h2 className="mt-3 text-2xl font-black text-white">
+            {hasCompletedSession ? 'Judging Session Complete' : 'Enter the Judging Chamber'}
+          </h2>
+          {hasCompletedSession ? (
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-2xl font-black text-white">{sessionTotals.reviews}</div><div className="text-xs text-zinc-400">Tracks judged</div></div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-2xl font-black text-amber-400">+{sessionTotals.xp}</div><div className="text-xs text-zinc-400">Judge XP earned</div></div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-2xl font-black text-emerald-400">+{sessionTotals.credits}</div><div className="text-xs text-zinc-400">Submission credits earned</div></div>
+            </div>
+          ) : (
+            <p className="mx-auto mt-3 max-w-xl text-sm text-zinc-400">
+              Choose a music room, enter anonymously, and review one eligible track at a time. Every server-confirmed verdict earns 50 Judge XP and one submission credit.
+            </p>
+          )}
+          <p className="mt-5 text-xs font-mono text-zinc-500">
+            {candidateTracks.length} eligible {candidateTracks.length === 1 ? 'track' : 'tracks'} currently available in this room.
+          </p>
+          <button
+            type="button"
+            onClick={handleStartSession}
+            disabled={candidateTracks.length === 0}
+            className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 px-7 py-3 text-sm font-black text-amber-950 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Gavel className="h-4 w-4" />
+            {hasCompletedSession ? 'Start Another Judging Session' : 'Start Judging'}
+          </button>
+          {candidateTracks.length === 0 && (
+            <p className="mt-3 text-xs text-amber-300">
+              No eligible tracks from other artists are waiting in this room. Your own uploads cannot be judged by your account.
+            </p>
+          )}
+        </div>
+      </div></>
+    );
+  }
 
   if (!currentTrack) {
     return (
@@ -286,21 +360,15 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
         <p className="text-zinc-400 text-sm mt-2 max-w-md mx-auto">
           You have reviewed all currently active blind submissions in your drift queue. Submit your own original master or calibrate your Sonic Drift.
         </p>
-        <div className="flex items-center justify-center gap-3 mt-6">
-          <button
-            onClick={onNavigateToSubmit}
-            type="button"
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 font-bold text-sm shadow-lg hover:from-amber-400 hover:to-yellow-400 transition"
-          >
-            Submit Original Master Track
-          </button>
-          <button
-            onClick={onNavigateToSonicProfile}
-            type="button"
-            className="px-6 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-bold text-sm hover:bg-zinc-800 transition"
-          >
-            Adjust Sonic Drift
-          </button>
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3"><strong className="text-white">{sessionTotals.reviews}</strong><div className="text-xs text-zinc-500">Tracks judged</div></div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3"><strong className="text-amber-400">+{sessionTotals.xp}</strong><div className="text-xs text-zinc-500">Judge XP</div></div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3"><strong className="text-emerald-400">+{sessionTotals.credits}</strong><div className="text-xs text-zinc-500">Submission credits</div></div>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+          <button onClick={handleQuitJudging} type="button" className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 font-bold text-sm">Finish & View Final Points</button>
+          <button onClick={onNavigateToSubmit} type="button" className="px-6 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-bold text-sm hover:bg-zinc-800 transition">Submit Original Master Track</button>
+          <button onClick={onNavigateToSonicProfile} type="button" className="px-6 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-bold text-sm hover:bg-zinc-800 transition">Adjust Sonic Drift</button>
         </div>
       </div></>
     );
@@ -584,17 +652,30 @@ export const JudgementChamber: React.FC<JudgementChamberProps> = ({
             </span>
           </div>
 
-          {/* Action to proceed to next track */}
-          <div className="flex justify-end pt-2">
-            <button
-              id="chamber-next-track-btn"
-              onClick={handleNextTrack}
-              type="button"
-              className="px-8 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-amber-950 font-black text-sm flex items-center gap-2 shadow-xl shadow-amber-500/20 cursor-pointer transition active:scale-95"
-            >
-              <span>Next Blind Audition</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+          {/* Continue or finish this judging session */}
+          <div className="flex flex-col gap-3 border-t border-zinc-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-mono text-zinc-400">
+              Session: <strong className="text-white">{sessionTotals.reviews}</strong> judged · <strong className="text-amber-400">+{sessionTotals.xp} XP</strong> · <strong className="text-emerald-400">+{sessionTotals.credits} credits</strong>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                id="chamber-quit-judging-btn"
+                onClick={handleQuitJudging}
+                type="button"
+                className="rounded-2xl border border-zinc-700 bg-zinc-900 px-6 py-3 text-sm font-bold text-zinc-200 transition hover:bg-zinc-800"
+              >
+                Quit Judging
+              </button>
+              <button
+                id="chamber-next-track-btn"
+                onClick={handleNextTrack}
+                type="button"
+                className="px-8 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-amber-950 font-black text-sm flex items-center gap-2 shadow-xl shadow-amber-500/20 cursor-pointer transition active:scale-95"
+              >
+                <span>Judge Another</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       ) : (
