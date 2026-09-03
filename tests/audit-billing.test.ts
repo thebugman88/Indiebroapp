@@ -112,3 +112,20 @@ test('Lyric Pro whole-song direction is bounded, persisted, acknowledged and saf
   assert.match(disclaimer, /accept responsibility for reviewing, editing, publishing, and using the result/);
   assert.doesNotMatch(app, /Gemini 3\.7/);
 });
+
+
+test('AI screens bound provider thinking and never leave Lyric Pro loading indefinitely', async () => {
+  const [app, gateway, server] = await Promise.all([
+    readFile('lyric-pro-studio/src/App.tsx', 'utf8'),
+    readFile('server/aiResilience.ts', 'utf8'),
+    readFile('server.ts', 'utf8'),
+  ]);
+  assert.match(app, /requestController = new AbortController\(\)/);
+  assert.match(app, /signal: requestController\.signal/);
+  assert.match(app, /finally \{[\s\S]*setIsGenerating\(false\)/);
+  assert.match(app, /Retry uses the same protected request ID so Coins are not charged twice/);
+  assert.match(gateway, /thinkingConfig = \{ thinkingBudget: options\.thinkingBudget \}/);
+  assert.match(server, /maxRetriesPerModel: 1/);
+  assert.match(server, /thinkingBudget: 2048/);
+  assert.match(server, /thinkingBudget: 1024/);
+});
