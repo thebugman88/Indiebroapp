@@ -28,6 +28,7 @@ export function lyricInput(payload: any) {
       500,
     ),
     userLyrics: textField(payload.userLyrics ?? "", 20000, false),
+    creativePrompt: textField(payload.creativePrompt ?? "", 2000, false),
     userLyricsOption,
   };
 }
