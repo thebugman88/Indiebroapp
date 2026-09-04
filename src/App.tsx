@@ -499,7 +499,7 @@ function SuiteApp() {
                     OS
                   </span>
                 </div>
-                <p className="text-[10px] text-zinc-400 font-medium hidden md:block">10-Studio Intelligence Suite</p>
+                <p className="text-[10px] text-zinc-400 font-medium hidden md:block">11-Studio Intelligence Suite</p>
               </div>
             </button>
           </div>
@@ -601,7 +601,7 @@ function SuiteApp() {
                 ) : (
                   <>
                     <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="font-semibold text-white hidden sm:inline">10 Studios</span>
+                    <span className="font-semibold text-white hidden sm:inline">11 Studios</span>
                   </>
                 )}
               </div>
@@ -669,7 +669,7 @@ function SuiteApp() {
                 className={`px-2.5 py-1 rounded-lg items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
                   isSelected
                     ? 'flex bg-zinc-100 text-zinc-950 font-bold shadow-sm'
-                    : 'hidden min-[1800px]:flex text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    : 'hidden min-[2400px]:flex text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
                 }`}
                 title={`${app.name} (Alt+${app.shortcut})`}
               >
@@ -933,7 +933,7 @@ function SuiteApp() {
                     </div>
                     <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800">
                       <p className="text-[11px] font-mono text-zinc-400 uppercase">AI Audio Models</p>
-                      <p className="text-xl font-extrabold text-amber-400 mt-0.5">Gemini 2.5</p>
+                      <p className="text-xl font-extrabold text-amber-400 mt-0.5">Gemini Powered</p>
                     </div>
                     <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800">
                       <p className="text-[11px] font-mono text-zinc-400 uppercase">Progression Engine</p>
