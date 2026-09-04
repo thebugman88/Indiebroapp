@@ -191,7 +191,7 @@ test('ad-free support CTAs remain hidden until a validated Stripe Payment Link e
     readFile('server.ts', 'utf8'),
   ]);
   assert.match(server, /process\.env\.STRIPE_SUPPORT_PAYMENT_LINK/);
-  assert.match(server, /url\.hostname !== 'buy\.stripe\.com'/);
+  assert.match(server, /\['buy\.stripe\.com', 'donate\.stripe\.com'\]\.includes\(url\.hostname\)/);
   assert.match(server, /enabled: checkoutUrl !== null/);
   assert.match(app, /Help keep the Brotherhood independent and ad-free/);
   assert.match(app, /It never changes your access, ranking, judgment results, or community standing/);
