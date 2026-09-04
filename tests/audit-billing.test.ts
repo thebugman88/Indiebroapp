@@ -162,9 +162,13 @@ test('suite header keeps essential controls visible without breakpoint overflow'
   assert.match(app, /max-w-\[1600px\] grid-cols-\[auto_minmax\(0,1fr\)\]/);
   assert.match(app, /hidden min-\[360px\]:block shrink-0/);
   assert.match(app, /hidden min-\[1700px\]:block cursor-pointer/);
-  assert.match(app, /hidden min-\[1800px\]:flex/);
+  assert.match(app, /hidden min-\[2400px\]:flex/);
   assert.match(app, /overscroll-x-contain/);
   assert.doesNotMatch(app, /justify-between gap-2 sm:gap-3 overflow-hidden/);
+  assert.match(app, /11-Studio Intelligence Suite/);
+  assert.match(app, />11 Studios</);
+  assert.match(app, />Gemini Powered</);
+  assert.doesNotMatch(app, /Gemini 2\.5/);
 });
 
 
