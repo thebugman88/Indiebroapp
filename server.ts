@@ -542,6 +542,24 @@ Output a comprehensive hit potential breakdown in JSON format.
   return res.status(503).json({ error: 'Audio analysis is unavailable. No score or measurement was generated.' });
 });
 
+function supportPaymentLink() {
+  const raw = process.env.STRIPE_SUPPORT_PAYMENT_LINK;
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.hostname !== 'buy.stripe.com' || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+app.get('/api/support/config', (_req, res) => {
+  const checkoutUrl = supportPaymentLink();
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ enabled: checkoutUrl !== null, checkoutUrl });
+});
+
 // -------------------------------------------------------------
 // 7. RESILIENT LYRIC PRO STUDIO API (ELITE GHOSTWRITER & SECURITY AI SENTINEL)
 // -------------------------------------------------------------
