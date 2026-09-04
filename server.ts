@@ -547,7 +547,7 @@ function supportPaymentLink() {
   if (!raw) return null;
   try {
     const url = new URL(raw);
-    if (url.protocol !== 'https:' || url.hostname !== 'buy.stripe.com' || url.username || url.password) return null;
+    if (url.protocol !== 'https:' || !['buy.stripe.com', 'donate.stripe.com'].includes(url.hostname) || url.username || url.password) return null;
     return url.toString();
   } catch {
     return null;
