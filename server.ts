@@ -74,7 +74,7 @@ app.post('/api/stripe/webhook', ...createStripeWebhook(getStripeClient));
 
 // Public metadata is explicitly allowlisted; every other API requires verified identity.
 app.use('/api', (req, res, next) => {
-  if (req.method === 'GET' && ['/health', '/stripe/config', '/legal/terms'].includes(req.path)) return next();
+  if (req.method === 'GET' && ['/health', '/stripe/config', '/support/config', '/legal/terms'].includes(req.path)) return next();
   return requireAuth(req, res, next);
 });
 app.use(['/api/admin', '/api/audit', '/api/resilience'], requireAdmin);
