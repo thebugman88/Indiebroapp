@@ -312,6 +312,7 @@ function SuiteApp() {
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [feedbackCategory, setFeedbackCategory] = useState('Something is broken');
   const [feedbackDetails, setFeedbackDetails] = useState('');
+  const [supportCheckoutUrl, setSupportCheckoutUrl] = useState<string | null>(null);
   const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [unreadDms, setUnreadDms] = useState<number>(0);
 
@@ -342,6 +343,17 @@ function SuiteApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const { awardXP, setIsProfileModalOpen } = useGamification();
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/support/config', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((config) => {
+        if (active && config?.enabled && typeof config.checkoutUrl === 'string') setSupportCheckoutUrl(config.checkoutUrl);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   // Sync Unread DMs and Auth changes
   useEffect(() => {
@@ -510,6 +522,18 @@ function SuiteApp() {
             <div className="hidden min-[360px]:block shrink-0">
               <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
             </div>
+
+            {supportCheckoutUrl && (
+              <a
+                href={supportCheckoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden shrink-0 rounded-xl border border-amber-500/30 px-2.5 py-1.5 text-[11px] font-bold text-amber-300 transition hover:bg-amber-500/10 xl:block"
+                title="Help keep IndieBrotherhood independent and ad-free"
+              >
+                Keep It Ad-Free
+              </a>
+            )}
 
             <button
               type="button"
@@ -946,6 +970,19 @@ function SuiteApp() {
                   </div>
                 </div>
               </div>
+
+              {supportCheckoutUrl && (
+                <aside className="flex flex-col gap-4 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-sm font-black text-white">Help keep the Brotherhood independent and ad-free</h2>
+                    <p className="mt-1 max-w-2xl text-xs leading-relaxed text-zinc-400">Optional support helps cover secure hosting, storage, and AI infrastructure. It never changes your access, ranking, judgment results, or community standing.</p>
+                  </div>
+                  <a href={supportCheckoutUrl} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-400 px-4 py-2.5 text-xs font-black text-zinc-950 transition hover:bg-amber-300">
+                    Help the Brotherhood
+                    <ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </aside>
+              )}
 
               {/* 3. DAILY QUESTS & CREATIVE STREAK BOARD */}
               <DailyQuestsWidget onNavigateToApp={(appId) => navigateTo(appId as SuiteAppId)} />
