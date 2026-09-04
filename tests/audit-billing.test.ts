@@ -183,3 +183,19 @@ test('tester feedback opens a bounded pre-addressed diagnostic email', async () 
   assert.match(app, /maxLength=\{2000\}/);
   assert.match(app, /Review the message before sending it directly to Christopher/);
 });
+
+
+test('ad-free support CTAs remain hidden until a validated Stripe Payment Link exists', async () => {
+  const [app, server] = await Promise.all([
+    readFile('src/App.tsx', 'utf8'),
+    readFile('server.ts', 'utf8'),
+  ]);
+  assert.match(server, /process\.env\.STRIPE_SUPPORT_PAYMENT_LINK/);
+  assert.match(server, /url\.hostname !== 'buy\.stripe\.com'/);
+  assert.match(server, /enabled: checkoutUrl !== null/);
+  assert.match(app, /Help keep the Brotherhood independent and ad-free/);
+  assert.match(app, /It never changes your access, ranking, judgment results, or community standing/);
+  assert.match(app, /supportCheckoutUrl &&/);
+  assert.match(app, /Keep It Ad-Free/);
+  assert.match(app, /rel="noopener noreferrer"/);
+});
