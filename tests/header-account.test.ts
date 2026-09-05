@@ -62,6 +62,8 @@ test("signup reserves one artist name and ends the unverified Firebase session",
   assert.match(auth, /authenticatedFetch\('\/api\/account\/claim-name'/);
   assert.match(auth, /await sendEmailVerification\(result\.user\);[\s\S]*await logoutUser\(\);/);
   assert.match(modal, /setTab\('signin'\)/);
+  assert.match(modal, /check Spam, Junk, Promotions/);
+  assert.match(modal, /search for “Verify your email” from IndieBrotherhood/);
   assert.match(names, /runTransaction/);
   assert.match(names, /NAME_UNAVAILABLE/);
   assert.match(names, /accountNameClaims/);

@@ -235,8 +235,6 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
       artistHandle: updatedUser.artistHandle,
       avatarUrl: updatedUser.avatarUrl,
     });
-    setIsEditingEnv(false);
-
     awardXP({
       amount: 150,
       actionTitle: 'Customized Artist Environment & Studio Setup',
