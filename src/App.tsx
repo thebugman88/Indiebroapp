@@ -598,15 +598,22 @@ function SuiteApp() {
             {currentUser.id!=='guest'&&<button onClick={()=>setIsReferralOpen(true)} className="hidden lg:block rounded-xl border border-amber-500/30 px-2 py-1.5 text-xs font-bold text-amber-300 whitespace-nowrap" title="Profile completion and verified referral rewards">Invite & Earn</button>}
             <HeaderPlanAndCoins user={currentUser} />
             <button
-              onClick={() => setIsAuthModalOpen(true)}
+              onClick={() => currentUser.id === 'guest' ? setIsAuthModalOpen(true) : navigateTo('artist-profile')}
               className={`p-1.5 sm:p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
                 currentUser.isAdmin
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-amber-500/40'
               }`}
-              title={currentUser.isAdmin ? 'Verified administrator' : currentUser.id !== 'guest' ? 'Account and sign out' : 'Sign In / Recover Account'}
+              title={currentUser.isAdmin ? 'Open Christopher Ray profile' : currentUser.id !== 'guest' ? 'Open my profile' : 'Sign In / Recover Account'}
             >
-              {currentUser.isAdmin ? (
+              {currentUser.avatarUrl ? (
+                <>
+                  <img src={currentUser.avatarUrl} alt="" className="h-5 w-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                  <span className="hidden max-w-28 truncate text-[11px] sm:inline">
+                    {currentUser.displayName}
+                  </span>
+                </>
+              ) : currentUser.isAdmin ? (
                 <>
                   <Crown className="w-4 h-4 text-amber-400" />
                   <span className="hidden xl:inline text-[11px]">Christopher Ray</span>

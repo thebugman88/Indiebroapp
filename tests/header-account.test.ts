@@ -28,6 +28,29 @@ test("regular authenticated artists replace Login and can open Plan & Coins", as
   assert.match(modal, /setIsProfileModalOpen\(true\)/);
 });
 
+test("the signed-in header identity opens the artist profile instead of authentication", async () => {
+  const app = await readFile("src/App.tsx", "utf8");
+  assert.match(app, /currentUser\.id === 'guest' \? setIsAuthModalOpen\(true\) : navigateTo\('artist-profile'\)/);
+  assert.match(app, /currentUser\.avatarUrl \? \(/);
+});
+
+test("signup bonus retries after a pre-verification or temporary request failure", async () => {
+  const notice = await readFile("src/components/SignupBonusNotice.tsx", "utf8");
+  assert.match(notice, /if \(!response\.ok \|\| stopped\) return;/);
+  assert.match(notice, /checkedUid\.current = user\.id;/);
+  assert.ok(notice.indexOf("if (!response.ok || stopped) return;") < notice.indexOf("checkedUid.current = user.id;"));
+  assert.match(notice, /addEventListener\("focus", check\)/);
+  assert.match(notice, /visibilitychange/);
+});
+
+test("artist profile places sign out in its bottom account section", async () => {
+  const profile = await readFile("src/components/ArtistProfilePage.tsx", "utf8");
+  assert.match(profile, /Account &amp; security/);
+  assert.match(profile, /await logoutUser\(\);/);
+  assert.match(profile, /onNavigateToApp\('hub'\);/);
+  assert.ok(profile.indexOf("Account &amp; security") < profile.indexOf("ADD UNRELEASED DEMO MODAL"));
+});
+
 test("Coin action labels disclose deductions, free use and insufficient balances", () => {
   assert.equal(coinActionLabel("/api/generate-lyrics", 100), "Advanced Lyric AI · 10 BC");
   assert.equal(coinActionLabel("/api/generate-lyrics", 5), "Insufficient Coins · 10 BC needed");

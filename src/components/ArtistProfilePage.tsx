@@ -35,6 +35,7 @@ import {
   RefreshCw,
   X,
   Volume2,
+  LogOut,
 } from 'lucide-react';
 import {
   RegisteredUser,
@@ -43,6 +44,7 @@ import {
   STUDIO_AURAS,
   getCurrentAuthUser,
   saveCurrentAuthUser,
+  logoutUser,
 } from '../services/authService';
 import { useGamification } from '../context/GamificationContext';
 
@@ -117,6 +119,7 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
 
   // Tab state within profile
   const [activeTab, setActiveTab] = useState<'catalog' | 'environment' | 'gamify' | 'admin'>('catalog');
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Stop audio on unmount
   useEffect(() => {
@@ -986,6 +989,30 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
             </div>
           </div>
         </div>
+      )}
+
+      {uid !== 'guest' && (
+        <section className="mx-auto mt-8 max-w-7xl px-4 pb-10 md:px-8" aria-labelledby="account-security-title">
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 id="account-security-title" className="text-sm font-bold text-white">Account &amp; security</h2>
+              <p className="mt-1 text-xs text-slate-400">Signed in as {currentUser.email}. Sign out when you are finished on this device.</p>
+            </div>
+            <button
+              type="button"
+              disabled={isSigningOut}
+              onClick={async () => {
+                setIsSigningOut(true);
+                await logoutUser();
+                onNavigateToApp('hub');
+              }}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-wait disabled:opacity-60"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              {isSigningOut ? 'Signing out…' : 'Sign Out'}
+            </button>
+          </div>
+        </section>
       )}
 
       {/* ADD UNRELEASED DEMO MODAL */}

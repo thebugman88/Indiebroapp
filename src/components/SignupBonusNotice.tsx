@@ -13,17 +13,38 @@ export function SignupBonusNotice({ user }: { user: RegisteredUser }) {
       setAmount(null);
       return;
     }
-    if (checkedUid.current === user.id) return;
-    checkedUid.current = user.id;
-    authenticatedFetch("/api/economy/signup-bonus", { method: "POST" })
-      .then(async (response) => {
+    let stopped = false;
+    let checking = false;
+    const check = async () => {
+      if (stopped || checking || checkedUid.current === user.id) return;
+      checking = true;
+      try {
+        const response = await authenticatedFetch("/api/economy/signup-bonus", { method: "POST" });
         const body = await response.json();
-        if (response.ok && body.announcementPending && Number.isFinite(body.amount)) {
+        if (!response.ok || stopped) return;
+        // A failed pre-verification request must never suppress the later verified check.
+        checkedUid.current = user.id;
+        if (body.announcementPending && Number.isFinite(body.amount)) {
           setAmount(body.amount);
           window.dispatchEvent(new CustomEvent("ib_wallet_changed"));
         }
-      })
-      .catch(() => {});
+      } catch {
+        // Network and stale-token failures are retried on focus or visibility change.
+      } finally {
+        checking = false;
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    void check();
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [user.id]);
 
   if (amount === null) return null;
