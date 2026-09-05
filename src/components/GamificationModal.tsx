@@ -304,7 +304,7 @@ export const GamificationModal: React.FC = () => {
         </div>
 
         {/* 3. Navigation Tabs */}
-        <div className="flex items-center border-b border-zinc-800 bg-zinc-950 px-4 sm:px-6 overflow-x-auto text-xs font-medium scrollbar-none">
+        <div className="flex min-h-12 shrink-0 items-center border-b border-zinc-800 bg-zinc-950 px-4 sm:px-6 overflow-x-auto text-xs font-medium scrollbar-none">
           <button
             onClick={() => setActiveTab('overview')}
             className={`py-3 px-3.5 border-b-2 font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
