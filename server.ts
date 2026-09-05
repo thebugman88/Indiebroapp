@@ -47,6 +47,20 @@ dotenv.config();
 
 const app = express();
 app.disable('x-powered-by');
+// Reject common automated exploit probes before the SPA fallback can answer
+// with index.html and a misleading 200 response.
+app.use((req, res, next) => {
+  const probePath = req.path.toLowerCase();
+  if (
+    /(?:^|\/)\.(?:git|env)(?:\/|$)/.test(probePath) ||
+    /^\/(?:xmlrpc\.php|wp-admin|wp-login\.php|wp-json)(?:\/|$)/.test(probePath)
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendStatus(404);
+    return;
+  }
+  next();
+});
 app.use(httpProtection);
 const PORT = Number(process.env.PORT || 3000);
 

@@ -342,17 +342,30 @@ export function startPaymentMonitor(getStripe: () => Stripe | null) {
   const run = async () => {
     if (busy) return;
     busy = true;
+    let stage = "privacy_cleanup";
     try {
       await purgeExpiredPrivateResults().catch(()=>console.warn('[Privacy cleanup] Cleanup unavailable; expired content remains inaccessible.'));
       const stripe = getStripe();
-      if (stripe) await reconcilePayments(stripe);
+      if (stripe) {
+        stage = "stripe_reconciliation";
+        await reconcilePayments(stripe);
+      }
       else {
+        stage = "usage_recovery";
         await recoverExpiredUsage();
+        stage = "upload_recovery";
         await recoverUploads();
       }
-    } catch {
+    } catch (error: any) {
+      const code = typeof error?.code === "number" || typeof error?.code === "string"
+        ? String(error.code).slice(0, 40)
+        : "UNKNOWN";
+      const reason = /requires an index/i.test(String(error?.message || ""))
+        ? "FIRESTORE_INDEX_REQUIRED"
+        : "DEPENDENCY_UNAVAILABLE";
       console.warn(
         "[Payment monitor] Reconciliation unavailable; durable pending records retained.",
+        { stage, code, reason },
       );
     } finally {
       busy = false;

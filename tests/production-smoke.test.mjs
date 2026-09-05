@@ -38,7 +38,7 @@ test('production server blocks audit exploits without configured credentials', {
   assert.equal(page.headers.get('x-frame-options'),'DENY');
   assert.match(page.headers.get('content-security-policy'),/script-src 'self' 'wasm-unsafe-eval'/);
   assert.equal((await fetch(base+'/api/privacy/key')).headers.get('cache-control'),'private, no-store');
-  for (const route of ['/server.cjs', '/server.cjs.map']) assert.equal((await fetch(base + route)).status, 404, route);
+  for (const route of ['/server.cjs', '/server.cjs.map', '/.git/config', '/.env', '/xmlrpc.php', '/wp-json/batch/v1']) assert.equal((await fetch(base + route)).status, 404, route);
   assert.equal((await fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 503);
   await new Promise((resolve, reject) => {
     const socket = new WebSocket(`ws://127.0.0.1:${port}`);

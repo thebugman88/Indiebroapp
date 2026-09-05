@@ -91,6 +91,14 @@ test("floating wallet opens a compact summary before the full purchase screen", 
   assert.match(wallet, /month: body\.month/);
 });
 
+test("payment monitoring reports a safe failure stage without discarding pending records", async () => {
+  const payments = await readFile("server/payments.ts", "utf8");
+  assert.match(payments, /stage = "stripe_reconciliation"/);
+  assert.match(payments, /FIRESTORE_INDEX_REQUIRED/);
+  assert.match(payments, /\{ stage, code, reason \}/);
+  assert.match(payments, /durable pending records retained/);
+});
+
 test("profile edit opens real settings and supports bounded local photo uploads", async () => {
   const profile = await readFile("src/components/ArtistProfilePage.tsx", "utf8");
   assert.match(profile, /setActiveTab\('environment'\)/);
