@@ -5,6 +5,7 @@ import { AI_ACTIONS, ECONOMY_VERSION } from '../../shared/economy';
 import { initializeApp, getApps } from 'firebase/app';
 import { initializeAuth, getAuth, setPersistence, inMemoryPersistence, onIdTokenChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, sendEmailVerification, updateProfile, signOut, type User } from 'firebase/auth';
+import { deleteUser } from 'firebase/auth';
 
 export interface RegisteredUser {
   id: string;
@@ -187,10 +188,32 @@ export async function registerUser(params: { email: string; displayName: string;
   try {
     await persistenceReady;
     const result = await createUserWithEmailAndPassword(requireAuthClient(), params.email.trim(), params.password);
-    await updateProfile(result.user, { displayName: params.displayName.trim() });
-    let message = 'Account created. Check your email to verify your address.';
-    try { await sendEmailVerification(result.user); } catch { message = 'Account created. Verification email could not be sent; use Resend verification.'; }
-    return { success: true, user: await syncUser(result.user), message };
+    try {
+      const claim = await authenticatedFetch('/api/account/claim-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: params.displayName }),
+      });
+      const body = await claim.json();
+      if (!claim.ok) throw new Error(body?.error || 'Artist-name registration failed.');
+      await updateProfile(result.user, { displayName: body.displayName });
+      let message = 'Account created and artist name reserved. Verify your email, then return here and sign in.';
+      try {
+        await sendEmailVerification(result.user);
+      } catch {
+        message = 'Account and artist name were created, but the verification email could not be sent. Sign in and choose Resend verification.';
+      }
+      const registeredUid = result.user.uid;
+      await logoutUser();
+      return {
+        success: true,
+        registeredUid,
+        message,
+      };
+    } catch (error) {
+      try { await deleteUser(result.user); } catch { await logoutUser().catch(() => {}); }
+      return { success: false, error: (error as Error).message || 'Unable to complete account registration.' };
+    }
   } catch (error) { return { success: false, error: authError(error) }; }
 }
 export async function recoverAccount(params: { email: string }) {

@@ -100,7 +100,6 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
 
   // Profile Edit State
   const [isEditingEnv, setIsEditingEnv] = useState(false);
-  const [editDisplayName, setEditDisplayName] = useState(currentUser.displayName);
   const [editHandle, setEditHandle] = useState(currentUser.artistHandle || '');
   const [editBio, setEditBio] = useState(currentUser.bio || '');
   const [editDaw, setEditDaw] = useState(currentUser.dawSetup || 'Ableton Live 12 Suite');
@@ -184,12 +183,6 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
           badgeIncrement: 1,
         });
 
-        // Update display name if user desires
-        if (!currentUser.displayName || currentUser.displayName === 'Independent Creator') {
-          const updatedUser = { ...currentUser, displayName: artist.artistName };
-          onUpdateUser(updatedUser);
-          saveCurrentAuthUser(updatedUser);
-        }
       }
     } catch (err: any) {
       if (isCurrent()) setCatalogError(err.message || 'Catalog could not be saved.');
@@ -224,7 +217,7 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
   const handleSaveEnvironment = () => {
     const updatedUser: RegisteredUser = {
       ...currentUser,
-      displayName: editDisplayName.trim() || currentUser.displayName,
+      displayName: currentUser.displayName,
       artistHandle: editHandle.trim() || currentUser.artistHandle,
       bio: editBio.trim(),
       dawSetup: editDaw,

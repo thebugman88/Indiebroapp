@@ -61,6 +61,7 @@ import { getAuth } from "firebase-admin/auth";
 import { deleteApp } from "firebase-admin/app";
 import { getFirebaseAdminApp, requireAuth, requireAdmin } from "../server/auth";
 import { judgementRouter, freshJudge } from "../server/judgement";
+import { claimAccountName } from "../server/accountNames";
 import { createMessagingRouter, conversationId } from "../server/messaging";
 import {
   recordSubscriptionEvent,
@@ -511,6 +512,20 @@ test("verified new accounts receive the signup bonus once and acknowledge its no
   const old = await claimSignupBonus("legacy-account", SIGNUP_BONUS_START_AT - 1);
   assert.equal(old.eligible, false);
   assert.equal((await walletSnapshot("legacy-account")).total, 150);
+});
+
+test("artist names are normalized, transactionally unique and permanently attached", async () => {
+  assert.deepEqual(await claimAccountName("alice", "  CBUG   Music  "), {
+    displayName: "CBUG Music",
+    claimed: true,
+  });
+  assert.deepEqual(await claimAccountName("alice", "cbug music"), {
+    displayName: "cbug music",
+    claimed: false,
+  });
+  await assert.rejects(() => claimAccountName("bob", "Cbug Music"), /NAME_UNAVAILABLE/);
+  await assert.rejects(() => claimAccountName("alice", "Different Name"), /NAME_LOCKED/);
+  await assert.rejects(() => claimAccountName("carol", "x"), /INVALID_NAME/);
 });
 
 test("AI requests require price consent and bind idempotency to input; delivered results remain owner-only", async () => {

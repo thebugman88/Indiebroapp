@@ -19,9 +19,23 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
         const result = await recoverAccount({ email });
         setMessage(result.message || result.error || 'Please try again.');
       } else {
-        const result = tab === 'signup' ? await registerUser({ email, password, displayName }) : await loginUser(email, password);
-        if (result.success && result.user) { if(tab==='signup')rememberReferralInvite(result.user.id,referralCode);setPassword(''); onSuccess(result.user); setMessage('Signed in. Check your email if verification is pending.'); onClose(); }
-        else setMessage(result.error || 'Unable to sign in.');
+        if (tab === 'signup') {
+          const result = await registerUser({ email, password, displayName });
+          if (result.success && result.registeredUid) {
+            rememberReferralInvite(result.registeredUid, referralCode);
+            setPassword('');
+            setTab('signin');
+            setMessage(result.message || 'Verify your email, then sign in.');
+          } else setMessage(result.error || 'Unable to create account.');
+        } else {
+          const result = await loginUser(email, password);
+          if (result.success && result.user) {
+            setPassword('');
+            onSuccess(result.user);
+            setMessage('Signed in.');
+            onClose();
+          } else setMessage(result.error || 'Unable to sign in.');
+        }
       }
     } finally { setBusy(false); }
   };

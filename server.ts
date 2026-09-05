@@ -14,6 +14,7 @@ import { extraAiRouter } from './server/extraAi';
 import { decodeAudioDataUrl, textField, safeId } from './server/media';
 import { semanticRouter } from './server/semantic';
 import { requireAuth, requireAdmin } from './server/auth';
+import { accountNamesRouter } from './server/accountNames';
 import { createBillingRouter, createStripeWebhook } from './server/billing';
 import express, { Request, Response } from 'express';
 import path from 'path';
@@ -96,6 +97,9 @@ app.get('/api/privacy/key', (req, res) => {
   if (res.locals.identity?.email_verified !== true) return res.status(403).json({error:'Verify your email before unlocking private storage.'});
   try { return res.json(browserKeys(res.locals.identity.uid)); } catch { return res.status(503).json({error:'Private storage encryption is not configured.'}); }
 });
+// Name claiming is allowed before email verification so signup can reserve one
+// immutable, server-authoritative artist identity before ending the session.
+app.use('/api/account', accountNamesRouter);
 app.use('/api/stripe', createBillingRouter(getStripeClient));
 app.use(usageMiddleware);
 app.get('/api/legal/terms',(_req,res)=>res.type('text/plain').send('IndieBrotherhood — Purchase Terms and AI Disclosure\n\n'+PURCHASE_POLICY));

@@ -57,7 +57,6 @@ export const GamificationModal: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'notifications' | 'messages' | 'billing' | 'badges' | 'history' | 'sentinel' | 'customize'>('overview');
   const [editingName, setEditingName] = useState(false);
-  const [tempName, setTempName] = useState(profile.displayName);
   const [tempHandle, setTempHandle] = useState(profile.artistHandle || '@creator');
   const [customAvatarUrl, setCustomAvatarUrl] = useState(profile.avatarUrl || '');
 
@@ -127,10 +126,10 @@ export const GamificationModal: React.FC = () => {
 
   const handleSaveIdentity = () => {
     updateProfile({
-      displayName: tempName.trim() || 'Independent Creator',
+      displayName: profile.displayName,
       artistHandle: tempHandle.trim().startsWith('@') ? tempHandle.trim() : `@${tempHandle.trim()}`,
       avatarUrl: customAvatarUrl.trim() || undefined,
-      avatarSeed: getInitials(tempName)
+      avatarSeed: getInitials(profile.displayName)
     });
     setEditingName(false);
   };
@@ -210,11 +209,10 @@ export const GamificationModal: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"
-                        value={tempName}
-                        onChange={(e) => setTempName(e.target.value)}
-                        placeholder="Creator Name"
-                        className="bg-zinc-900 border border-amber-500/60 text-white text-xs font-bold px-2 py-1 rounded-lg focus:outline-none w-36"
-                        autoFocus
+                        value={profile.displayName}
+                        readOnly
+                        title="Artist name is permanently reserved to this account"
+                        className="bg-zinc-950 border border-zinc-800 text-zinc-400 text-xs font-bold px-2 py-1 rounded-lg focus:outline-none w-36 cursor-not-allowed"
                       />
                       <input
                         type="text"
@@ -239,7 +237,6 @@ export const GamificationModal: React.FC = () => {
                       <span className="text-xs text-zinc-400 font-mono">{profile.artistHandle || '@creator'}</span>
                       <button
                         onClick={() => {
-                          setTempName(profile.displayName);
                           setTempHandle(profile.artistHandle || '@creator');
                           setEditingName(true);
                         }}

@@ -51,6 +51,24 @@ test("artist profile places sign out in its bottom account section", async () =>
   assert.ok(profile.indexOf("Account &amp; security") < profile.indexOf("ADD UNRELEASED DEMO MODAL"));
 });
 
+test("signup reserves one artist name and ends the unverified Firebase session", async () => {
+  const [auth, modal, names, profile, progression] = await Promise.all([
+    readFile("src/services/authService.ts", "utf8"),
+    readFile("src/components/AuthModal.tsx", "utf8"),
+    readFile("server/accountNames.ts", "utf8"),
+    readFile("src/components/ArtistProfilePage.tsx", "utf8"),
+    readFile("src/components/GamificationModal.tsx", "utf8"),
+  ]);
+  assert.match(auth, /authenticatedFetch\('\/api\/account\/claim-name'/);
+  assert.match(auth, /await sendEmailVerification\(result\.user\);[\s\S]*await logoutUser\(\);/);
+  assert.match(modal, /setTab\('signin'\)/);
+  assert.match(names, /runTransaction/);
+  assert.match(names, /NAME_UNAVAILABLE/);
+  assert.match(names, /accountNameClaims/);
+  assert.match(profile, /displayName: currentUser\.displayName/);
+  assert.match(progression, /value=\{profile\.displayName\}[\s\S]*readOnly/);
+});
+
 test("Coin action labels disclose deductions, free use and insufficient balances", () => {
   assert.equal(coinActionLabel("/api/generate-lyrics", 100), "Advanced Lyric AI · 10 BC");
   assert.equal(coinActionLabel("/api/generate-lyrics", 5), "Insufficient Coins · 10 BC needed");
