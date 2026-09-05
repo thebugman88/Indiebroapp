@@ -230,10 +230,12 @@ app.post('/api/security/remediate', (req, res) => {
 // -------------------------------------------------------------
 app.get('/api/stripe/config', (_req, res) => {
   const publishableKey = process.env.VITE_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY || '';
-  const isConfigured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET && process.env.STRIPE_PRICE_ID_PRO && process.env.FIREBASE_PROJECT_ID && process.env.APP_PUBLIC_URL);
+  const coinPacksConfigured = !!(process.env.STRIPE_PRICE_ID_COINS100 && process.env.STRIPE_PRICE_ID_COINS250);
+  const isConfigured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET && process.env.STRIPE_PRICE_ID_PRO && coinPacksConfigured && process.env.FIREBASE_PROJECT_ID && process.env.APP_PUBLIC_URL);
   res.json({
     publishableKey,
     isConfigured,
+    coinPacksConfigured,
     tier: 'pro',
     priceId: process.env.STRIPE_PRICE_ID_PRO || 'price_indiebrotherhood_pro_1499',
     monthlyPriceUsd: 14.99,

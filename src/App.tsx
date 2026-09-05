@@ -48,6 +48,7 @@ import { DirectMessagesModal } from './components/DirectMessagesModal';
 import { NotificationCenter } from './components/NotificationCenter';
 import { NotificationToastContainer } from './components/NotificationToastContainer';
 import { AdminControlRoomModal } from './components/AdminControlRoomModal';
+import { HeaderPlanAndCoins } from './components/HeaderPlanAndCoins';
 import { grantUserXP } from './services/gamification';
 import {
   getCurrentAuthUser,
@@ -592,6 +593,7 @@ function SuiteApp() {
 
             {/* Login / Profile Switcher Button */}
             {currentUser.id!=='guest'&&<button onClick={()=>setIsReferralOpen(true)} className="hidden lg:block rounded-xl border border-amber-500/30 px-2 py-1.5 text-xs font-bold text-amber-300 whitespace-nowrap" title="Profile completion and verified referral rewards">Invite & Earn</button>}
+            <HeaderPlanAndCoins user={currentUser} />
             <button
               onClick={() => setIsAuthModalOpen(true)}
               className={`p-1.5 sm:p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
@@ -599,12 +601,21 @@ function SuiteApp() {
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-amber-500/40'
               }`}
-              title={currentUser.isAdmin ? 'Verified administrator' : 'Sign In / Recover Account'}
+              title={currentUser.isAdmin ? 'Verified administrator' : currentUser.id !== 'guest' ? 'Account and sign out' : 'Sign In / Recover Account'}
             >
               {currentUser.isAdmin ? (
                 <>
                   <Crown className="w-4 h-4 text-amber-400" />
                   <span className="hidden xl:inline text-[11px]">Christopher Ray</span>
+                </>
+              ) : currentUser.id !== 'guest' ? (
+                <>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/15 text-[9px] font-black text-amber-300">
+                    {currentUser.avatarSeed || currentUser.displayName.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="hidden max-w-28 truncate text-[11px] sm:inline">
+                    {currentUser.displayName}
+                  </span>
                 </>
               ) : (
                 <span className="text-[11px] px-1">Login</span>

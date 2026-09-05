@@ -11,6 +11,7 @@
     "test:security": "node --import tsx --test tests/*.test.ts",
     "test:production": "node --test tests/production-smoke.test.mjs",
     "test:firebase": "node scripts/test-firebase.mjs",
+    "check:stripe-live": "node scripts/check-stripe-live.mjs",
     "check:staging": "node scripts/check-staging.mjs",
     "check:apps": "node scripts/check-apps.mjs"
   },

@@ -65,6 +65,15 @@ export const GamificationModal: React.FC = () => {
   const [unreadNotifications, setUnreadNotifications] = useState<number>(getUnreadNotificationCount);
   const [unreadDms, setUnreadDms] = useState<number>(() => getUnreadDmCount(getCurrentAuthUser().id));
 
+  useEffect(() => {
+    const openPlanAndCoins = () => {
+      setActiveTab('billing');
+      setIsProfileModalOpen(true);
+    };
+    window.addEventListener('ib_open_plan_coins', openPlanAndCoins);
+    return () => window.removeEventListener('ib_open_plan_coins', openPlanAndCoins);
+  }, [setIsProfileModalOpen]);
+
   // Synchronize unread notifications and DMs
   useEffect(() => {
     const updateCounters = () => {

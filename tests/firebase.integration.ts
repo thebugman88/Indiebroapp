@@ -404,7 +404,8 @@ const fakeStripe = {
       id,
       active: true,
       currency: "usd",
-      unit_amount: id === "price_pro" ? 1499 : 99,
+      unit_amount:
+        id === "price_pro" ? 1499 : id === "price_coins250" ? 199 : 99,
       recurring:
         id === "price_pro" ? { interval: "month", interval_count: 1 } : null,
     }),
@@ -695,6 +696,7 @@ test("out-of-order refund before delivery never mints Coins or takes unrelated p
 });
 test("checkout uses verified identity, exact configured prices, accepted terms and stable per-user idempotency", async () => {
   process.env.STRIPE_PRICE_ID_COINS100 = "price_coins100";
+  process.env.STRIPE_PRICE_ID_COINS250 = "price_coins250";
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_emulator_only";
   process.env.APP_PUBLIC_URL = "https://suite.example";
   const body = {
@@ -720,6 +722,19 @@ test("checkout uses verified identity, exact configured prices, accepted terms a
   assert.equal(checkoutParams.consent_collection.terms_of_service, "required");
   assert.ok(checkoutParams.success_url.startsWith("https://suite.example/"));
   const options = checkoutOptions;
+  assert.equal(
+    (
+      await request("/billing/create-checkout-session", "carol", "POST", {
+        ...body,
+        productId: "coins250",
+        clientCustomKey: "large-checkout-request-123",
+        expectedCoins: 250,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(checkoutParams.line_items[0].price, "price_coins250");
+  assert.equal(checkoutParams.client_reference_id, "carol");
   assert.equal(
     (await request("/billing/create-checkout-session", "bob", "POST", body))
       .status,
