@@ -1,4 +1,5 @@
 import { authenticatedFetch } from '../../../src/services/authService';
+import { useCoinAction } from '../../../src/useCoinAction';
 import React, { useState } from "react";
 import {
   Calendar,
@@ -38,6 +39,7 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
   onUpdateEvent,
   onDeleteEvent,
 }) => {
+  const roadmapCoin = useCoinAction('/api/ai/strategy-plan');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRoadmapModal, setShowRoadmapModal] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -390,7 +392,7 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
               </button>
               <button
                 type="button"
-                disabled={isGeneratingRoadmap}
+                disabled={isGeneratingRoadmap || roadmapCoin.insufficient}
                 title={roadmapError || undefined} onClick={handleGenerate8WeekRoadmap}
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20"
               >
@@ -402,7 +404,7 @@ export const ReleaseScheduler: React.FC<ReleaseSchedulerProps> = ({
                 ) : (
                   <>
                     <Zap className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Generate Rollout</span>
+                    <span>{roadmapCoin.insufficient ? roadmapCoin.label : `Generate Rollout · ${roadmapCoin.action?.cost ?? 20} BC`}</span>
                   </>
                 )}
               </button>

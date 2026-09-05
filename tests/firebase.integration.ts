@@ -18,6 +18,7 @@ import {
   keyFor,
   awardReviewCoins,
   awardProfileCoins,
+  claimSignupBonus,
 } from "../server/economy";
 import {
   initializePayment,
@@ -27,7 +28,7 @@ import {
   reconcilePayments,
 } from "../server/payments";
 import { createBillingRouter } from "../server/billing";
-import { TERMS_VERSION, ECONOMY_VERSION } from "../shared/economy";
+import { TERMS_VERSION, ECONOMY_VERSION, SIGNUP_BONUS_COINS, SIGNUP_BONUS_START_AT } from "../shared/economy";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -483,6 +484,35 @@ test("wallet reservations prevent concurrent overspending and duplicate charges;
   ]);
   assert.equal((await walletSnapshot(uid)).total, 10);
 });
+test("verified new accounts receive the signup bonus once and acknowledge its notice", async () => {
+  assert.equal((await request("/api/economy/signup-bonus", "unverified", "POST")).status, 403);
+  const uid = "signup-bonus-member";
+  await makeUser(uid);
+  const before = await walletSnapshot(uid);
+  const first = await request("/api/economy/signup-bonus", uid, "POST");
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), {
+    eligible: true,
+    awarded: true,
+    announcementPending: true,
+    amount: SIGNUP_BONUS_COINS,
+  });
+  assert.equal((await walletSnapshot(uid)).total, before.total + SIGNUP_BONUS_COINS);
+
+  const replay = await (await request("/api/economy/signup-bonus", uid, "POST")).json();
+  assert.equal(replay.awarded, false);
+  assert.equal(replay.announcementPending, true);
+  assert.equal((await walletSnapshot(uid)).total, before.total + SIGNUP_BONUS_COINS);
+
+  assert.equal((await request("/api/economy/signup-bonus/acknowledge", uid, "POST")).status, 200);
+  const acknowledged = await (await request("/api/economy/signup-bonus", uid, "POST")).json();
+  assert.equal(acknowledged.announcementPending, false);
+
+  const old = await claimSignupBonus("legacy-account", SIGNUP_BONUS_START_AT - 1);
+  assert.equal(old.eligible, false);
+  assert.equal((await walletSnapshot("legacy-account")).total, 150);
+});
+
 test("AI requests require price consent and bind idempotency to input; delivered results remain owner-only", async () => {
   const body = { lyrics: "original words" },
     id = "ai-consent-request";

@@ -3,6 +3,7 @@ import { flushPrivateStorage } from '../../shared/privateStorage';
 import { currentPrivateStorage } from '../../shared/privateStorage';
 import { createLyricVault } from './vault';
 import { authenticatedFetch, getCurrentAuthUser } from '../../src/services/authService';
+import { useCoinAction } from '../../src/useCoinAction';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
@@ -58,6 +59,7 @@ export default function App() {
 }
 
 function LyricStudio({ accountId }: { accountId: string }) {
+  const lyricCoin = useCoinAction('/api/generate-lyrics');
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -597,7 +599,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
                   setPendingAutoMode(false);
                   setIsDisclaimerOpen(true);
                 }}
-                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0}
+                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0 || lyricCoin.insufficient}
                 className={`w-full py-4.5 sm:py-5 min-h-[56px] font-black text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-[0_10px_25px_-3px_rgba(245,158,11,0.35),0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center space-x-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 cursor-pointer border ${
                   isAccountPaused
                     ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 cursor-not-allowed'
@@ -619,7 +621,7 @@ function LyricStudio({ accountId }: { accountId: string }) {
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5 fill-zinc-950 stroke-zinc-950 shrink-0" />
-                    <span>GENERATE 2 LYRIC BLUEPRINTS (A & B)</span>
+                    <span>{lyricCoin.insufficient ? lyricCoin.label : `GENERATE 2 LYRIC BLUEPRINTS (A & B) · ${lyricCoin.action?.cost ?? 10} BC`}</span>
                   </>
                 )}
               </button>
@@ -634,11 +636,11 @@ function LyricStudio({ accountId }: { accountId: string }) {
                   setPendingAutoMode(true);
                   setIsDisclaimerOpen(true);
                 }}
-                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0}
+                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0 || lyricCoin.insufficient}
                 className="w-full py-3.5 min-h-[48px] bg-zinc-900 border border-zinc-800 hover:border-amber-400/60 text-zinc-200 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-2 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-md disabled:opacity-50"
               >
                 <Dice5 className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>AUTO SELECT (RANDOMIZED LYRICS)</span>
+                <span>{lyricCoin.insufficient ? lyricCoin.label : `AUTO SELECT (RANDOMIZED LYRICS) · ${lyricCoin.action?.cost ?? 10} BC`}</span>
               </button>
             </div>
 

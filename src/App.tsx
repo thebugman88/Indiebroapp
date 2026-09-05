@@ -49,6 +49,9 @@ import { NotificationCenter } from './components/NotificationCenter';
 import { NotificationToastContainer } from './components/NotificationToastContainer';
 import { AdminControlRoomModal } from './components/AdminControlRoomModal';
 import { HeaderPlanAndCoins } from './components/HeaderPlanAndCoins';
+import { PersistentCoinWallet } from './components/PersistentCoinWallet';
+import { SignupBonusNotice } from './components/SignupBonusNotice';
+import { CoinWalletProvider } from './context/CoinWalletContext';
 import { grantUserXP } from './services/gamification';
 import {
   getCurrentAuthUser,
@@ -1198,6 +1201,8 @@ function SuiteApp() {
       <GamificationModal />
       <PurchaseDialog />
       <NotificationToastContainer onNavigateTo={(appId) => navigateTo(appId as SuiteAppId)} />
+      <PersistentCoinWallet user={currentUser} activeApp={activeApp} />
+      <SignupBonusNotice user={currentUser} />
 
       {/* Founder Christopher Ray Admin Control Room Modal */}
       <AdminControlRoomModal
@@ -1274,8 +1279,10 @@ function SuiteApp() {
 
 export default function App() {
   return (
-    <GamificationProvider>
-      <SuiteApp />
-    </GamificationProvider>
+    <CoinWalletProvider>
+      <GamificationProvider>
+        <SuiteApp />
+      </GamificationProvider>
+    </CoinWalletProvider>
   );
 }

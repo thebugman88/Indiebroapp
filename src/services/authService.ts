@@ -273,6 +273,9 @@ export async function authenticatedFetch(input: string, init: RequestInit = {}) 
     const deliveryUncertain = response.status === 503 && typeof body?.jobId === 'string';
     if (!pending && !deliveryUncertain) closeAiRequest(aiStorageKey);
   }
+  if (action && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ib_wallet_changed'));
+  }
   return response;
 }
 

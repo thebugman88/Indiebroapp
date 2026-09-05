@@ -3,6 +3,7 @@ import { decodeJudgeProfile } from './profileProtection';
 import {advanceReferralActivity, REFERRAL_TOOL_PATHS, type ReferralActivity} from '../shared/referrals';
 import { createHash, randomUUID } from "node:crypto";
 import { getFirestore, FieldValue, type Transaction } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import express from "express";
 import { getFirebaseAdminApp, requireVerifiedEmail } from "./auth";
 import {
@@ -13,6 +14,8 @@ import {
   GB,
   STORAGE_GB,
   STORAGE_PACKS,
+  SIGNUP_BONUS_COINS,
+  SIGNUP_BONUS_START_AT,
 } from "../shared/economy";
 export const economyDb = () => getFirestore(getFirebaseAdminApp());
 export const keyFor = (...parts: string[]) =>
@@ -123,6 +126,41 @@ export const walletSnapshot = (uid: string) =>
     economyVersion: ECONOMY_VERSION,
     termsVersion: TERMS_VERSION,
   }));
+
+export async function claimSignupBonus(uid: string, accountCreatedAt: number) {
+  if (!Number.isFinite(accountCreatedAt) || accountCreatedAt < SIGNUP_BONUS_START_AT) {
+    return { eligible: false, awarded: false, announcementPending: false, amount: 0 };
+  }
+  return withWallet(uid, async (w, t) => {
+    const ref = economyDb().doc(`coinRewards/${keyFor(uid, "signup_bonus_v1")}`);
+    const existing = await t.get(ref);
+    if (existing.exists) {
+      const data = existing.data()!;
+      return {
+        eligible: true,
+        awarded: false,
+        announcementPending: !data.announcementAcknowledgedAt,
+        amount: data.amount,
+      };
+    }
+    w.purchased += SIGNUP_BONUS_COINS;
+    t.create(ref, {
+      uid,
+      reason: "verified account signup bonus",
+      category: "promotional",
+      grantVersion: "signup_bonus_v1",
+      amount: SIGNUP_BONUS_COINS,
+      createdAt: Date.now(),
+      announcementAcknowledgedAt: null,
+    });
+    return {
+      eligible: true,
+      awarded: true,
+      announcementPending: true,
+      amount: SIGNUP_BONUS_COINS,
+    };
+  });
+}
 export async function reserveUsage(
   uid: string,
   requestId: string,
@@ -400,6 +438,33 @@ economyRouter.get("/wallet", async (_req, res) => {
     res
       .status(503)
       .json({ error: "Wallet unavailable. No local balance is trusted." });
+  }
+});
+economyRouter.post("/signup-bonus", async (_req, res) => {
+  try {
+    const uid = res.locals.identity.uid;
+    const user = await getAuth(getFirebaseAdminApp()).getUser(uid);
+    const createdAt = Date.parse(user.metadata.creationTime || "");
+    const result = await claimSignupBonus(uid, createdAt);
+    res.json(result);
+  } catch {
+    res.status(503).json({ error: "Signup bonus status is temporarily unavailable." });
+  }
+});
+economyRouter.post("/signup-bonus/acknowledge", async (_req, res) => {
+  try {
+    const uid = res.locals.identity.uid;
+    await economyDb().runTransaction(async (t) => {
+      const ref = economyDb().doc(`coinRewards/${keyFor(uid, "signup_bonus_v1")}`);
+      const reward = await t.get(ref);
+      if (!reward.exists || reward.data()!.uid !== uid) return;
+      if (!reward.data()!.announcementAcknowledgedAt) {
+        t.update(ref, { announcementAcknowledgedAt: Date.now() });
+      }
+    });
+    res.json({ acknowledged: true });
+  } catch {
+    res.status(503).json({ error: "Bonus acknowledgement is temporarily unavailable." });
   }
 });
 economyRouter.get("/history", async (_req, res) => {

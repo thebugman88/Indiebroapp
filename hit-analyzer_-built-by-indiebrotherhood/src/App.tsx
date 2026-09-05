@@ -1,6 +1,7 @@
 import { currentPrivateStorage } from '../../shared/privateStorage';
 import { decodeAudioBuffer } from '../../src/services/webAudioEngine';
 import { authenticatedFetch } from '../../src/services/authService';
+import { useCoinAction } from '../../src/useCoinAction';
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { AudioInputSection } from './components/AudioInputSection';
@@ -14,6 +15,7 @@ import { AnalysisResult } from './types';
 import { Flame, Radio, Loader2, Sparkles, ArrowUpRight } from 'lucide-react';
 
 export default function App() {
+  const analysisCoin = useCoinAction('/api/analyze');
   const [basic, setBasic] = useState<string | null>(null);
   const [basicBusy, setBasicBusy] = useState(false);
   async function analyzeBasic() {
@@ -229,7 +231,7 @@ export default function App() {
           <div className="text-center pt-2">
             <button
               type="button"
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || analysisCoin.insufficient}
               onClick={handleAnalyzeClick}
               className={`w-full sm:w-auto px-10 py-4 rounded-2xl font-black text-sm tracking-wide transition-all shadow-xl flex items-center justify-center gap-3 mx-auto ${
                 isAnalyzing
@@ -245,7 +247,7 @@ export default function App() {
               ) : (
                 <>
                   <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
-                  <span>Full AI Analysis · 25 BC</span>
+                  <span>{analysisCoin.label}</span>
                   <ArrowUpRight className="w-5 h-5" />
                 </>
               )}

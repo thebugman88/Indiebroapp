@@ -1,6 +1,10 @@
 export const ECONOMY_VERSION = "2026-08-30-v1";
 export const TERMS_VERSION = "2026-08-30-purchases-v1";
 export const MONTHLY_BC = { free: 150, pro: 1500 };
+export const SIGNUP_BONUS_COINS = 100;
+// Accounts created before the rewards launch remain unchanged. The server
+// verifies Firebase creation time; the browser cannot claim eligibility.
+export const SIGNUP_BONUS_START_AT = Date.parse("2026-09-05T06:00:00.000Z");
 export const STORAGE_GB = { free: 1, pro: 10 };
 export const GB = 1_000_000_000;
 export const PRODUCTS = {
@@ -56,6 +60,32 @@ export const AI_ACTIONS: Record<
     daily: 5,
   },
 };
+
+export const STUDIO_COIN_SUMMARIES: Record<string, string> = {
+  "mastering-suite": "0 BC · Local processing",
+  "quick-tools": "0 BC · Local tools",
+  "judgement-zone": "0 BC · Community judging",
+  "lyric-pro": "10 BC · Generate lyrics",
+  "semantic-lab": "15 BC · Deep synthesis",
+  "hit-analyzer": "25 BC · Full analysis",
+  "royaltyops": "5 BC · Optional AI cleanup",
+  "artist-assistant": "0–25 BC · Depends on action",
+  "sonic-iq": "0 BC · 10 free daily",
+  "hang-out": "0–25 BC · Depends on action",
+};
+
+export function coinActionLabel(
+  path: string,
+  total: number | null,
+  unlimited = false,
+) {
+  const action = AI_ACTIONS[path];
+  if (!action) return "Coin price unavailable";
+  if (unlimited) return `${action.name} · Unlimited`;
+  if (total !== null && action.cost > total) return `Insufficient Coins · ${action.cost} BC needed`;
+  if (action.cost === 0) return `${action.name} · 0 BC`;
+  return `${action.name} · ${action.cost} BC`;
+}
 export const PURCHASE_POLICY = [
   "All sales are final to the extent permitted by applicable law. We do not ordinarily offer discretionary cash refunds. Eligible discretionary service credits are issued as Brotherhood Coins, not money.",
   "AI can make mistakes. Outputs vary with input, context and individual taste; results and commercial success are not guaranteed. Subjective dissatisfaction alone does not qualify for a discretionary credit. This does not exclude remedies for non-delivery, duplicate or unauthorized charges, material misrepresentation, technical failure, or rights required by law or payment-provider rules.",
