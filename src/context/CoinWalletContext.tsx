@@ -6,6 +6,7 @@ export type CoinWallet = {
   total: number;
   monthly: number;
   purchased: number;
+  month: string;
 };
 
 type CoinWalletContextValue = {
@@ -44,6 +45,7 @@ export function CoinWalletProvider({ children }: { children: React.ReactNode }) 
             total: body.total,
             monthly: body.monthly,
             purchased: body.purchased,
+            month: body.month,
           });
         }
       })

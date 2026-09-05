@@ -82,6 +82,7 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
   const [vault] = useState(() => createArtistCatalog(uid, isCurrent, () => currentPrivateStorage()));
   const [initial] = useState(() => { try { return { data: vault.load(), error: '' }; } catch { return { data: { artist: null, tracks: [] }, error: 'Saved catalog could not be read. Reopen after checking browser storage; existing data has not been replaced.' }; } });
   const [catalogError, setCatalogError] = useState(initial.error);
+  const [profilePhotoError, setProfilePhotoError] = useState('');
 
   // Search Real-World Artist Identifier
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,7 +100,6 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
   // Profile Edit State
-  const [isEditingEnv, setIsEditingEnv] = useState(false);
   const [editHandle, setEditHandle] = useState(currentUser.artistHandle || '');
   const [editBio, setEditBio] = useState(currentUser.bio || '');
   const [editDaw, setEditDaw] = useState(currentUser.dawSetup || 'Ableton Live 12 Suite');
@@ -244,6 +244,32 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
     });
   };
 
+  const handleProfilePicture = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 2_000_000) {
+      setProfilePhotoError('Choose a JPG, PNG, or WebP profile picture smaller than 2 MB.');
+      return;
+    }
+    setProfilePhotoError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 256;
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        const side = Math.min(image.width, image.height);
+        context.drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, 256, 256);
+        const avatarUrl = canvas.toDataURL('image/jpeg', 0.82);
+        const updatedUser = { ...currentUser, avatarUrl };
+        onUpdateUser(updatedUser); saveCurrentAuthUser(updatedUser); updateProfile({ avatarUrl });
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Add Manual Demo Track
   const handleAddManualTrack = (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,6 +349,11 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
                     <Crown className="h-4 w-4" />
                   </div>
                 )}
+                <label className="absolute inset-x-1 bottom-1 cursor-pointer rounded-lg bg-black/75 px-2 py-1 text-center text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  Change photo
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={event => handleProfilePicture(event.target.files?.[0])} />
+                </label>
+                {profilePhotoError && <p role="alert" className="absolute left-0 top-full mt-2 w-64 text-xs text-rose-300">{profilePhotoError}</p>}
               </div>
 
               {/* User Bio & Meta */}
@@ -366,11 +397,11 @@ const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
             {/* Quick Actions / Auth Switch */}
             <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
               <button
-                onClick={() => setIsEditingEnv(true)}
+                onClick={() => { setActiveTab('environment'); window.requestAnimationFrame(() => window.scrollTo({ top: 360, behavior: 'smooth' })); }}
                 className="flex-1 md:flex-initial rounded-xl bg-slate-900 border border-slate-800 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition flex items-center justify-center gap-2"
               >
                 <Edit3 className="h-4 w-4 text-amber-400" />
-                Edit Studio Environment
+                Edit Studio &amp; Profile
               </button>
               <button
                 onClick={onOpenAuthModal}

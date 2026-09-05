@@ -75,3 +75,26 @@ test("Coin action labels disclose deductions, free use and insufficient balances
   assert.equal(coinActionLabel("/api/ai/chat", 0), "Basic career chat · 0 BC");
   assert.equal(coinActionLabel("/api/analyze", 0, true), "Full Hit Analysis · Unlimited");
 });
+
+test("floating wallet opens a compact summary before the full purchase screen", async () => {
+  const [floating, wallet] = await Promise.all([
+    readFile("src/components/PersistentCoinWallet.tsx", "utf8"),
+    readFile("src/context/CoinWalletContext.tsx", "utf8"),
+  ]);
+  assert.match(floating, /BROTHERHOOD WALLET/);
+  assert.match(floating, /Recent Coin activity/);
+  assert.match(floating, /Next refill/);
+  assert.match(floating, /Buy more/);
+  assert.match(floating, /authenticatedFetch\("\/api\/economy\/history"\)/);
+  assert.match(wallet, /month: body\.month/);
+});
+
+test("profile edit opens real settings and supports bounded local photo uploads", async () => {
+  const profile = await readFile("src/components/ArtistProfilePage.tsx", "utf8");
+  assert.match(profile, /setActiveTab\('environment'\)/);
+  assert.match(profile, /Edit Studio &amp; Profile/);
+  assert.match(profile, /accept="image\/png,image\/jpeg,image\/webp"/);
+  assert.match(profile, /file\.size > 2_000_000/);
+  assert.match(profile, /canvas\.width = 256; canvas\.height = 256/);
+  assert.match(profile, /saveCurrentAuthUser\(updatedUser\)/);
+});
