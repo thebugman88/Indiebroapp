@@ -1,4 +1,9 @@
-import { authenticatedFetch } from '../../src/services/authService';
+import { retainLyricPairs } from '../../shared/lyricRetention';
+import { flushPrivateStorage } from '../../shared/privateStorage';
+import { currentPrivateStorage } from '../../shared/privateStorage';
+import { createLyricVault } from './vault';
+import { authenticatedFetch, getCurrentAuthUser } from '../../src/services/authService';
+import { useCoinAction } from '../../src/useCoinAction';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
@@ -36,12 +41,37 @@ import {
   SecurityState 
 } from './types';
 import { GENRE_STRUCTURES } from './data/structures';
-import { generateAlgorithmicLyrics } from './data/lyricTemplates';
-import { generateNativeLyrics } from '../../src/services/nativeBrowserAi';
+
+
 
 export default function App() {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => {
+      const uid = getCurrentAuthUser().id;
+      setSession(old => uid === old.uid ? old : { uid, revision: old.revision + 1 });
+    };
+    window.addEventListener('ib_auth_changed', sync);
+    sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+  return <LyricStudio key={session.revision} accountId={session.uid} />;
+}
+
+function LyricStudio({ accountId }: { accountId: string }) {
+  const lyricCoin = useCoinAction('/api/generate-lyrics');
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  const isCurrentSession = () => active.current && getCurrentAuthUser().id === accountId;
+  const vault = createLyricVault(accountId, () => getCurrentAuthUser().id, () => currentPrivateStorage());
+  const [vaultError, setVaultError] = useState('');
+  const [retentionNotice, setRetentionNotice] = useState(false);
+  const [suppressNotice, setSuppressNotice] = useState(false);
+  const generatedAt = useRef(0);
   // ACCOUNT & SECURITY SENTINEL STATE
-  const [accountId, setAccountId] = useState<string>('');
   const [securityState, setSecurityState] = useState<SecurityState>({
     status: 'ACTIVE',
     trustScore: 100,
@@ -61,6 +91,7 @@ export default function App() {
   const [structure, setStructure] = useState<string>(GENRE_STRUCTURES['Hip-Hop'][0]);
   const [userLyrics, setUserLyrics] = useState<string>('');
   const [userLyricsOption, setUserLyricsOption] = useState<UserLyricsOption>('finish_lyrics');
+  const [creativePrompt, setCreativePrompt] = useState<string>('');
 
   // OUTPUT STATE
   const [setA, setSetA] = useState<LyricSet | null>(null);
@@ -79,38 +110,20 @@ export default function App() {
 
   // INITIAL LOAD & ACCOUNT INITIALIZATION
   useEffect(() => {
-    // 1. Initialize unique account identifier
-    let storedAccountId = localStorage.getItem('lyric_pro_account_id');
-    if (!storedAccountId) {
-      storedAccountId = `acc_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-      localStorage.setItem('lyric_pro_account_id', storedAccountId);
-    }
-    setAccountId(storedAccountId);
-
-    // 2. Check TOS acceptance (Startup Guidelines)
-    const tos = localStorage.getItem('lyric_pro_tos_accepted');
-    if (tos === 'true') {
-      setTosAccepted(true);
-    } else {
-      // Auto open Startup Rules & Guidelines on first load
-      setIsTosOpen(true);
-    }
-
-    // 3. Load saved history
-    const saved = localStorage.getItem('lyric_pro_saved_vault');
-    if (saved) {
-      try {
-        setSavedEntries(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse saved vault:', e);
-      }
+    // Never infer ownership from the old browser-wide vault or random account ID.
+    try {
+      setTosAccepted(vault.acceptedTerms());
+      setIsTosOpen(!vault.acceptedTerms());
+      setSavedEntries(vault.load());
+    } catch {
+      setVaultError('Browser storage is unavailable or damaged. Your vault could not be loaded.');
     }
 
     // 4. Fetch account security status from server
-    authenticatedFetch(`/api/security/account-status?accountId=${storedAccountId}`)
+    authenticatedFetch('/api/security/account-status')
       .then((r) => r.json())
       .then((data) => {
-        if (data?.status) {
+        if (isCurrentSession() && data?.status) {
           setSecurityState({
             status: data.status.status || 'ACTIVE',
             pausedUntil: data.status.pausedUntil,
@@ -159,7 +172,7 @@ export default function App() {
 
   const handleAcceptTos = () => {
     setTosAccepted(true);
-    localStorage.setItem('lyric_pro_tos_accepted', 'true');
+    try { vault.acceptTerms(); } catch { setVaultError('Guidelines accepted for this session only; browser storage is unavailable.'); }
   };
 
   // UNPAUSE ACCOUNT (REMEDIAL ACTION)
@@ -170,7 +183,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId }),
       });
-      if (res.ok) {
+      if (res.ok && isCurrentSession()) {
         setPauseCountdown(0);
         setSecurityState({
           status: 'ACTIVE',
@@ -228,11 +241,18 @@ export default function App() {
 
     setIsGenerating(true);
     setCurrentEntrySaved(false);
+    setVaultError('');
+    const requestController = new AbortController();
+    const requestTimer = window.setTimeout(
+      () => requestController.abort(new Error('Lyric generation timed out.')),
+      125000,
+    );
 
     try {
       const response = await authenticatedFetch('/api/generate-lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: requestController.signal,
         body: JSON.stringify({
           accountId,
           genre: activeGenre,
@@ -245,12 +265,15 @@ export default function App() {
           structure,
           autoRandomize: isAutoMode,
           userLyrics,
-          userLyricsOption
+          userLyricsOption,
+          creativePrompt: !isAutoMode && mode === 'full_song' ? creativePrompt : ''
         })
       });
 
+      if (!isCurrentSession()) return;
       if (response.status === 429) {
         const errorData = await response.json();
+        if (!isCurrentSession()) return;
         const remaining = errorData.remainingSeconds || 60;
         setSecurityState({
           status: 'PAUSED',
@@ -265,107 +288,119 @@ export default function App() {
 
       if (response.ok) {
         const data: LyricGenerateResponse = await response.json();
+        if (!isCurrentSession()) return;
         setSetA(data.setA);
         setSetB(data.setB);
         setIsAiGenerated(data.isAiGenerated);
+        generatedAt.current = data.timestamp;
+        const entry: SavedLyricEntry = {id: String(data.timestamp), timestamp:data.timestamp,genre:activeCustomGenre||activeGenre,vibe:activeCustomVibe||activeVibe,explicit,mode,creativePrompt: !isAutoMode && mode === 'full_song' ? creativePrompt : '',setA:data.setA,setB:data.setB};
+        const next = retainLyricPairs([entry,...vault.load()]);
+        try { vault.save(next); await flushPrivateStorage(); if(!isCurrentSession())return; setSavedEntries(next);setCurrentEntrySaved(true);setVaultError(''); }
+        catch { setVaultError('Lyrics are visible but could not be saved. Download both sets now.'); }
+        setRetentionNotice(!vault.noticeSuppressed());
         if (data._telemetry?.trustScore !== undefined) {
           setSecurityState((s) => ({ ...s, trustScore: data._telemetry?.trustScore }));
         }
-        setIsGenerating(false);
         return;
       }
-    } catch (err) {
-      console.debug('[Lyric Pro] Cloud API offline/keyless, trying native browser AI:', err);
-    }
-
-    try {
-      // Step 2: Try Native Browser AI (Chrome Prompt API / Gemini Nano)
-      const nativeResult = await generateNativeLyrics({
-        genre: activeCustomGenre || activeGenre,
-        vibe: activeCustomVibe || activeVibe,
-        explicit,
-        mode: isAutoMode ? 'full_song' : mode,
-        structure,
-        starterType,
-        userLyrics,
-        userLyricsOption,
-      });
-
-      if (nativeResult) {
-        setSetA(nativeResult.setA);
-        setSetB(nativeResult.setB);
-        setIsAiGenerated(true);
-        setIsGenerating(false);
-        return;
+      const failure = await response.json().catch(() => ({}));
+      if (isCurrentSession()) {
+        setVaultError(failure?.error || 'Generation did not deliver two validated songs. Please try again.');
       }
-    } catch (browserAiErr) {
-      console.debug('[Lyric Pro] Browser AI fallback to algorithmic:', browserAiErr);
-    }
-
-    // Step 3: High-precision client-side Algorithmic Lyric Synthesis (Zero-Cost, Keyless)
-    try {
-      const algoResult = generateAlgorithmicLyrics({
-        genre: activeGenre,
-        customGenre: activeCustomGenre,
-        vibe: activeVibe,
-        customVibe: activeCustomVibe,
-        explicit,
-        mode: isAutoMode ? 'full_song' : mode,
-        starterType,
-        structure,
-        userLyrics,
-        userLyricsOption
-      });
-
-      setSetA(algoResult.setA);
-      setSetB(algoResult.setB);
-      setIsAiGenerated(false);
-    } catch (algoErr) {
-      console.error('Lyrical synthesis error:', algoErr);
+    } catch (error) {
+      if (isCurrentSession()) {
+        setVaultError(
+          requestController.signal.aborted
+            ? 'Lyric generation took too long. No result was delivered. Retry uses the same protected request ID so Coins are not charged twice.'
+            : error instanceof Error ? error.message : 'Generation did not deliver two validated songs. Please try again.',
+        );
+      }
     } finally {
-      setIsGenerating(false);
+      window.clearTimeout(requestTimer);
+      if (isCurrentSession()) setIsGenerating(false);
     }
   };
 
+  useEffect(() => {
+    const sweep = () => {
+      try { setSavedEntries(vault.load()); } catch {}
+      if(generatedAt.current && generatedAt.current + 86400000 <= Date.now()) {
+        setSetA(null);setSetB(null);setCurrentEntrySaved(false);
+      }
+    };
+    const timer=setInterval(sweep,30000);
+    window.addEventListener('focus',sweep);
+    return()=>{clearInterval(timer);window.removeEventListener('focus',sweep);};
+  },[]);
+
+  useEffect(()=>{
+    if(!setA||!generatedAt.current)return;
+    const timer=setTimeout(()=>{setSetA(null);setSetB(null);setCurrentEntrySaved(false);},Math.max(0,generatedAt.current+86400000-Date.now()));
+    return()=>clearTimeout(timer);
+  },[setA,setB]);
+
+  useEffect(()=>{
+    if(!savedEntries.length)return;
+    const nextExpiry=Math.min(...savedEntries.map(entry=>entry.timestamp+86400000));
+    const timer=setTimeout(()=>{try{setSavedEntries(vault.load());}catch{}},Math.max(0,nextExpiry-Date.now()));
+    return()=>clearTimeout(timer);
+  },[savedEntries]);
+
   // SAVE CURRENT DUAL SET TO VAULT
-  const handleSaveBothSets = () => {
+  const handleSaveBothSets = async () => {
     if (!setA || !setB) return;
 
     const newEntry: SavedLyricEntry = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
+      id: String(generatedAt.current),
+      timestamp: generatedAt.current,
       genre: customGenre || selectedGenre,
       vibe: customVibe || selectedVibe,
       explicit,
       mode,
+      creativePrompt: mode === 'full_song' ? creativePrompt : '',
       setA,
       setB
     };
 
-    const updated = [newEntry, ...savedEntries];
+    const updated = retainLyricPairs([newEntry, ...savedEntries]);
+    if (!isCurrentSession()) return;
+    try { vault.save(updated); await flushPrivateStorage(); } catch (error) {
+      setVaultError(error instanceof Error ? error.message : 'Could not save this vault.');
+      return;
+    }
+    setVaultError('');
     setSavedEntries(updated);
-    localStorage.setItem('lyric_pro_saved_vault', JSON.stringify(updated));
     setCurrentEntrySaved(true);
   };
 
   const handleDeleteSavedEntry = (id: string) => {
     const updated = savedEntries.filter(e => e.id !== id);
+    if (!isCurrentSession()) return;
+    try { vault.save(updated); } catch (error) {
+      setVaultError(error instanceof Error ? error.message : 'Could not save this vault.');
+      return;
+    }
+    setVaultError('');
     setSavedEntries(updated);
-    localStorage.setItem('lyric_pro_saved_vault', JSON.stringify(updated));
   };
 
   const handleClearVault = () => {
+    if (!isCurrentSession()) return;
+    try { vault.clear(); } catch { setVaultError('Could not clear this vault.'); return; }
+    setVaultError('');
     setSavedEntries([]);
-    localStorage.removeItem('lyric_pro_saved_vault');
   };
 
   const handleLoadSavedEntry = (entry: SavedLyricEntry) => {
+    if(!retainLyricPairs([entry]).length)return;
+    generatedAt.current = entry.timestamp;
     setSetA(entry.setA);
     setSetB(entry.setB);
     setSelectedGenre(entry.genre as GenreOption);
     setSelectedVibe(entry.vibe as VibeOption);
     setExplicit(entry.explicit);
     setMode(entry.mode);
+    setCreativePrompt(entry.creativePrompt || '');
     setIsAiGenerated(true);
     setCurrentEntrySaved(true);
   };
@@ -374,6 +409,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-400 selection:text-zinc-950 relative overflow-x-hidden">
+      {retentionNotice && <div role="dialog" aria-modal="true" aria-labelledby="retention-title" className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
+        <div className="max-w-lg rounded-2xl bg-zinc-950 border border-amber-500 p-6 space-y-4 text-zinc-100">
+          <h2 id="retention-title" className="font-bold text-lg">Download your songs now</h2>
+          <p>Your encrypted temporary history keeps up to 10 songs (5 pairs), for at most 24 hours from generation. Older songs expire or are replaced sooner when the history fills. Downloads remain on your device; shared copies have their own lifetime.</p>
+          <p className="text-sm">We check that the two sets differ and don’t repeat recent output. No automated check can guarantee copyright clearance; review before releasing.</p>
+          <label className="flex gap-2"><input type="checkbox" checked={suppressNotice} onChange={e=>setSuppressNotice(e.target.checked)}/>Don’t show this reminder again for my account</label>
+          <button className="bg-amber-400 text-black rounded px-4 py-2" onClick={()=>{if(suppressNotice){try{vault.suppressNotice();}catch{setVaultError('Reminder preference could not be saved.');}}setRetentionNotice(false);}}>Continue to downloads</button>
+        </div>
+      </div>}
+
       
       {/* 3D STUDIO LIGHTING / AMBIENT ATMOSPHERE */}
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -382,10 +427,17 @@ export default function App() {
         <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl" />
       </div>
 
+      <div className="relative z-10 p-3 text-sm text-zinc-300" role="status">
+        {accountId === 'guest'
+          ? 'Guest drafts are temporary and clear when you sign in or leave this tool. Copy them before switching; sign in before creating a saved vault.'
+          : 'Your vault is saved for this account on this browser only. It is not a cloud backup.'}
+        {' '}Older browser-wide drafts are preserved but are not automatically imported because their owner is unknown.
+        {vaultError && <p role="alert" className="text-amber-300">{vaultError}</p>}
+      </div>
       {/* HEADER */}
       <Header
         onOpenTos={() => setIsTosOpen(true)}
-        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenHistory={() => {try{setSavedEntries(vault.load());}catch{setVaultError('History could not be loaded.');}setIsHistoryOpen(true);}}
         tosAccepted={tosAccepted}
         historyCount={savedEntries.length}
       />
@@ -437,7 +489,7 @@ export default function App() {
             <div className="flex items-center space-x-3 text-amber-300 text-xs">
               <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
               <span>
-                <strong>Startup Security Guidelines & Agreement Required:</strong> You must review and accept the Studio Rules & Anti-Bot Sentinel to unlock Gemini 3.7 lyric synthesis.
+                <strong>Startup Security Guidelines & Agreement Required:</strong> You must review and accept the Studio Rules & Anti-Bot Sentinel to unlock Gemini-powered lyric synthesis.
               </span>
             </div>
             <button
@@ -469,7 +521,7 @@ export default function App() {
                   {securityState.trustScore ?? 100}%
                 </span>
                 <span className="text-zinc-600">|</span>
-                <span className="text-amber-400 font-semibold">Gemini 3.7 Ghostwriter</span>
+                <span className="text-amber-400 font-semibold">Gemini Ghostwriter</span>
               </div>
             </div>
 
@@ -498,6 +550,29 @@ export default function App() {
               onUserLyricsOptionChange={setUserLyricsOption}
             />
 
+            {mode === 'full_song' && (
+              <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="creative-song-direction" className="text-sm font-black text-white">
+                    Direct the whole song
+                  </label>
+                  <span className="text-[10px] font-mono text-zinc-500">{creativePrompt.length}/2000</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-zinc-400">
+                  Give the AI your story, scene, names, perspective, emotions, or must-use details. Be specific—the result will follow this creative brief while still obeying the safety rules.
+                </p>
+                <textarea
+                  id="creative-song-direction"
+                  value={creativePrompt}
+                  onChange={(event) => setCreativePrompt(event.target.value)}
+                  maxLength={2000}
+                  rows={5}
+                  placeholder="Example: A sad late-night song about rain on Friday, Lyra breaking my heart, and me driving past the place where we first met. First person, vivid details, restrained verses, unforgettable hook."
+                  className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950/80 px-3.5 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10"
+                />
+              </section>
+            )}
+
             <StructureSelector
               selectedGenre={selectedGenre}
               customGenre={customGenre}
@@ -524,7 +599,7 @@ export default function App() {
                   setPendingAutoMode(false);
                   setIsDisclaimerOpen(true);
                 }}
-                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0}
+                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0 || lyricCoin.insufficient}
                 className={`w-full py-4.5 sm:py-5 min-h-[56px] font-black text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-[0_10px_25px_-3px_rgba(245,158,11,0.35),0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center space-x-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 cursor-pointer border ${
                   isAccountPaused
                     ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 cursor-not-allowed'
@@ -546,7 +621,7 @@ export default function App() {
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5 fill-zinc-950 stroke-zinc-950 shrink-0" />
-                    <span>GENERATE 2 LYRIC BLUEPRINTS (A & B)</span>
+                    <span>{lyricCoin.insufficient ? lyricCoin.label : `GENERATE 2 LYRIC BLUEPRINTS (A & B) · ${lyricCoin.action?.cost ?? 10} BC`}</span>
                   </>
                 )}
               </button>
@@ -561,11 +636,11 @@ export default function App() {
                   setPendingAutoMode(true);
                   setIsDisclaimerOpen(true);
                 }}
-                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0}
+                disabled={isGenerating || isAccountPaused || clickThrottleSeconds > 0 || lyricCoin.insufficient}
                 className="w-full py-3.5 min-h-[48px] bg-zinc-900 border border-zinc-800 hover:border-amber-400/60 text-zinc-200 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-2 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-md disabled:opacity-50"
               >
                 <Dice5 className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>AUTO SELECT (RANDOMIZED LYRICS)</span>
+                <span>{lyricCoin.insufficient ? lyricCoin.label : `AUTO SELECT (RANDOMIZED LYRICS) · ${lyricCoin.action?.cost ?? 10} BC`}</span>
               </button>
             </div>
 
@@ -603,7 +678,7 @@ export default function App() {
               </div>
               <div>
                 <div className="text-[11px] font-black text-white uppercase tracking-wider">ELITE GHOSTWRITER</div>
-                <div className="text-[10px] text-zinc-400 font-mono">GEMINI 3.7 POWERED</div>
+                <div className="text-[10px] text-zinc-400 font-mono">GEMINI POWERED</div>
               </div>
             </div>
 

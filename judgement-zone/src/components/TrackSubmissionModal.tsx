@@ -15,7 +15,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ArtistTrack, TrackGenre } from '../types';
+import { ArtistTrack, MusicCreationType, TrackGenre } from '../types';
 import { audioEngine } from '../utils/audioEngine';
 
 interface TrackSubmissionModalProps {
@@ -50,6 +50,7 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
   const [keySignature, setKeySignature] = useState('');
   const [lyricsText, setLyricsText] = useState('');
   const [coverArtUrl, setCoverArtUrl] = useState('');
+  const [creationType, setCreationType] = useState<MusicCreationType>('human-created');
 
   // Audio Upload & Duration State
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -169,7 +170,9 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
         isUserSubmission: true,
         ownershipConfirmed: true,
         rightsHolderSignature: signatureName.trim(),
+        creationType,
         status: 'evaluating',
+        flagCounts: { 'bad-quality': 0, 'wrong-ai-room': 0 },
         targetJudges: 10,
         reviews: initialReviews,
         aggregatedScores
@@ -208,6 +211,10 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
           <div className="flex justify-between text-zinc-400">
             <span>Genre & Vibe:</span>
             <span className="text-white">{submittedTrackData.genre}</span>
+          </div>
+          <div className="flex justify-between text-zinc-400">
+            <span>Judgment room:</span>
+            <span className="text-white">{submittedTrackData.creationType === 'ai-assisted' ? 'AI-Assisted Music' : 'Human-Created Music'}</span>
           </div>
           <div className="flex justify-between text-zinc-400">
             <span>Auditors Assigned:</span>
@@ -269,6 +276,22 @@ export const TrackSubmissionModal: React.FC<TrackSubmissionModalProps> = ({
 
       {/* Main Submission Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 shadow-xl space-y-4">
+          <h3 className="text-base font-bold text-white">Choose the correct Judgment room</h3>
+          <p className="text-xs text-zinc-400">This disclosure keeps human-created and AI-assisted music in separate blind pools. Artwork-only AI does not make the audio AI-assisted.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([
+              ['human-created', 'Human-Created Music', 'No generative AI in the lyrics, vocals, composition, melody, beat, stems, or recording.'],
+              ['ai-assisted', 'AI-Assisted Music', 'Generative AI contributed to any part of the music or lyrics.'],
+            ] as const).map(([value, label, description]) => (
+              <button key={value} type="button" onClick={() => setCreationType(value)} className={`p-4 rounded-2xl border text-left transition ${creationType === value ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'}`}>
+                <span className="block text-sm font-bold text-white">{label}</span>
+                <span className="block mt-1 text-xs text-zinc-400">{description}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-amber-300">Five matching community flags return a submission to its owner with an explanation.</p>
+        </div>
         {/* SECTION 1: Direct Ownership Warranty */}
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 shadow-xl space-y-4">
           <h3 className="text-base font-bold text-white flex items-center gap-2">

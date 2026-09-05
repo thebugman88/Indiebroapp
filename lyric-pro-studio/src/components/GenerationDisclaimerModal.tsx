@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ShieldAlert, Sparkles, AlertTriangle, CheckCircle, X } from 'lucide-react';
 
 interface GenerationDisclaimerModalProps {
@@ -19,6 +19,10 @@ export const GenerationDisclaimerModal: React.FC<GenerationDisclaimerModalProps>
   explicit
 }) => {
   const [understood, setUnderstood] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) setUnderstood(false);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -65,9 +69,9 @@ export const GenerationDisclaimerModal: React.FC<GenerationDisclaimerModalProps>
             <div className="flex items-start space-x-2.5">
               <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white">1. You Own & Master Your Output:</strong>
+                <strong className="text-white">1. Review & Protect Your Work:</strong>
                 <p className="text-zinc-400 mt-0.5">
-                  Any and all lyrics produced are entirely yours. You own all output generated and assume full artistic and legal responsibility for their recording, distribution, and publication.
+                  Review generated lyrics before recording or releasing them. AI output is not a guarantee of originality, copyright protection, or clearance. Cloud generation sends your submitted text to the configured AI provider; provider handling is separate from our 24-hour app cache.
                 </p>
               </div>
             </div>
@@ -75,9 +79,9 @@ export const GenerationDisclaimerModal: React.FC<GenerationDisclaimerModalProps>
             <div className="flex items-start space-x-2.5">
               <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white">2. Pure Artistic Expression & Zero Violence Policy:</strong>
+                <strong className="text-white">2. Fiction, Safety & Law:</strong>
                 <p className="text-zinc-400 mt-0.5">
-                  We strictly do not accept, promote, or encourage self-harm, harming others, hate speech, or wishing harm upon anyone. All generated text is delivered purely in the name of creative art, storytelling, and musical expression.
+                  Lyrics may explore adult language, conflict, crime, death, or other dark fictional themes. The service does not endorse harmful or unlawful conduct and may refuse targeted threats, encouragement of real-world harm, or actionable instructions for self-harm, violence, weapons, or crime.
                 </p>
               </div>
             </div>
@@ -85,9 +89,9 @@ export const GenerationDisclaimerModal: React.FC<GenerationDisclaimerModalProps>
             <div className="flex items-start space-x-2.5">
               <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white">3. Complete Immunity for indiebrotherhood:</strong>
+                <strong className="text-white">3. Your Direction, Your Release Decision:</strong>
                 <p className="text-zinc-400 mt-0.5">
-                  The <strong className="text-amber-300">indiebrotherhood</strong>, its creators, and owners shall not in any way be held responsible or liable for any lyrics produced, or for any negative consequences, controversies, or legal matters that may arise from your lyrics or songs.
+                  You are responsible for reviewing, editing, recording, publishing, and using the result. AI output may be inaccurate, offensive, or unsuitable. IndieBrotherhood does not provide legal clearance or guarantee originality, safety, copyright protection, or commercial results. The Terms and applicable law still apply.
                 </p>
               </div>
             </div>
@@ -112,7 +116,7 @@ export const GenerationDisclaimerModal: React.FC<GenerationDisclaimerModalProps>
               className="mt-0.5 accent-amber-400 w-4 h-4 rounded cursor-pointer shrink-0"
             />
             <span className="text-[11px] text-zinc-300 leading-tight">
-              I understand, accept full ownership of the generated output, and agree that <strong className="text-amber-400">indiebrotherhood</strong> holds zero liability for my lyrics.
+              I supplied the creative direction and accept responsibility for reviewing, editing, publishing, and using the result. I understand AI output may be inaccurate, offensive, or unsuitable; no originality, legal, safety, or commercial guarantee is made; and the Terms and applicable law still apply.
             </span>
           </label>
 

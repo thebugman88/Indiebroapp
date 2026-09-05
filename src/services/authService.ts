@@ -1,6 +1,11 @@
+import { lockPrivateStorage, unlockPrivateStorage, privateStorageStatus, failPrivateStorage, privateStorageFor, flushPrivateStorage } from '../../shared/privateStorage';
+import { bindRequestSession } from '../../shared/requestSession';
+import { clearLegacyAuthStorage } from '../../shared/legacyAuthStorage';
+import { AI_ACTIONS, ECONOMY_VERSION } from '../../shared/economy';
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, onIdTokenChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+import { initializeAuth, getAuth, setPersistence, inMemoryPersistence, onIdTokenChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, sendEmailVerification, updateProfile, signOut, type User } from 'firebase/auth';
+import { deleteUser } from 'firebase/auth';
 
 export interface RegisteredUser {
   id: string;
@@ -55,8 +60,6 @@ export interface VerifiedArtistInfo {
   totalCatalogTracks: number;
 }
 
-const ARTIST_CATALOG_KEY = 'ib_artist_verified_catalog_v2';
-const ARTIST_INFO_KEY = 'ib_artist_verified_info_v2';
 // Display/contact information only. Never use this address as an authorization rule.
 export const ADMIN_EMAIL = 'xchristopherrayx@gmail.com';
 export const GUEST_USER: RegisteredUser = {
@@ -74,7 +77,20 @@ const config = {
 export const isAuthConfigured = Object.values(config).every(Boolean);
 const app = isAuthConfigured
   ? getApps().find(a => a.name === 'suite-auth') || initializeApp(config, 'suite-auth') : null;
-const auth = app ? getAuth(app) : null;
+let referralAppCheck: Promise<import('firebase/app-check').AppCheck>|undefined;
+async function referralAttestation() {
+  const siteKey=import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
+  if(!app||!siteKey)throw new Error('Referral security is not configured yet. Your other tools remain available.');
+  const sdk=await import('firebase/app-check');
+  referralAppCheck??=Promise.resolve(sdk.initializeAppCheck(app,{provider:new sdk.ReCaptchaEnterpriseProvider(siteKey),isTokenAutoRefreshEnabled:false}));
+  return (await sdk.getLimitedUseToken(await referralAppCheck)).token;
+}
+let reusedAuth=false;
+const auth = app ? (()=>{
+  try{return initializeAuth(app,{persistence:inMemoryPersistence});}
+  catch(error){if((error as {code?:string}).code!=='auth/already-initialized')throw error;reusedAuth=true;return getAuth(app);}
+})() : null;
+const persistenceReady = auth ? clearLegacyAuthStorage(config.apiKey,'suite-auth').then(async()=>{if(reusedAuth)await signOut(auth);await setPersistence(auth,inMemoryPersistence);}) : Promise.resolve();
 let currentUser: RegisteredUser = { ...GUEST_USER };
 let authRevision = 0;
 
@@ -97,6 +113,12 @@ function publishUser(user: RegisteredUser) {
 
 async function syncUser(user: User | null): Promise<RegisteredUser> {
   const revision = ++authRevision;
+  if (!user || user.isAnonymous || privateStorageStatus().uid !== user.uid) {
+    lockPrivateStorage();
+    // Clear identity-driven UI (including DMs outside the workspace gate)
+    // before waiting for the next account's token or encryption keys.
+    if(currentUser.id!=='guest'&&currentUser.id!==user?.uid)publishUser({...GUEST_USER});
+  }
   if (!user || user.isAnonymous) {
     publishUser({ ...GUEST_USER });
     return getCurrentAuthUser();
@@ -113,16 +135,19 @@ async function syncUser(user: User | null): Promise<RegisteredUser> {
     createdAt: Date.parse(user.metadata.creationTime || '') || 0, lastLoginAt: Date.now(),
   };
   try {
-    const saved = JSON.parse(localStorage.getItem(`ib_profile_details_v3:${user.uid}`) || '{}');
+    if(privateStorageStatus().status!=='ready'||privateStorageStatus().uid!==user.uid) await unlockForUser(user);
+    if (revision !== authRevision || auth?.currentUser?.uid !== user.uid) return getCurrentAuthUser();
+    const saved = JSON.parse(privateStorageFor(user.uid).getItem(`ib_profile_details_v3:${user.uid}`) || '{}');
     for (const field of PROFILE_FIELDS) if (typeof saved[field] === 'string') (profile as any)[field] = saved[field];
-  } catch { /* Optional local profile details are not credentials. */ }
+  } catch { if(revision===authRevision&&auth?.currentUser?.uid===user.uid) failPrivateStorage(); }
+  if (revision !== authRevision || auth?.currentUser?.uid !== user.uid) return getCurrentAuthUser();
   publishUser(profile);
   return getCurrentAuthUser();
 }
 const PROFILE_FIELDS = ['displayName', 'artistHandle', 'avatarUrl', 'avatarSeed', 'avatarBg', 'bio',
   'dawSetup', 'proAffiliation', 'labelDistributor', 'isrcPrefix', 'studioAura', 'spotifyUrl', 'appleMusicUrl', 'instagramUrl'] as const;
 if (auth) onIdTokenChanged(auth, user => {
-  void syncUser(user).catch(() => publishUser({ ...GUEST_USER }));
+  void persistenceReady.then(()=>{if(auth.currentUser?.uid===user?.uid)return syncUser(user);}).catch(() => {lockPrivateStorage();publishUser({ ...GUEST_USER });});
 });
 
 export function getCurrentAuthUser(): RegisteredUser { return { ...currentUser }; }
@@ -130,7 +155,7 @@ export function saveCurrentAuthUser(user: RegisteredUser): void {
   if (!auth?.currentUser || auth.currentUser.uid !== user.id) return;
   const details: Record<string, string> = {};
   for (const field of PROFILE_FIELDS) if (typeof user[field] === 'string') details[field] = user[field];
-  try { localStorage.setItem(`ib_profile_details_v3:${user.id}`, JSON.stringify(details)); } catch {}
+  try { privateStorageFor(user.id).setItem(`ib_profile_details_v3:${user.id}`, JSON.stringify(details)); } catch {}
   publishUser({ ...currentUser, ...details });
 }
 // This is the current browser's profile, not a server-wide user directory.
@@ -152,6 +177,7 @@ function authError(error: unknown): string {
 export async function loginUser(email: string, password: string) {
   if (!auth) return { success: false, error: 'Firebase sign-in is not configured yet.' };
   try {
+    await persistenceReady;
     const result = await signInWithEmailAndPassword(requireAuthClient(), email.trim(), password);
     return { success: true, user: await syncUser(result.user) };
   } catch (error) { return { success: false, error: authError(error) }; }
@@ -160,11 +186,34 @@ export async function registerUser(params: { email: string; displayName: string;
   if (!auth) return { success: false, error: 'Firebase sign-in is not configured yet.' };
   if (!params.displayName.trim() || params.password.length < 8) return { success: false, error: 'Enter a name and a password of at least 8 characters.' };
   try {
+    await persistenceReady;
     const result = await createUserWithEmailAndPassword(requireAuthClient(), params.email.trim(), params.password);
-    await updateProfile(result.user, { displayName: params.displayName.trim() });
-    let message = 'Account created. Check your email to verify your address.';
-    try { await sendEmailVerification(result.user); } catch { message = 'Account created. Verification email could not be sent; use Resend verification.'; }
-    return { success: true, user: await syncUser(result.user), message };
+    try {
+      const claim = await authenticatedFetch('/api/account/claim-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: params.displayName }),
+      });
+      const body = await claim.json();
+      if (!claim.ok) throw new Error(body?.error || 'Artist-name registration failed.');
+      await updateProfile(result.user, { displayName: body.displayName });
+      let message = 'Account created and artist name reserved. Verify your email, then return here and sign in.';
+      try {
+        await sendEmailVerification(result.user);
+      } catch {
+        message = 'Account and artist name were created, but the verification email could not be sent. Sign in and choose Resend verification.';
+      }
+      const registeredUid = result.user.uid;
+      await logoutUser();
+      return {
+        success: true,
+        registeredUid,
+        message,
+      };
+    } catch (error) {
+      try { await deleteUser(result.user); } catch { await logoutUser().catch(() => {}); }
+      return { success: false, error: (error as Error).message || 'Unable to complete account registration.' };
+    }
   } catch (error) { return { success: false, error: authError(error) }; }
 }
 export async function recoverAccount(params: { email: string }) {
@@ -177,27 +226,80 @@ export async function recoverAccount(params: { email: string }) {
     return { success: false, error: authError(error) };
   }
 }
-export async function logoutUser() { if (auth) await signOut(auth); publishUser({ ...GUEST_USER }); }
+const logoutChannel=typeof window!=='undefined'&&typeof window.BroadcastChannel==='function'?new BroadcastChannel('ib-private-session-logout'):null;
+async function endSession(broadcast:boolean) {
+  const closingUser=auth?.currentUser;
+  const saving=flushPrivateStorage().catch(()=>{});
+  authRevision++;lockPrivateStorage();publishUser({...GUEST_USER});
+  if(broadcast)logoutChannel?.postMessage('logout');
+  await saving;
+  if(auth&&auth.currentUser===closingUser)await signOut(auth);
+}
+if(logoutChannel)logoutChannel.onmessage=event=>{if(event.data==='logout')void endSession(false);};
+export async function logoutUser() {await endSession(true);}
 export async function resendVerification() {
   const user = requireAuthClient().currentUser;
   if (!user || user.isAnonymous) throw new Error('Sign in first.');
   await sendEmailVerification(user);
 }
 export async function getSuiteIdToken(): Promise<string> {
-  const client = requireAuthClient(); await client.authStateReady();
+  const client = requireAuthClient(); await persistenceReady; await client.authStateReady();
   if (!client.currentUser || client.currentUser.isAnonymous) throw new Error('Sign in to continue.');
   return client.currentUser.getIdToken();
 }
+async function aiRequestStorageKey(uid: string, path: string, body: BodyInit | null | undefined) {
+  const value = typeof body === 'string' ? body : '';
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(JSON.stringify([uid, path, value])),
+  );
+  return `ib-ai-request:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+function closeAiRequest(storageKey: string | null) {
+  if (!storageKey) return;
+  try { sessionStorage.removeItem(storageKey); } catch { /* Storage may be disabled. */ }
+}
 export async function authenticatedFetch(input: string, init: RequestInit = {}) {
   const client = requireAuthClient();
-  await client.authStateReady();
+  await persistenceReady; await client.authStateReady();
   if (!client.currentUser || client.currentUser.isAnonymous) throw new Error('Sign in to continue.');
   // Never forward a bearer token to an external URL.
+  const user=client.currentUser;
+  const inSession=bindRequestSession(()=>client.currentUser,()=>privateStorageStatus().revision);
   const target = new URL(input, window.location.origin);
   if (target.origin !== window.location.origin) throw new Error('Authenticated requests must use the suite backend.');
   const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${await client.currentUser.getIdToken()}`);
-  return fetch(target, { ...init, headers });
+  const action = AI_ACTIONS[target.pathname];
+  let aiStorageKey: string | null = null;
+  if ((init.method || 'GET').toUpperCase() === 'POST' && action) {
+    const unlimited = currentUser.id === user.uid && currentUser.isUnlimited === true;
+    if (!unlimited && action.cost > 0 && !window.confirm(`${action.name} costs ${action.cost} Brotherhood Coins. Included Coins are spent first. Failed cloud requests restore their Coins. Continue?`)) throw new Error('AI request canceled. No Coins spent.');
+    let requestId: string = crypto.randomUUID();
+    try {
+      aiStorageKey = await aiRequestStorageKey(user.uid, target.pathname, init.body);
+      requestId = sessionStorage.getItem(aiStorageKey) || requestId;
+      sessionStorage.setItem(aiStorageKey, requestId);
+    } catch { aiStorageKey = null; }
+    headers.set('x-request-id', requestId);
+    headers.set('x-economy-version', ECONOMY_VERSION);
+    headers.set('x-coin-consent', String(action.cost));
+  }
+  headers.set('Authorization', `Bearer ${await inSession(()=>user.getIdToken())}`);
+  const referralMutation=target.pathname.startsWith('/api/referrals/')&&!target.pathname.startsWith('/api/referrals/admin/')&&(init.method||'GET').toUpperCase()==='POST';
+  if(referralMutation)headers.set('X-Firebase-AppCheck',await inSession(referralAttestation));
+  const response = await inSession(()=>fetch(target, { ...init, headers, cache: 'no-store', credentials: referralMutation?'same-origin':'omit', redirect:'error' }));
+  // Keep the ID only while delivery is genuinely uncertain. A conclusive
+  // response lets the next deliberate click start a separate paid action.
+  if (aiStorageKey) {
+    const body = await response.clone().json().catch(() => ({}));
+    const pending = response.status === 409 && String(body?.error || '').includes('still processing');
+    const deliveryUncertain = response.status === 503 && typeof body?.jobId === 'string';
+    if (!pending && !deliveryUncertain) closeAiRequest(aiStorageKey);
+  }
+  if (action && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ib_wallet_changed'));
+  }
+  return response;
 }
 
 export const STUDIO_AURAS: {
@@ -215,51 +317,18 @@ export const STUDIO_AURAS: {
   { id: 'crimson', name: 'Apex Crimson', glowClass: 'ring-2 ring-red-400/80 shadow-[0_0_20px_rgba(239,68,68,0.5)]', badgeClass: 'bg-red-500/20 text-red-300 border-red-500/40', hex: '#ef4444' },
 ];
 
-// -------------------------------------------------------------
-// VERIFIED ARTIST SONG CATALOG STORAGE & MANAGEMENT
-// -------------------------------------------------------------
-
-export function loadVerifiedArtistInfo(): VerifiedArtistInfo | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(ARTIST_INFO_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
+async function unlockForUser(user: User) {
+  const revision = privateStorageStatus().revision;
+  const token = await user.getIdToken();
+  const response = await fetch('/api/privacy/key', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', credentials: 'omit', redirect:'error' });
+  if (!response.ok) throw new Error('Secure workspace unavailable.');
+  const material = await response.json();
+  if (auth?.currentUser?.uid !== user.uid) return;
+  await unlockPrivateStorage(user.uid, material, revision);
 }
-
-export function loadVerifiedCatalog(): CatalogTrack[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(ARTIST_CATALOG_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [];
-}
-
-export function saveVerifiedArtistAndCatalog(artist: VerifiedArtistInfo, tracks: CatalogTrack[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(ARTIST_INFO_KEY, JSON.stringify(artist));
-    localStorage.setItem(ARTIST_CATALOG_KEY, JSON.stringify(tracks));
-    window.dispatchEvent(new CustomEvent('ib_catalog_updated', { detail: { artist, tracks } }));
-  } catch (e) {
-    console.error('Failed to save verified artist & catalog:', e);
-  }
-}
-
-export function addCustomTrackToCatalog(track: CatalogTrack): CatalogTrack[] {
-  const current = loadVerifiedCatalog();
-  const updated = [track, ...current];
-  const artist = loadVerifiedArtistInfo() || {
-    artistId: 'custom_artist',
-    artistName: track.artistName,
-    primaryGenreName: track.primaryGenreName,
-    artworkUrl: track.artworkUrl,
-    claimedAt: Date.now(),
-    totalCatalogTracks: updated.length,
-  };
-  artist.totalCatalogTracks = updated.length;
-  saveVerifiedArtistAndCatalog(artist, updated);
-  return updated;
+export async function retryPrivateUnlock() {
+  if (!auth?.currentUser) return;
+  const user=auth.currentUser;
+  try {await user.reload();await user.getIdToken(true);if(auth.currentUser===user)await syncUser(user);}
+  catch {if(auth.currentUser===user)failPrivateStorage();}
 }

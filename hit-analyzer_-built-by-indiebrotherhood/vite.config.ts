@@ -1,21 +1,14 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 
 export default defineConfig(({ mode }) => {
-  // Load all env vars (including non-VITE_ prefixed) so GEMINI_API_KEY works
-  const env = loadEnv(mode, process.cwd(), '');
-
   return {
     plugins: [react(), tailwindcss()],
-    define: {
-      // Expose GEMINI_API_KEY to client-side without requiring VITE_ prefix
-      'import.meta.env.GEMINI_API_KEY': JSON.stringify(
-        env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY || ''
-      ),
-    },
+    envPrefix: 'VITE_FIREBASE_',
     resolve: {
+    dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
       },

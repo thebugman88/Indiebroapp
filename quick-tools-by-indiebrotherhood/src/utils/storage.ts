@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../../shared/PrivateWorkspaceGate';
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface StorageOptions<T> {
@@ -11,6 +12,7 @@ export function useLocalStorage<T>({
   initialValue,
   enableAutoSave = true,
 }: StorageOptions<T>): [T, (value: T | ((val: T) => T)) => void, { lastSaved: Date | null; isAutoSaveOn: boolean; setIsAutoSaveOn: (val: boolean) => void; resetToDefault: () => void }] {
+  const localStorage = usePrivateStorage();
   const [isAutoSaveOn, setIsAutoSaveOn] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(`autosave_pref_${key}`);

@@ -1,25 +1,11 @@
 {
-    "buildCommand": "npm run build",
-    "installCommand": "npm install",
-    "outputDirectory": "dist",
-    "env": {
-        "GEMINI_API_KEY": "@gemini_api_key"
-    },
-    "rewrites": [
-        {
-            "source": "/(.*)",
-            "destination": "/"
-        }
-    ],
-    "headers": [
-        {
-            "source": "/(.*)",
-            "headers": [
-                {
-                    "key": "Cache-Control",
-                    "value": "public, max-age=3600, s-maxage=3600"
-                }
-            ]
-        }
-    ]
+  "buildCommand": "npm run build",
+  "installCommand": "npx --yes bun@1.4.0 install --frozen-lockfile --ignore-scripts",
+  "outputDirectory": "dist/client",
+  "rewrites": [
+    {
+      "source": "/((?!api/|ws/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }

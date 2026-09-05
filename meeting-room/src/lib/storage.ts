@@ -1,3 +1,4 @@
+import { currentPrivateStorage } from '../../../shared/privateStorage';
 import type { UserRole } from '../types';
 
 const STORAGE_KEYS = {
@@ -25,10 +26,10 @@ export function getRandomColor(): string {
 
 export function loadUserPrefs(): { name: string; role: UserRole; color: string; roomId: string } {
   try {
-    const name = localStorage.getItem(STORAGE_KEYS.USER_NAME) || '';
-    const role = (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'attendee';
-    const color = localStorage.getItem(STORAGE_KEYS.USER_COLOR) || getRandomColor();
-    const roomId = localStorage.getItem(STORAGE_KEYS.ROOM_ID) || 'general';
+    const name = currentPrivateStorage().getItem(STORAGE_KEYS.USER_NAME) || '';
+    const role = (currentPrivateStorage().getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'attendee';
+    const color = currentPrivateStorage().getItem(STORAGE_KEYS.USER_COLOR) || getRandomColor();
+    const roomId = currentPrivateStorage().getItem(STORAGE_KEYS.ROOM_ID) || 'general';
     return { name, role, color, roomId };
   } catch {
     return { name: '', role: 'attendee', color: '#2563EB', roomId: 'general' };
@@ -37,10 +38,10 @@ export function loadUserPrefs(): { name: string; role: UserRole; color: string; 
 
 export function saveUserPrefs(prefs: { name?: string; role?: UserRole; color?: string; roomId?: string }) {
   try {
-    if (prefs.name !== undefined) localStorage.setItem(STORAGE_KEYS.USER_NAME, prefs.name);
-    if (prefs.role !== undefined) localStorage.setItem(STORAGE_KEYS.USER_ROLE, prefs.role);
-    if (prefs.color !== undefined) localStorage.setItem(STORAGE_KEYS.USER_COLOR, prefs.color);
-    if (prefs.roomId !== undefined) localStorage.setItem(STORAGE_KEYS.ROOM_ID, prefs.roomId);
+    if (prefs.name !== undefined) currentPrivateStorage().setItem(STORAGE_KEYS.USER_NAME, prefs.name);
+    if (prefs.role !== undefined) currentPrivateStorage().setItem(STORAGE_KEYS.USER_ROLE, prefs.role);
+    if (prefs.color !== undefined) currentPrivateStorage().setItem(STORAGE_KEYS.USER_COLOR, prefs.color);
+    if (prefs.roomId !== undefined) currentPrivateStorage().setItem(STORAGE_KEYS.ROOM_ID, prefs.roomId);
   } catch (e) {
     console.warn('Unable to persist to localStorage', e);
   }

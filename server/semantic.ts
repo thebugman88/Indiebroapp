@@ -197,7 +197,7 @@ Provide a deep synthesis of the bars with refactored lyrics, estimated syllable 
       data: parsed,
     });
   } catch (error) {
-    console.error("Synthesis error:", error);
+    console.error("[Synthesis] Provider or output validation failed.");
     return res
       .status(502)
       .json({

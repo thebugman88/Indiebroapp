@@ -1,3 +1,4 @@
+import { requestPurchase } from '../components/PurchaseDialog';
 import { authenticatedFetch } from '../services/authService';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
@@ -72,18 +73,19 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       const request = ++revision;
       setProfile(cancelProSubscription());
       try {
-        const response = await authenticatedFetch('/api/stripe/subscription');
+        const response = await authenticatedFetch('/api/economy/wallet');
         const status = await response.json();
-        if (request === revision && response.ok && status.valid === true && status.expiresAt > Date.now()) {
-          setProfile(activateProSubscription(status.expiresAt));
+        if (request === revision && response.ok && status.tier === 'pro' && status.proExpiresAt > Date.now()) {
+          setProfile(activateProSubscription(status.proExpiresAt));
         }
       } catch { /* No trusted status means free access. */ }
     };
     void refresh();
     window.addEventListener('ib_auth_changed', refresh);
     window.addEventListener('focus', refresh);
+    window.addEventListener('ib_community_changed',refresh);
     const timer = window.setInterval(refresh, 60000);
-    return () => { revision++; clearInterval(timer); window.removeEventListener('ib_auth_changed', refresh); window.removeEventListener('focus', refresh); };
+    return () => { revision++; clearInterval(timer); window.removeEventListener('ib_auth_changed', refresh); window.removeEventListener('focus', refresh); window.removeEventListener('ib_community_changed',refresh); };
   }, []);
 
   // Check URL for stripe payment redirect params on mount
@@ -107,7 +109,7 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
             setProfile(updated);
             awardXP({
               amount: 500,
-              actionTitle: 'Activated Artist Pro Powerhouse ($4.99/mo)',
+              actionTitle: 'Activated Artist Pro Powerhouse ($14.99/mo)',
               sourceApp: 'Stripe Checkout',
               badgeId: 'pipeline-perfect',
               badgeIncrement: 1
@@ -174,27 +176,9 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setProfile(updated);
   }, []);
 
-  const cancelPro = useCallback(() => {
-    const updated = cancelProSubscription();
-    setProfile(updated);
-  }, []);
+  const cancelPro = useCallback(() => { void authenticatedFetch('/api/stripe/cancel', { method: 'POST' }).then(async r => { const data = await r.json(); window.alert(data.message || data.error || 'Cancellation not confirmed.'); }).catch(() => window.alert('Cancellation not confirmed. Please retry.')); }, []);
 
-  const startStripeCheckout = useCallback(async (_returnUrl?: string) => {
-    try {
-      const res = await authenticatedFetch('/api/stripe/create-checkout-session', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientCustomKey: crypto.randomUUID() })
-      });
-      const data = await res.json();
-      if (!res.ok || typeof data.url !== 'string') return { success: false, error: data.error || 'Checkout is unavailable.' };
-      const url = new URL(data.url);
-      if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com') return { success: false, error: 'Unexpected checkout destination.' };
-      window.location.assign(url.href);
-      return { success: true, url: url.href };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Checkout failed. No subscription was activated.' };
-    }
-  }, []);
+  const startStripeCheckout = useCallback(async (_returnUrl?: string) => { requestPurchase('pro'); return { success: true }; }, []);
 
   const verifyCheckoutSession = useCallback(async (sessionId: string) => {
     try {

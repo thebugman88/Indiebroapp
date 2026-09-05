@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../../shared/PrivateWorkspaceGate';
 import React, { useState } from 'react';
 import { 
   Music, 
@@ -38,6 +39,7 @@ const INITIAL_METADATA: TrackMetadata = {
 };
 
 export const MetadataHelper: React.FC<MetadataHelperProps> = ({ isAutoSaveOn }) => {
+  const localStorage = usePrivateStorage();
   const [metadata, setMetadata] = useState<TrackMetadata>(() => {
     try {
       const saved = localStorage.getItem('indie_track_metadata');

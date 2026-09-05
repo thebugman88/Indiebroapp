@@ -23,6 +23,9 @@ export type TrackVerdict =
   | 'Needs Polish'
   | 'Rethink/Rework';
 
+export type MusicCreationType = 'human-created' | 'ai-assisted';
+export type TrackFlagReason = 'bad-quality' | 'wrong-ai-room';
+
 export interface ScoreBreakdown {
   lyrics: number;          // 1-10
   vocals: number;          // 1-10
@@ -66,7 +69,11 @@ export interface ArtistTrack {
   isUserSubmission: boolean;
   ownershipConfirmed: boolean;
   rightsHolderSignature: string;
-  status: 'evaluating' | 'completed';
+  creationType: MusicCreationType;
+  status: 'evaluating' | 'completed' | 'returned';
+  flagCounts: Record<TrackFlagReason, number>;
+  returnedReason?: TrackFlagReason;
+  returnedAt?: string;
   targetJudges: number; // 10
   reviews: JudgeReview[];
   aggregatedScores: {
@@ -106,6 +113,7 @@ export interface UserJudgeProfile {
   songsJudgedGoodCount: number; // user tracks with >= 8.0/10
   termsAccepted: boolean;
   termsAcceptedDate?: string;
+  judgementCredits: number; // Three validated reviews activate one submission.
 }
 
 export interface TierConfig {

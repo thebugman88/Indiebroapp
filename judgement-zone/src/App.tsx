@@ -1,3 +1,4 @@
+import { getCurrentAuthUser } from '../../src/services/authService';
 import React, { useState, useEffect } from 'react';
 import {
   Gavel,
@@ -23,6 +24,17 @@ import { loadStoredProfile, loadStoredTracks, saveProfile, submitTrack, submitRe
 import { calculateTierFromXp, recalculateTrackScores } from './utils/matchmaker';
 
 export default function App() {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => { const uid = getCurrentAuthUser().id; setSession(old => old.uid === uid ? old : { uid, revision: old.revision + 1 }); };
+    window.addEventListener('ib_auth_changed', sync); sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+
+  // Late review/profile responses can only update the unmounted old workspace.
+  return <JudgementWorkspace key={session.revision} />;
+}
+function JudgementWorkspace() {
   const [tracks, setTracks] = useState<ArtistTrack[]>([]);
   const [userProfile, setUserProfile] = useState<UserJudgeProfile | null>(null);
   const [activeTab, setActiveTab] = useState<'chamber' | 'submit' | 'dossier' | 'vault' | 'sonic'>('chamber');
@@ -40,6 +52,14 @@ export default function App() {
     refresh();window.addEventListener('ib_auth_changed',refresh);
     return()=>{version++;window.removeEventListener('ib_auth_changed',refresh);};
   }, []);
+
+  useEffect(() => {
+    let current = true;
+    if (activeTab === 'chamber' || activeTab === 'dossier') {
+      loadStoredTracks().then(list => { if (current) setTracks(list); }).catch(e => { if (current) setError(e.message); });
+    }
+    return () => { current = false; };
+  }, [activeTab]);
 
   const handleUpdateProfile = async (newProfile:UserJudgeProfile) => {
     try { setUserProfile(await saveProfile(newProfile));setError(''); } catch(e:any) {setError(e.message);}
@@ -119,7 +139,7 @@ export default function App() {
         userProfile={userProfile}
         onOpenTiers={() => setIsTierModalOpen(true)}
         onOpenTerms={() => setIsTermsOpen(true)}
-        queuedCount={tracks.filter((t) => !userProfile.savedVaultTrackIds.includes(t.id)).length}
+        queuedCount={tracks.filter((t) => t.status === 'evaluating' && t.ownerId !== userProfile.id && !t.reviews.some(r => r.judgeId === userProfile.id)).length}
       />
 
       {/* Main View Switcher */}

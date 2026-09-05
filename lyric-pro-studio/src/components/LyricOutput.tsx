@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Copy, Check, Download, Volume2, VolumeX, Bookmark, Sparkles, Music, Activity, Disc, Zap, Flame, Radio } from 'lucide-react';
 import { LyricSet, LyricSection } from '../types';
 
@@ -25,6 +25,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
   const [isPlayingB, setIsPlayingB] = useState(false);
   const [activeTabMobile, setActiveTabMobile] = useState<'A' | 'B'>('A');
   const [viewMode, setViewMode] = useState<'prosody' | 'clean'>('prosody');
+  useEffect(()=>()=>{if('speechSynthesis' in window)window.speechSynthesis.cancel();},[setA,setB]);
 
   const handleCopy = (text: string, isSetA: boolean) => {
     if (!text) return;
@@ -45,8 +46,8 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = `${set.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${label}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const speakLyrics = (text: string, isSetA: boolean) => {
@@ -66,6 +67,9 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
       // Remove section headers like [INTRO] for smoother reading
       const cleanText = text.replace(/\[.*?\]/g, '');
       const utterance = new SpeechSynthesisUtterance(cleanText);
+      const localVoice=window.speechSynthesis.getVoices().find(voice=>voice.localService);
+      if(!localVoice){window.alert('A local device voice is not available. Read-aloud stays disabled to avoid sending your lyrics to a remote voice service.');return;}
+      utterance.voice=localVoice;
       utterance.rate = 1.05;
       utterance.pitch = 0.95;
 
@@ -189,7 +193,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
               Dual Studio Output Ready (Set A & Set B)
               {isAiGenerated && (
                 <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-mono">
-                  GEMINI 3.7 ELITE GHOSTWRITER
+                  AI LYRIC STUDIO
                 </span>
               )}
             </div>
@@ -199,6 +203,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
           </div>
         </div>
 
+        <button className="px-4 py-2 bg-amber-400 text-black rounded-xl font-bold text-xs" onClick={() => handleDownload({...setA, title:'Both lyric sets',content:`SET A — ${setA.title}\n\n${setA.content}\n\nSET B — ${setB.title}\n\n${setB.content}`}, 'both_sets')}>Download both songs (.txt)</button>
         {/* CONTROLS: PROSODY TOGGLE & SAVE */}
         <div className="flex items-center gap-2">
           <div className="flex bg-zinc-950 border border-zinc-800 p-1 rounded-xl">
@@ -230,7 +235,7 @@ export const LyricOutput: React.FC<LyricOutputProps> = ({
             }`}
           >
             <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-zinc-950' : ''}`} />
-            <span>{isSaved ? 'Saved to Vault' : 'Save Both Sets'}</span>
+            <span>{isSaved ? 'Saved temporarily' : 'Save for up to 24h'}</span>
           </button>
         </div>
       </div>

@@ -1,0 +1,56 @@
+/* Custom Studio Range Inputs */
+.mastering-suite-root input[type="range"] {
+  accent-color: #f59e0b;
+}
+
+.mastering-suite-root input[type="range"]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fbbf24;
+  border: 2px solid #09090b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+  cursor: pointer;
+  appearance: none;
+  margin-top: -4px;
+}
+
+.mastering-suite-root input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: #27272a;
+}
+
+/* Keep feature scrollbars local to the mastering workspace. */
+.mastering-suite-root ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.mastering-suite-root ::-webkit-scrollbar-track {
+  background: #09090b;
+}
+
+.mastering-suite-root ::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+}
+
+.mastering-suite-root ::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+@keyframes masteringSuiteFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mastering-suite-root .animate-fade-in {
+  animation: masteringSuiteFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

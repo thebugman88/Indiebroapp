@@ -1,4 +1,5 @@
 import { authenticatedFetch } from '../../../../src/services/authService';
+import { useCoinAction } from '../../../../src/useCoinAction';
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, UserProfile, GenreType } from '../../types';
 import { backendApiUrl } from '../../services/backend';
@@ -17,6 +18,7 @@ export const MarketingRoom: React.FC<Props> = ({
   onSendMessage,
   onRequireNickname,
 }) => {
+  const marketingCoin = useCoinAction('/api/gemini/marketing-advisor');
   const [inputMessage, setInputMessage] = useState('');
   const [trackTitle, setTrackTitle] = useState('');
   const [trackGenre, setTrackGenre] = useState<GenreType>('Hip-Hop');
@@ -152,7 +154,7 @@ export const MarketingRoom: React.FC<Props> = ({
 
             <button
               type="submit"
-              disabled={isGeneratingPlan || !trackTitle.trim()}
+              disabled={isGeneratingPlan || !trackTitle.trim() || marketingCoin.insufficient}
               className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isGeneratingPlan ? (
@@ -163,7 +165,7 @@ export const MarketingRoom: React.FC<Props> = ({
               ) : (
                 <>
                   <Rocket className="h-4 w-4" />
-                  Generate 4-Week Rollout Plan
+                  {marketingCoin.insufficient ? marketingCoin.label : `Generate 4-Week Rollout Plan · ${marketingCoin.action?.cost ?? 25} BC`}
                 </>
               )}
             </button>

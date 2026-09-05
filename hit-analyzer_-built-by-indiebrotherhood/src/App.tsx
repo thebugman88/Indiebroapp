@@ -1,4 +1,7 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
+import { decodeAudioBuffer } from '../../src/services/webAudioEngine';
 import { authenticatedFetch } from '../../src/services/authService';
+import { useCoinAction } from '../../src/useCoinAction';
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { AudioInputSection } from './components/AudioInputSection';
@@ -12,6 +15,20 @@ import { AnalysisResult } from './types';
 import { Flame, Radio, Loader2, Sparkles, ArrowUpRight } from 'lucide-react';
 
 export default function App() {
+  const analysisCoin = useCoinAction('/api/analyze');
+  const [basic, setBasic] = useState<string | null>(null);
+  const [basicBusy, setBasicBusy] = useState(false);
+  async function analyzeBasic() {
+    if (!audioData) { setErrorMessage('Upload audio for free local measurements.'); return; }
+    setBasicBusy(true); setErrorMessage(null);
+    try {
+      const buffer = await decodeAudioBuffer(audioData);
+      let peak=0, squares=0, count=0;
+      for(let c=0;c<buffer.numberOfChannels;c++){const samples=buffer.getChannelData(c);for(let i=0;i<samples.length;i++){peak=Math.max(peak,Math.abs(samples[i]));squares+=samples[i]*samples[i];count++;}}
+      const db=(v:number)=>v>0?(20*Math.log10(v)).toFixed(1):'−∞';
+      setBasic(`Duration ${buffer.duration.toFixed(1)} s · ${buffer.sampleRate} Hz · ${buffer.numberOfChannels} channels · Sample peak ${db(peak)} dBFS · RMS ${db(Math.sqrt(squares/Math.max(1,count)))} dBFS`);
+    } catch { setErrorMessage('This audio could not be decoded locally. Try a supported audio file.'); } finally { setBasicBusy(false); }
+  }
   // Audio state
   const [selectedAudioName, setSelectedAudioName] = useState<string>('');
   const [artistName, setArtistName] = useState<string>('');
@@ -37,7 +54,7 @@ export default function App() {
 
   // Load persistent lyric reminder preference from localStorage
   useEffect(() => {
-    const savedHidePref = localStorage.getItem('hit_analyzer_hide_lyric_reminder');
+    const savedHidePref = currentPrivateStorage().getItem('hit_analyzer_hide_lyric_reminder');
     if (savedHidePref === 'true') {
       setHideReminderPermanently(true);
     }
@@ -54,6 +71,7 @@ export default function App() {
     setSelectedAudioName(data.audioName);
     setArtistName(data.artistName);
     setAudioData(data.audioData);
+    setBasic(null);
     setAudioUrl(data.audioUrl);
     setInputMethod(data.inputMethod);
     setMimeType(data.mimeType);
@@ -125,9 +143,9 @@ export default function App() {
   const handleDontShowAgainToggle = (dontShow: boolean) => {
     setHideReminderPermanently(dontShow);
     if (dontShow) {
-      localStorage.setItem('hit_analyzer_hide_lyric_reminder', 'true');
+      currentPrivateStorage().setItem('hit_analyzer_hide_lyric_reminder', 'true');
     } else {
-      localStorage.removeItem('hit_analyzer_hide_lyric_reminder');
+      currentPrivateStorage().removeItem('hit_analyzer_hide_lyric_reminder');
     }
   };
 
@@ -204,11 +222,16 @@ export default function App() {
           {/* Copyright Guard Bar */}
           <CopyrightGuardBar onOpenTerms={() => handleOpenHelp('tos')} />
 
+          <section className="rounded-2xl border border-slate-700 p-4 space-y-3">
+            <button disabled={basicBusy} onClick={analyzeBasic} className="rounded-xl bg-emerald-600 text-white font-bold p-3">{basicBusy ? 'Measuring…' : 'Basic local audio analysis · Free'}</button>
+            <p className="text-xs text-slate-400">Measured in your browser. No upload, Coins, hit prediction, or copyright claim.</p>
+            {basic && <p className="text-sm text-emerald-200">{basic}</p>}
+          </section>
           {/* ANALYZE BUTTON */}
           <div className="text-center pt-2">
             <button
               type="button"
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || analysisCoin.insufficient}
               onClick={handleAnalyzeClick}
               className={`w-full sm:w-auto px-10 py-4 rounded-2xl font-black text-sm tracking-wide transition-all shadow-xl flex items-center justify-center gap-3 mx-auto ${
                 isAnalyzing
@@ -224,7 +247,7 @@ export default function App() {
               ) : (
                 <>
                   <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
-                  <span>Analyze Hit Potential</span>
+                  <span>{analysisCoin.label}</span>
                   <ArrowUpRight className="w-5 h-5" />
                 </>
               )}

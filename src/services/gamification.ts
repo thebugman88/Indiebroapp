@@ -1,3 +1,4 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
 import confetti from 'canvas-confetti';
 import { soundFx } from './audioEffects';
 
@@ -464,7 +465,7 @@ export function getInitialState(): UserProfileState {
 export function loadProfileState(): UserProfileState {
   if (typeof window === 'undefined') return getInitialState();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = currentPrivateStorage().getItem(STORAGE_KEY);
     if (!raw) {
       const init = getInitialState();
       saveProfileState(init);
@@ -528,14 +529,14 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 1. Lyric Sets count
     let lyricCount = 0;
     try {
-      const pRaw = localStorage.getItem('lyric_pro_projects');
+      const pRaw = currentPrivateStorage().getItem('lyric_pro_projects');
       if (pRaw) {
         const arr = JSON.parse(pRaw);
         if (Array.isArray(arr)) lyricCount += arr.length;
       }
-      const sRaw = localStorage.getItem('indie_lyric_scratchpad');
+      const sRaw = currentPrivateStorage().getItem('indie_lyric_scratchpad');
       if (sRaw && sRaw.trim().length > 20) lyricCount += 1;
-      const catRaw = localStorage.getItem('ib_artist_verified_catalog_v2');
+      const catRaw = currentPrivateStorage().getItem('ib_artist_verified_catalog_v2');
       if (catRaw) {
         const cat = JSON.parse(catRaw);
         if (Array.isArray(cat)) {
@@ -547,17 +548,17 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 2. Documents & Split Sheets processed
     let docsCount = 0;
     try {
-      const rRaw = localStorage.getItem('royalty_extractor_history');
+      const rRaw = currentPrivateStorage().getItem('royalty_extractor_history');
       if (rRaw) {
         const arr = JSON.parse(rRaw);
         if (Array.isArray(arr)) docsCount += arr.length;
       }
-      const sRaw = localStorage.getItem('indie_split_sheets');
+      const sRaw = currentPrivateStorage().getItem('indie_split_sheets');
       if (sRaw) {
         const arr = JSON.parse(sRaw);
         if (Array.isArray(arr)) docsCount += arr.length;
       }
-      const catRaw = localStorage.getItem('ib_artist_verified_catalog_v2');
+      const catRaw = currentPrivateStorage().getItem('ib_artist_verified_catalog_v2');
       if (catRaw) {
         const cat = JSON.parse(catRaw);
         if (Array.isArray(cat)) {
@@ -569,12 +570,12 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 3. Tracks Analyzed
     let tracksCount = 0;
     try {
-      const hRaw = localStorage.getItem('hit_analyzer_history');
+      const hRaw = currentPrivateStorage().getItem('hit_analyzer_history');
       if (hRaw) {
         const arr = JSON.parse(hRaw);
         if (Array.isArray(arr)) tracksCount += arr.length;
       }
-      const catRaw = localStorage.getItem('ib_artist_verified_catalog_v2');
+      const catRaw = currentPrivateStorage().getItem('ib_artist_verified_catalog_v2');
       if (catRaw) {
         const cat = JSON.parse(catRaw);
         if (Array.isArray(cat)) {
@@ -586,7 +587,7 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 4. Battles Completed
     let battleCount = 0;
     try {
-      const bRaw = localStorage.getItem('hangout_battles_history');
+      const bRaw = currentPrivateStorage().getItem('hangout_battles_history');
       if (bRaw) {
         const arr = JSON.parse(bRaw);
         if (Array.isArray(arr)) battleCount += arr.length;
@@ -596,7 +597,7 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 5. Consensus Reviews
     let reviewCount = 0;
     try {
-      const revRaw = localStorage.getItem('judgement_zone_user_reviews');
+      const revRaw = currentPrivateStorage().getItem('judgement_zone_user_reviews');
       if (revRaw) {
         const arr = JSON.parse(revRaw);
         if (Array.isArray(arr)) reviewCount += arr.length;
@@ -606,7 +607,7 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 6. Trivia Rounds
     let triviaCount = 0;
     try {
-      const qRaw = localStorage.getItem('soniciq_quiz_history');
+      const qRaw = currentPrivateStorage().getItem('soniciq_quiz_history');
       if (qRaw) {
         const arr = JSON.parse(qRaw);
         if (Array.isArray(arr)) triviaCount += arr.length;
@@ -616,7 +617,7 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 7. Motions Passed
     let motionCount = 0;
     try {
-      const mRaw = localStorage.getItem('meeting_room_minutes_history');
+      const mRaw = currentPrivateStorage().getItem('meeting_room_minutes_history');
       if (mRaw) {
         const arr = JSON.parse(mRaw);
         if (Array.isArray(arr)) motionCount += arr.length;
@@ -626,7 +627,7 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 8. Semantic Scans
     let scanCount = 0;
     try {
-      const scRaw = localStorage.getItem('semantic_lab_history');
+      const scRaw = currentPrivateStorage().getItem('semantic_lab_history');
       if (scRaw) {
         const arr = JSON.parse(scRaw);
         if (Array.isArray(arr)) scanCount += arr.length;
@@ -671,7 +672,7 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
 export function saveProfileState(state: UserProfileState): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    currentPrivateStorage().setItem(STORAGE_KEY, JSON.stringify(state));
     // Dispatch global event for cross-component synchrony
     window.dispatchEvent(new CustomEvent('ib_profile_updated', { detail: state }));
   } catch (err) {

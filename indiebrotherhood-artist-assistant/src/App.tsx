@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import { currentPrivateStorage } from '../../shared/privateStorage';
+import React, { useState, useEffect, useRef } from "react";
 import {
   Music,
   Folder,
@@ -20,23 +21,8 @@ import {
   SongMetadata,
   UploadedDocument,
 } from "./types";
-import {
-  getStoredProfile,
-  saveStoredProfile,
-  getStoredSettings,
-  saveStoredSettings,
-  getStoredSongs,
-  saveStoredSongs,
-  getStoredFolders,
-  saveStoredFolders,
-  getStoredDocuments,
-  saveStoredDocuments,
-  getStoredEvents,
-  saveStoredEvents,
-  getStoredChatHistory,
-  saveStoredChatHistory,
-  clearAllVaultData,
-} from "./lib/storage";
+import { createCareerVault, emptyCareerSnapshot } from "./lib/storage";
+import { getCurrentAuthUser } from '../../src/services/authService';
 import { checkAndTriggerEventReminders } from "./lib/notificationEngine";
 
 // UI Components
@@ -52,14 +38,44 @@ import { TermsPrivacyModal } from "./components/TermsPrivacyModal";
 import { HelpModal } from "./components/HelpModal";
 
 export function App() {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => {
+      const uid = getCurrentAuthUser().id;
+      setSession(old => uid === old.uid ? old : { uid, revision: old.revision + 1 });
+    };
+    window.addEventListener('ib_auth_changed', sync);
+    sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+  return <CareerWorkspace key={session.revision} uid={session.uid} />;
+}
+
+function CareerWorkspace({ uid }: { uid: string }) {
+  const active = useRef(true);
+  const isCurrent = () => active.current && getCurrentAuthUser().id === uid;
+  useEffect(() => {
+    active.current = true;
+    const changed = () => { if (getCurrentAuthUser().id !== uid) active.current = false; };
+    window.addEventListener('ib_auth_changed', changed);
+    return () => { active.current = false; window.removeEventListener('ib_auth_changed', changed); };
+  }, [uid]);
+  const [vault] = useState(() => createCareerVault(uid, isCurrent, () => currentPrivateStorage()));
+  const [initial] = useState(() => {
+    try { return { data: vault.load(), error: '' }; }
+    catch { return { data: emptyCareerSnapshot(), error: 'Saved workspace could not be read. It has not been overwritten. Check browser storage, then reopen this tool.' }; }
+  });
+  const [saveError, setSaveError] = useState('');
+  const [saved, setSaved] = useState(false);
+
   // Main State
-  const [profile, setProfile] = useState<ArtistProfile>(getStoredProfile);
-  const [settings, setSettings] = useState<SettingsState>(getStoredSettings);
-  const [songs, setSongs] = useState<SongMetadata[]>(getStoredSongs);
-  const [folders, setFolders] = useState<FolderItem[]>(getStoredFolders);
-  const [documents, setDocuments] = useState<UploadedDocument[]>(getStoredDocuments);
-  const [events, setEvents] = useState<ScheduledEvent[]>(getStoredEvents);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(getStoredChatHistory);
+  const [profile, setProfile] = useState<ArtistProfile>(initial.data.profile);
+  const [settings, setSettings] = useState<SettingsState>(initial.data.settings);
+  const [songs, setSongs] = useState<SongMetadata[]>(initial.data.songs);
+  const [folders, setFolders] = useState<FolderItem[]>(initial.data.folders);
+  const [documents, setDocuments] = useState<UploadedDocument[]>(initial.data.documents);
+  const [events, setEvents] = useState<ScheduledEvent[]>(initial.data.events);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initial.data.chatMessages);
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<"catalogue" | "files" | "schedule" | "export" | "chat">("catalogue");
@@ -72,39 +88,18 @@ export function App() {
   // Cross-component initial prompt to send into Assistant Chat
   const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string>("");
 
-  // Sync state to storage
+  const snapshot = { profile, settings, songs, folders, documents, events, chatMessages };
+  // One account-owned snapshot prevents partial updates across separate browser keys.
   useEffect(() => {
-    saveStoredProfile(profile);
-  }, [profile]);
-
-  useEffect(() => {
-    saveStoredSettings(settings);
-  }, [settings]);
-
-  useEffect(() => {
-    saveStoredSongs(songs);
-  }, [songs]);
-
-  useEffect(() => {
-    saveStoredFolders(folders);
-  }, [folders]);
-
-  useEffect(() => {
-    saveStoredDocuments(documents);
-  }, [documents]);
-
-  useEffect(() => {
-    saveStoredEvents(events);
-  }, [events]);
-
-  useEffect(() => {
-    saveStoredChatHistory(chatMessages);
-  }, [chatMessages]);
+    if (initial.error || !isCurrent()) return;
+    try { setSaved(vault.save(snapshot)); setSaveError(''); }
+    catch { setSaved(false); setSaveError('Changes could not be saved. Keep this page open and export your current work before retrying.'); }
+  }, [profile, settings, songs, folders, documents, events, chatMessages]);
 
   // Periodic Reminder Daemon (checks every 60s for due events)
   useEffect(() => {
     const timer = setInterval(() => {
-      checkAndTriggerEventReminders(events, settings);
+      if (isCurrent()) checkAndTriggerEventReminders(events, settings);
     }, 60000);
 
     return () => clearInterval(timer);
@@ -193,15 +188,25 @@ export function App() {
 
   // Reset entire database
   const handleResetAllData = () => {
-    clearAllVaultData();
+    if (!isCurrent()) return;
+    try { vault.reset(snapshot); }
+    catch { setSaveError('Could not reset the saved workspace. No reset was applied to the editor.'); return; }
+    setFolders(structuredClone(emptyCareerSnapshot().folders));
     setSongs([]);
     setDocuments([]);
     setEvents([]);
     setChatMessages([]);
   };
 
+  if (initial.error) return <div role="alert" className="p-6 text-amber-300">{initial.error}</div>;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+      <div role="status" className="p-3 text-xs text-slate-300">
+        {uid === 'guest' ? 'Guest work is temporary. Export before signing in or leaving this tool.' : saved ? 'Saved for this account in this browser. Not a cloud backup.' : 'Saving this account’s workspace…'}
+        {' '}Legacy shared-browser data is retained but not automatically imported.
+        {saveError && <p role="alert" className="text-amber-300">{saveError}</p>}
+      </div>
       {/* 1. Live Ticker Across the Top */}
       <TopTicker
         events={events}
@@ -424,6 +429,7 @@ export function App() {
         onSaveProfile={setProfile}
         onSaveSettings={setSettings}
         onResetData={handleResetAllData}
+        onExportBackup={() => vault.export(snapshot)}
       />
 
       <TermsPrivacyModal

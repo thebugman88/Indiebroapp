@@ -1,3 +1,4 @@
+import { PlanAndCoins } from './PlanAndCoins';
 import { authenticatedFetch } from '../services/authService';
 import React, { useState, useEffect } from 'react';
 import {
@@ -52,21 +53,25 @@ export const GamificationModal: React.FC = () => {
     updateProfileName,
     updateAvatar,
     resetProgress,
-    startStripeCheckout,
-    cancelPro
   } = useGamification();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'notifications' | 'messages' | 'billing' | 'badges' | 'history' | 'sentinel' | 'customize'>('overview');
   const [editingName, setEditingName] = useState(false);
-  const [tempName, setTempName] = useState(profile.displayName);
   const [tempHandle, setTempHandle] = useState(profile.artistHandle || '@creator');
   const [customAvatarUrl, setCustomAvatarUrl] = useState(profile.avatarUrl || '');
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [checkoutMsg, setCheckoutMsg] = useState<string | null>(null);
 
   const [currentUser, setCurrentUser] = useState<RegisteredUser>(getCurrentAuthUser);
   const [unreadNotifications, setUnreadNotifications] = useState<number>(getUnreadNotificationCount);
   const [unreadDms, setUnreadDms] = useState<number>(() => getUnreadDmCount(getCurrentAuthUser().id));
+
+  useEffect(() => {
+    const openPlanAndCoins = () => {
+      setActiveTab('billing');
+      setIsProfileModalOpen(true);
+    };
+    window.addEventListener('ib_open_plan_coins', openPlanAndCoins);
+    return () => window.removeEventListener('ib_open_plan_coins', openPlanAndCoins);
+  }, [setIsProfileModalOpen]);
 
   // Synchronize unread notifications and DMs
   useEffect(() => {
@@ -121,27 +126,12 @@ export const GamificationModal: React.FC = () => {
 
   const handleSaveIdentity = () => {
     updateProfile({
-      displayName: tempName.trim() || 'Independent Creator',
+      displayName: profile.displayName,
       artistHandle: tempHandle.trim().startsWith('@') ? tempHandle.trim() : `@${tempHandle.trim()}`,
       avatarUrl: customAvatarUrl.trim() || undefined,
-      avatarSeed: getInitials(tempName)
+      avatarSeed: getInitials(profile.displayName)
     });
     setEditingName(false);
-  };
-
-  const handleCheckout = async () => {
-    setIsCheckingOut(true);
-    setCheckoutMsg(null);
-    try {
-      const res = await startStripeCheckout();
-      if (res.isSimulated) {
-        setCheckoutMsg('Artist Pro Powerhouse activated successfully!');
-      }
-    } catch (err: any) {
-      setCheckoutMsg(err.message || 'Checkout failed. Please try again.');
-    } finally {
-      setIsCheckingOut(false);
-    }
   };
 
   return (
@@ -219,11 +209,10 @@ export const GamificationModal: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"
-                        value={tempName}
-                        onChange={(e) => setTempName(e.target.value)}
-                        placeholder="Creator Name"
-                        className="bg-zinc-900 border border-amber-500/60 text-white text-xs font-bold px-2 py-1 rounded-lg focus:outline-none w-36"
-                        autoFocus
+                        value={profile.displayName}
+                        readOnly
+                        title="Artist name is permanently reserved to this account"
+                        className="bg-zinc-950 border border-zinc-800 text-zinc-400 text-xs font-bold px-2 py-1 rounded-lg focus:outline-none w-36 cursor-not-allowed"
                       />
                       <input
                         type="text"
@@ -248,7 +237,6 @@ export const GamificationModal: React.FC = () => {
                       <span className="text-xs text-zinc-400 font-mono">{profile.artistHandle || '@creator'}</span>
                       <button
                         onClick={() => {
-                          setTempName(profile.displayName);
                           setTempHandle(profile.artistHandle || '@creator');
                           setEditingName(true);
                         }}
@@ -313,7 +301,7 @@ export const GamificationModal: React.FC = () => {
         </div>
 
         {/* 3. Navigation Tabs */}
-        <div className="flex items-center border-b border-zinc-800 bg-zinc-950 px-4 sm:px-6 overflow-x-auto text-xs font-medium scrollbar-none">
+        <div className="flex min-h-12 shrink-0 items-center border-b border-zinc-800 bg-zinc-950 px-4 sm:px-6 overflow-x-auto text-xs font-medium scrollbar-none">
           <button
             onClick={() => setActiveTab('overview')}
             className={`py-3 px-3.5 border-b-2 font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
@@ -369,7 +357,7 @@ export const GamificationModal: React.FC = () => {
             }`}
           >
             <Crown className="w-4 h-4" />
-            <span>Plan & Billing ($4.99 Pro)</span>
+            <span>Plan & Billing ($14.99 Pro)</span>
           </button>
 
           <button
@@ -547,122 +535,8 @@ export const GamificationModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: BILLING & $4.99 PRO */}
-          {activeTab === 'billing' && (
-            <div className="space-y-6">
-              {checkoutMsg && (
-                <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-400" />
-                  <span>{checkoutMsg}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-                {/* Free Starter Card */}
-                <div
-                  className={`p-5 rounded-3xl border flex flex-col justify-between space-y-4 ${
-                    !isPro
-                      ? 'bg-zinc-900/90 border-amber-500/60 shadow-lg'
-                      : 'bg-zinc-950/50 border-zinc-800 opacity-80'
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-mono font-bold text-zinc-400 uppercase">Starter Creator</span>
-                      {!isPro && (
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                          ACTIVE PLAN
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-2xl font-black text-white">$0 <span className="text-xs text-zinc-400 font-mono">/ forever</span></div>
-                    <p className="text-xs text-zinc-400">Essential creator tools with standard quota across all 10 modules.</p>
-                  </div>
-
-                  <div className="space-y-2 text-xs text-zinc-300 pt-2 border-t border-zinc-800">
-                    <div className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>3 Blind Submissions / Month</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Standard Lyric & Hit Scans</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>1.0x Base XP Earning Rate</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Artist Pro Powerhouse Card */}
-                <div
-                  className={`p-5 rounded-3xl border-2 flex flex-col justify-between space-y-4 relative ${
-                    isPro
-                      ? 'bg-gradient-to-b from-[#18140c] to-[#0c0e17] border-amber-500 shadow-xl shadow-amber-500/10'
-                      : 'bg-gradient-to-b from-[#14120c] to-[#0a0c14] border-amber-500/60'
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-mono font-extrabold text-amber-400 uppercase flex items-center gap-1">
-                        <Crown className="w-3.5 h-3.5" />
-                        Artist Pro Powerhouse
-                      </span>
-                      {isPro ? (
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500 text-zinc-950">
-                          ACTIVE PRO
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40">
-                          BEST VALUE
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-2xl font-black text-amber-400">$4.99 <span className="text-xs text-zinc-400 font-mono">/ month</span></div>
-                    <p className="text-xs text-zinc-300">Unlimited multimodal AI telemetry, unlimited 10-judge submissions, OCR split sheets, and 2.5x XP multiplier.</p>
-                  </div>
-
-                  <div className="space-y-2 text-xs text-zinc-200 pt-2 border-t border-zinc-800">
-                    <div className="flex items-center gap-2 font-medium text-white">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Unlimited 10-Judge Blind Panels</span>
-                    </div>
-                    <div className="flex items-center gap-2 font-medium text-white">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Gemini 2.5 Pro Multimodal Hit Telemetry</span>
-                    </div>
-                    <div className="flex items-center gap-2 font-medium text-white">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
-                      <span>OCR Split Sheets & PRO Packager</span>
-                    </div>
-                    <div className="flex items-center gap-2 font-medium text-white">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
-                      <span>2.5x Universal XP Boost</span>
-                    </div>
-                  </div>
-
-                  {isPro ? (
-                    <button
-                      onClick={cancelPro}
-                      className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs transition cursor-pointer"
-                    >
-                      Downgrade to Starter Free
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleCheckout}
-                      disabled={isCheckingOut}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-zinc-950 font-black text-xs shadow-lg hover:scale-[1.01] transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      <CreditCard className="w-4 h-4" />
-                      <span>{isCheckingOut ? 'Opening Stripe...' : 'Upgrade with Stripe ($4.99/mo)'}</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* TAB 2: BILLING & $14.99 PRO */}
+          {activeTab === 'billing' && <PlanAndCoins />}
 
           {/* TAB 3: BADGES GALLERY */}
           {activeTab === 'badges' && (
@@ -809,14 +683,14 @@ export const GamificationModal: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-mono font-bold text-zinc-200 uppercase flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-purple-400" />
-                    <span>3-Stage Idempotent Transaction Audit Log</span>
+                    <span>Durable payment delivery log</span>
                   </h4>
-                  <span className="text-[10px] font-mono text-zinc-400">UUID v4 Verified</span>
+                  <span className="text-[10px] font-mono text-zinc-400">Server-verified records</span>
                 </div>
 
                 {transactionLogs.length === 0 ? (
                   <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 text-center text-xs text-zinc-400">
-                    No billing transactions initialized yet. Purchases through Stripe automatically record Before/During/After states with UUID v4 idempotency keys.
+                    No payment records loaded. Verified purchases record initiation, processing, receipt and delivery.
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -830,7 +704,7 @@ export const GamificationModal: React.FC = () => {
                             <span className="text-white font-bold">{tx.transactionId}</span>
                             <span
                               className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
-                                tx.status === 'completed'
+                                tx.status === 'fulfilled'
                                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                   : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                               }`}

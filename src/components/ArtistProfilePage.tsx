@@ -1,5 +1,7 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
+import { createArtistCatalog } from '../services/artistCatalog';
 import { authenticatedFetch } from '../services/authService';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Crown,
@@ -33,18 +35,16 @@ import {
   RefreshCw,
   X,
   Volume2,
+  LogOut,
 } from 'lucide-react';
 import {
   RegisteredUser,
   CatalogTrack,
   VerifiedArtistInfo,
   STUDIO_AURAS,
-  loadVerifiedArtistInfo,
-  loadVerifiedCatalog,
-  saveVerifiedArtistAndCatalog,
-  addCustomTrackToCatalog,
   getCurrentAuthUser,
   saveCurrentAuthUser,
+  logoutUser,
 } from '../services/authService';
 import { useGamification } from '../context/GamificationContext';
 
@@ -55,13 +55,34 @@ interface Props {
   onNavigateToApp: (appId: string) => void;
 }
 
-export const ArtistProfilePage: React.FC<Props> = ({
+export const ArtistProfilePage: React.FC<Props> = (props) => {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => { const uid = getCurrentAuthUser().id; setSession(old => old.uid === uid ? old : { uid, revision: old.revision + 1 }); };
+    window.addEventListener('ib_auth_changed', sync); sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+  return <ArtistProfileWorkspace key={session.revision} {...props} uid={session.uid} />;
+};
+const ArtistProfileWorkspace: React.FC<Props & { uid: string }> = ({ uid,
   currentUser,
   onUpdateUser,
   onOpenAuthModal,
   onNavigateToApp,
 }) => {
   const { profile, levelDetails, awardXP, updateProfile } = useGamification();
+  const active = useRef(true);
+  const isCurrent = () => active.current && getCurrentAuthUser().id === uid;
+  useEffect(() => {
+    active.current = true;
+    const changed = () => { if (getCurrentAuthUser().id !== uid) active.current = false; };
+    window.addEventListener('ib_auth_changed', changed);
+    return () => { active.current = false; window.removeEventListener('ib_auth_changed', changed); };
+  }, [uid]);
+  const [vault] = useState(() => createArtistCatalog(uid, isCurrent, () => currentPrivateStorage()));
+  const [initial] = useState(() => { try { return { data: vault.load(), error: '' }; } catch { return { data: { artist: null, tracks: [] }, error: 'Saved catalog could not be read. Reopen after checking browser storage; existing data has not been replaced.' }; } });
+  const [catalogError, setCatalogError] = useState(initial.error);
+  const [profilePhotoError, setProfilePhotoError] = useState('');
 
   // Search Real-World Artist Identifier
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,8 +91,8 @@ export const ArtistProfilePage: React.FC<Props> = ({
   const [hasSearched, setHasSearched] = useState(false);
 
   // Catalog State
-  const [verifiedArtist, setVerifiedArtist] = useState<VerifiedArtistInfo | null>(loadVerifiedArtistInfo);
-  const [catalog, setCatalog] = useState<CatalogTrack[]>(loadVerifiedCatalog);
+  const [verifiedArtist, setVerifiedArtist] = useState<VerifiedArtistInfo | null>(initial.data.artist);
+  const [catalog, setCatalog] = useState<CatalogTrack[]>(initial.data.tracks);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
   // Audio Preview Player
@@ -79,14 +100,12 @@ export const ArtistProfilePage: React.FC<Props> = ({
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
   // Profile Edit State
-  const [isEditingEnv, setIsEditingEnv] = useState(false);
-  const [editDisplayName, setEditDisplayName] = useState(currentUser.displayName);
   const [editHandle, setEditHandle] = useState(currentUser.artistHandle || '');
   const [editBio, setEditBio] = useState(currentUser.bio || '');
   const [editDaw, setEditDaw] = useState(currentUser.dawSetup || 'Ableton Live 12 Suite');
   const [editPro, setEditPro] = useState(currentUser.proAffiliation || 'ASCAP / Independent');
   const [editDistro, setEditDistro] = useState(currentUser.labelDistributor || 'indiebrotherhood Records');
-  const [editIsrc, setEditIsrc] = useState(currentUser.isrcPrefix || 'US-IBH-2026');
+  const [editIsrc, setEditIsrc] = useState(currentUser.isrcPrefix || '');
   const [editAura, setEditAura] = useState<RegisteredUser['studioAura']>(currentUser.studioAura || 'gold');
   const [editAvatarUrl, setEditAvatarUrl] = useState(currentUser.avatarUrl || '');
 
@@ -99,6 +118,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
 
   // Tab state within profile
   const [activeTab, setActiveTab] = useState<'catalog' | 'environment' | 'gamify' | 'admin'>('catalog');
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Stop audio on unmount
   useEffect(() => {
@@ -119,6 +139,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
     try {
       const resp = await authenticatedFetch(`/api/artist/search?q=${encodeURIComponent(searchQuery.trim())}`);
       const data = await resp.json();
+      if (!isCurrent()) return;
       if (data.artists) {
         setSearchResults(data.artists);
       }
@@ -136,6 +157,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
       const url = `/api/artist/catalog?artistId=${encodeURIComponent(artist.artistId)}&artistName=${encodeURIComponent(artist.artistName)}`;
       const resp = await authenticatedFetch(url);
       const data = await resp.json();
+      if (!isCurrent()) return;
 
       if (data.success && data.tracks) {
         const artistInfo: VerifiedArtistInfo = {
@@ -148,9 +170,9 @@ export const ArtistProfilePage: React.FC<Props> = ({
           totalCatalogTracks: data.tracks.length,
         };
 
+        vault.save(artistInfo, data.tracks);
         setVerifiedArtist(artistInfo);
         setCatalog(data.tracks);
-        saveVerifiedArtistAndCatalog(artistInfo, data.tracks);
 
         // Award XP for verifying real-world catalog
         awardXP({
@@ -161,14 +183,9 @@ export const ArtistProfilePage: React.FC<Props> = ({
           badgeIncrement: 1,
         });
 
-        // Update display name if user desires
-        if (!currentUser.displayName || currentUser.displayName === 'Independent Creator') {
-          const updatedUser = { ...currentUser, displayName: artist.artistName };
-          onUpdateUser(updatedUser);
-          saveCurrentAuthUser(updatedUser);
-        }
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (isCurrent()) setCatalogError(err.message || 'Catalog could not be saved.');
       console.error('Failed to load artist catalog:', err);
     } finally {
       setIsLoadingCatalog(false);
@@ -200,7 +217,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
   const handleSaveEnvironment = () => {
     const updatedUser: RegisteredUser = {
       ...currentUser,
-      displayName: editDisplayName.trim() || currentUser.displayName,
+      displayName: currentUser.displayName,
       artistHandle: editHandle.trim() || currentUser.artistHandle,
       bio: editBio.trim(),
       dawSetup: editDaw,
@@ -218,13 +235,37 @@ export const ArtistProfilePage: React.FC<Props> = ({
       artistHandle: updatedUser.artistHandle,
       avatarUrl: updatedUser.avatarUrl,
     });
-    setIsEditingEnv(false);
-
     awardXP({
       amount: 150,
       actionTitle: 'Customized Artist Environment & Studio Setup',
       sourceApp: 'Artist Environment',
     });
+  };
+
+  const handleProfilePicture = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 2_000_000) {
+      setProfilePhotoError('Choose a JPG, PNG, or WebP profile picture smaller than 2 MB.');
+      return;
+    }
+    setProfilePhotoError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 256;
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        const side = Math.min(image.width, image.height);
+        context.drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, 256, 256);
+        const avatarUrl = canvas.toDataURL('image/jpeg', 0.82);
+        const updatedUser = { ...currentUser, avatarUrl };
+        onUpdateUser(updatedUser); saveCurrentAuthUser(updatedUser); updateProfile({ avatarUrl });
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   // Add Manual Demo Track
@@ -238,15 +279,16 @@ export const ArtistProfilePage: React.FC<Props> = ({
       collectionName: newAlbumName.trim() || 'Unreleased Master Singles',
       artistName: verifiedArtist?.artistName || currentUser.displayName,
       releaseDate: newReleaseDate,
-      trackTimeMillis: 195000,
+      trackTimeMillis: 0, // Unknown until measured from an uploaded file.
       previewUrl: '',
       artworkUrl: verifiedArtist?.artworkUrl || currentUser.avatarUrl || '',
       primaryGenreName: newGenre,
       priceUsd: 'Unreleased',
-      isrc: `${editIsrc}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      isrc: '', // Only a user-supplied or verified registry ISRC is valid.
     };
 
-    const updated = addCustomTrackToCatalog(newTrack);
+    let updated: CatalogTrack[];
+    try { updated = vault.add(newTrack); } catch (e: any) { setCatalogError(e.message); return; }
     setCatalog(updated);
     setIsAddTrackOpen(false);
     setNewTrackName('');
@@ -263,11 +305,13 @@ export const ArtistProfilePage: React.FC<Props> = ({
   const currentAuraConfig = STUDIO_AURAS.find((a) => a.id === currentUser.studioAura) || STUDIO_AURAS[0];
 
   // Catalog Metrics Calculation
-  const totalCatalogSeconds = catalog.reduce((acc, t) => acc + (t.trackTimeMillis || 180000) / 1000, 0);
+  const totalCatalogSeconds = catalog.reduce((acc, t) => acc + (t.trackTimeMillis || 0) / 1000, 0);
   const totalMinutes = Math.floor(totalCatalogSeconds / 60);
   const hours = Math.floor(totalMinutes / 60);
   const remainingMinutes = totalMinutes % 60;
-  const playtimeString = hours > 0 ? `${hours}h ${remainingMinutes}m` : `${totalMinutes} mins`;
+  const playtimeString = `${hours > 0 ? `${hours}h ${remainingMinutes}m` : `${totalMinutes} mins`}${catalog.some(t=>!t.trackTimeMillis)?' (known durations only)':''}`;
+
+  if (catalogError) return <p role="alert" className="p-6 text-red-300">{catalogError}</p>;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
@@ -303,6 +347,11 @@ export const ArtistProfilePage: React.FC<Props> = ({
                     <Crown className="h-4 w-4" />
                   </div>
                 )}
+                <label className="absolute inset-x-1 bottom-1 cursor-pointer rounded-lg bg-black/75 px-2 py-1 text-center text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  Change photo
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={event => handleProfilePicture(event.target.files?.[0])} />
+                </label>
+                {profilePhotoError && <p role="alert" className="absolute left-0 top-full mt-2 w-64 text-xs text-rose-300">{profilePhotoError}</p>}
               </div>
 
               {/* User Bio & Meta */}
@@ -346,11 +395,11 @@ export const ArtistProfilePage: React.FC<Props> = ({
             {/* Quick Actions / Auth Switch */}
             <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
               <button
-                onClick={() => setIsEditingEnv(true)}
+                onClick={() => { setActiveTab('environment'); window.requestAnimationFrame(() => window.scrollTo({ top: 360, behavior: 'smooth' })); }}
                 className="flex-1 md:flex-initial rounded-xl bg-slate-900 border border-slate-800 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:text-white transition flex items-center justify-center gap-2"
               >
                 <Edit3 className="h-4 w-4 text-amber-400" />
-                Edit Studio Environment
+                Edit Studio &amp; Profile
               </button>
               <button
                 onClick={onOpenAuthModal}
@@ -603,9 +652,9 @@ export const ArtistProfilePage: React.FC<Props> = ({
                   <tbody className="divide-y divide-slate-800/60 font-medium">
                     {catalog.map((track, idx) => {
                       const isPlaying = playingTrackId === track.trackId;
-                      const mins = Math.floor((track.trackTimeMillis || 180000) / 60000);
-                      const secs = Math.floor(((track.trackTimeMillis || 180000) % 60000) / 1000);
-                      const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                      const mins = Math.floor((track.trackTimeMillis || 0) / 60000);
+                      const secs = Math.floor(((track.trackTimeMillis || 0) % 60000) / 1000);
+                      const timeStr = track.trackTimeMillis > 0 ? `${mins}:${secs < 10 ? '0' : ''}${secs}` : 'Duration unknown';
 
                       return (
                         <tr key={idx} className="hover:bg-slate-950/60 transition group">
@@ -663,7 +712,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
                           <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">{track.releaseDate}</td>
 
                           {/* ISRC */}
-                          <td className="py-3 px-3 font-mono text-[11px] text-cyan-400">{track.isrc || 'US-IBH-AUTO'}</td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-cyan-400">{track.isrc || 'Not provided'}</td>
 
                           {/* Studio Action Shortcuts */}
                           <td className="py-3 px-3 text-right">
@@ -944,6 +993,7 @@ export const ArtistProfilePage: React.FC<Props> = ({
                 <p className="text-[11px] text-slate-400">Download complete catalog, profile, and XP audit logs.</p>
                 <button
                   onClick={() => {
+                    if (!isCurrent()) return;
                     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ user: currentUser, catalog, profile }, null, 2));
                     const downloadAnchor = document.createElement('a');
                     downloadAnchor.setAttribute('href', dataStr);
@@ -961,6 +1011,30 @@ export const ArtistProfilePage: React.FC<Props> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {uid !== 'guest' && (
+        <section className="mx-auto mt-8 max-w-7xl px-4 pb-10 md:px-8" aria-labelledby="account-security-title">
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 id="account-security-title" className="text-sm font-bold text-white">Account &amp; security</h2>
+              <p className="mt-1 text-xs text-slate-400">Signed in as {currentUser.email}. Sign out when you are finished on this device.</p>
+            </div>
+            <button
+              type="button"
+              disabled={isSigningOut}
+              onClick={async () => {
+                setIsSigningOut(true);
+                await logoutUser();
+                onNavigateToApp('hub');
+              }}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-wait disabled:opacity-60"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              {isSigningOut ? 'Signing out…' : 'Sign Out'}
+            </button>
+          </div>
+        </section>
       )}
 
       {/* ADD UNRELEASED DEMO MODAL */}

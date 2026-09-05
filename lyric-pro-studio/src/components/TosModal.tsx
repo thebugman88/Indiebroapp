@@ -66,37 +66,37 @@ export const TosModal: React.FC<TosModalProps> = ({
                   <span>1. Anti-Bot Protection & Request Rate Sentinel</span>
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-normal">
-                  Automated scripts, continuous button hammering, macro repeaters, and headless crawlers are strictly prohibited. The Security AI tracks requests per account and IP in real-time. Accounts that spam the generation button will be automatically paused for cool-off cooldowns (60-90s) to safeguard compute resources.
+                  Automated request limits and unsafe request-structure checks protect the service. Abuse can trigger a temporary account cooldown. Any optional AI security review is advisory only; it does not read your lyrics or decide account bans.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1.5">
                 <div className="flex items-center gap-2 text-amber-400 font-bold">
                   <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>2. Multi-Platinum Lyricist Prosody & Output Rules</span>
+                  <span>2. Studio Writing Goals & Output Checks</span>
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-normal">
-                  Lyric Pro operates under strict prosodic guidelines: syllable counting, slant/internal rhyme schemes, zero tired clichés, visceral imagery, and structured sectional dynamics. Conversational greetings or non-lyric text are strictly filtered out in favor of pure, rhythmically accurate song blueprints.
+                  Lyric Pro aims for natural cadence, internal rhyme, specific imagery, and purposeful song structure. Both sets must pass completeness and repetition checks. Musical quality remains subjective; review and refine each song for your voice.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1.5">
                 <div className="flex items-center gap-2 text-amber-400 font-bold">
                   <Scale className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>3. Absolute Waiver of Legal Action & Court Rights</span>
+                  <span>3. Originality & Review Before Release</span>
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-normal">
-                  By accepting these terms, you explicitly, irrevocably, and fully agree that you will NOT be able to take <strong>indiebrother</strong>, the <strong>indiebrotherhood</strong>, or any of the owners of the <strong>indiebrotherhood</strong> to court under any circumstances. You covenant and agree never to initiate or maintain any lawsuit, civil action, or legal claim.
+                  AI is instructed to write original lyrics, and outputs are checked against each other and this account’s recent generation history. This is not a search of every released song and cannot guarantee copyright clearance. Only submit material you are authorized to use and review lyrics before publishing.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1.5">
                 <div className="flex items-center gap-2 text-amber-400 font-bold">
                   <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>4. Complete Immunity, Commercial Grant & Explicit Content</span>
+                  <span>4. Temporary Storage, Downloads & Sharing</span>
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-normal">
-                  You agree to place zero liability on the creators for generated output. When Explicit Mode is selected, you assume 100% sole responsibility for generated words and their distribution. All generated compositions are granted for commercial recording and release.
+                  Download work you want to keep. Temporary lyric history stores up to ten songs (five A/B pairs) for up to 24 hours from generation. Intentionally shared messages and your downloaded copies have separate lifetimes. Creative input is sent to the configured AI provider; app expiry does not control that provider’s retention. These guidelines do not waive your statutory rights.
                 </p>
               </div>
             </div>
@@ -114,7 +114,7 @@ export const TosModal: React.FC<TosModalProps> = ({
               className="mt-0.5 accent-amber-400 w-4 h-4 rounded cursor-pointer"
             />
             <span className="text-xs text-zinc-200 font-medium leading-snug">
-              I have read, understood, and accept the <strong className="text-amber-400">Startup Security AI Rules & Terms of Service</strong>. I agree to human-paced creation, anti-bot policies, and legal immunity waiver for <strong className="text-amber-400">indiebrother</strong> and <strong className="text-amber-400">indiebrotherhood</strong>.
+              I understand the <strong className="text-amber-400">writing, security, storage, and sharing guidelines</strong>. I will review generated lyrics and download work I want to keep.
             </span>
           </label>
 

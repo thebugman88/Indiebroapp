@@ -1,5 +1,6 @@
 import { authenticatedFetch } from "../../../src/services/authService";
 import type { ArtistTrack, JudgeReview, UserJudgeProfile } from "../types";
+import type { TrackFlagReason } from "../types";
 async function request(path: string, method = "GET", body?: unknown) {
   const res = await authenticatedFetch("/api/judgement" + path, {
     method,
@@ -25,6 +26,8 @@ export const useSkip = (): Promise<UserJudgeProfile> =>
   request("/skip", "POST", {});
 export const startListening = (id: string) =>
   request("/tracks/" + encodeURIComponent(id) + "/listen", "POST", {});
+export const flagTrack = (id: string, reason: TrackFlagReason): Promise<{count:number;returned:boolean;reason:TrackFlagReason}> =>
+  request("/tracks/" + encodeURIComponent(id) + "/flags", "POST", { reason });
 export const submitReview = (
   id: string,
   review: JudgeReview,

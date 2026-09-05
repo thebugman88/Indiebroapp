@@ -34,10 +34,10 @@ export const SavedHistoryModal: React.FC<SavedHistoryModalProps> = ({
               </div>
               <div>
                 <h2 className="text-base font-bold text-white">
-                  Saved Lyric Vault ({savedEntries.length})
+                  Temporary Lyric History ({savedEntries.length})
                 </h2>
                 <p className="text-xs text-zinc-400">
-                  Access previously generated dual lyric sets stored in your browser.
+                  Encrypted history: up to 5 pairs (10 songs), expiring 24 hours after generation. Download to keep.
                 </p>
               </div>
             </div>
@@ -55,7 +55,7 @@ export const SavedHistoryModal: React.FC<SavedHistoryModalProps> = ({
             <div className="py-12 text-center text-zinc-500 space-y-2">
               <FileText className="w-8 h-8 mx-auto opacity-50" />
               <p className="text-xs">No saved lyric sets yet.</p>
-              <p className="text-[11px] text-zinc-600">Click "Save Both Sets" on generated lyrics to store them here.</p>
+              <p className="text-[11px] text-zinc-600">Newly generated songs are kept here temporarily.</p>
             </div>
           ) : (
             <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">

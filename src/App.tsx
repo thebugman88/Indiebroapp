@@ -1,3 +1,5 @@
+import { PrivateWorkspaceGate } from '../shared/PrivateWorkspaceGate';
+import { PurchaseDialog } from './components/PurchaseDialog';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import {
   Gavel,
@@ -29,7 +31,8 @@ import {
   X,
   Compass,
   Trophy,
-  Award
+  Award,
+  Lock
 } from 'lucide-react';
 import { GamificationProvider, useGamification } from './context/GamificationContext';
 import { ProfileBadge } from './components/ProfileBadge';
@@ -39,11 +42,16 @@ import { DailyQuestsWidget } from './components/DailyQuestsWidget';
 import { AchievementGallery } from './components/AchievementGallery';
 import { LandingPage } from './components/LandingPage';
 import { AuthModal } from './components/AuthModal';
+import {CommunityProgressPrompt,ReferralCenter} from './components/ReferralCenter';
 import { ArtistProfilePage } from './components/ArtistProfilePage';
 import { DirectMessagesModal } from './components/DirectMessagesModal';
 import { NotificationCenter } from './components/NotificationCenter';
 import { NotificationToastContainer } from './components/NotificationToastContainer';
 import { AdminControlRoomModal } from './components/AdminControlRoomModal';
+import { HeaderPlanAndCoins } from './components/HeaderPlanAndCoins';
+import { PersistentCoinWallet } from './components/PersistentCoinWallet';
+import { SignupBonusNotice } from './components/SignupBonusNotice';
+import { CoinWalletProvider } from './context/CoinWalletContext';
 import { grantUserXP } from './services/gamification';
 import {
   getCurrentAuthUser,
@@ -52,6 +60,7 @@ import {
   ADMIN_EMAIL,
 } from './services/authService';
 import { getUnreadDmCount } from './services/dmService';
+import { canMountMasteringSuite } from './masteringSuiteAccess';
 import { MessageSquare, Crown } from 'lucide-react';
 
 // Lazy load sub-applications for high-speed switching and performance
@@ -65,6 +74,7 @@ const SemanticLabApp = React.lazy(() => import('../indiebrotherhood-semantic-lab
 const ArtistAssistantApp = React.lazy(() => import('../indiebrotherhood-artist-assistant/src/App'));
 const MeetingRoomApp = React.lazy(() => import('../meeting-room/src/App'));
 const RoyaltyExtractorApp = React.lazy(() => import('../royalty-and-isrc-metadata-extractor/src/App'));
+const MasteringSuiteApp = React.lazy(() => import('../mastering-suite/src/App'));
 
 export type SuiteAppId =
   | 'landing'
@@ -79,6 +89,7 @@ export type SuiteAppId =
   | 'semantic-lab'
   | 'artist-assistant'
   | 'meeting-room'
+  | 'mastering-suite'
   | 'royaltyops';
 
 interface AppMeta {
@@ -214,6 +225,19 @@ const APPS: AppMeta[] = [
     features: ['Parliamentary Motions', 'Live Quorum & Voting', 'Interactive Agendas', 'Meeting Minutes Export']
   },
   {
+    id: 'mastering-suite',
+    name: 'Mastering Suite',
+    shortName: 'Mastering',
+    tagline: 'Browser-local mastering controls with 24-bit and 16-bit WAV export',
+    description: 'Load supported audio into volatile browser memory, adjust the mastering chain, edit optional release metadata, and export a WAV without uploading the session.',
+    category: 'Creation',
+    icon: AudioWaveform,
+    color: 'from-amber-500 to-yellow-600',
+    badge: 'Free • 0 Coins',
+    shortcut: 'M',
+    features: ['Browser-Local Processing', 'WAV 24-Bit Export', 'WAV 16-Bit Export', 'No Server Uploads']
+  },
+  {
     id: 'royaltyops',
     name: 'RoyaltyOps',
     shortName: 'RoyaltyOps',
@@ -265,6 +289,7 @@ export function resolveSuiteApp(rawInput: string): SuiteAppId | null {
   if (['semantic-lab', 'semanticlab', 'semantic'].includes(clean) || clean.startsWith('semantic-lab') || clean.startsWith('semanticlab')) return 'semantic-lab';
   if (['artist-assistant', 'artistassistant', 'assistant'].includes(clean) || clean.startsWith('artist-assistant') || clean.startsWith('artistassistant')) return 'artist-assistant';
   if (['meeting-room', 'meetingroom', 'assembly', 'meeting'].includes(clean) || clean.startsWith('meeting-room') || clean.startsWith('meetingroom')) return 'meeting-room';
+  if (['mastering-suite', 'masteringsuite', 'mastering'].includes(clean) || clean.startsWith('mastering-suite') || clean.startsWith('masteringsuite')) return 'mastering-suite';
   if (['royaltyops', 'royalty-ops', 'royalty', 'isrc'].includes(clean) || clean.startsWith('royaltyops') || clean.startsWith('royalty-ops')) return 'royaltyops';
 
   const exact = APPS.find((a) => a.id.toLowerCase() === clean);
@@ -286,17 +311,53 @@ function SuiteApp() {
 
   const [currentUser, setCurrentUser] = useState<RegisteredUser>(getCurrentAuthUser);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isReferralOpen,setIsReferralOpen]=useState(false);
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState('Something is broken');
+  const [feedbackDetails, setFeedbackDetails] = useState('');
+  const [supportCheckoutUrl, setSupportCheckoutUrl] = useState<string | null>(null);
   const [isAdminControlRoomOpen, setIsAdminControlRoomOpen] = useState(false);
   const [unreadDms, setUnreadDms] = useState<number>(0);
 
   const isMasterAdmin = currentUser.isAdmin === true;
+
+  const sendTesterFeedback = () => {
+    const details = feedbackDetails.trim();
+    if (details.length < 10) return;
+    const subject = `[IndieBrotherhood Feedback] ${feedbackCategory} — ${currentMeta?.shortName || activeApp}`;
+    const body = [
+      `Category: ${feedbackCategory}`,
+      `Studio: ${currentMeta?.name || activeApp}`,
+      `Account: ${currentUser.email || 'Guest / not supplied'}`,
+      `Page: ${window.location.href}`,
+      '',
+      'Feedback:',
+      details,
+      '',
+      `Browser: ${navigator.userAgent}`,
+    ].join('\n');
+    window.location.href = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setIsFeedbackOpen(false);
+    setFeedbackDetails('');
+  };
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const { awardXP, setIsProfileModalOpen } = useGamification();
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/support/config', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((config) => {
+        if (active && config?.enabled && typeof config.checkoutUrl === 'string') setSupportCheckoutUrl(config.checkoutUrl);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   // Sync Unread DMs and Auth changes
   useEffect(() => {
@@ -434,7 +495,7 @@ function SuiteApp() {
     <div className="min-h-screen bg-[#06080d] text-zinc-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-white">
       {/* 1. MASTER TOP SUITE DOCK */}
       <header className="sticky top-0 z-50 bg-[#0a0d14]/95 backdrop-blur-xl border-b border-zinc-800/80">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-3">
+        <div className="mx-auto grid min-h-14 w-full max-w-[1600px] grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-2 sm:gap-3 sm:px-4 xl:px-6">
           {/* Logo & Suite Brand */}
           <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <button
@@ -447,22 +508,46 @@ function SuiteApp() {
                   <Sparkles className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
                 </div>
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <div className="flex items-center gap-1.5 leading-none">
                   <span className="font-extrabold tracking-tight text-white text-xs sm:text-sm">INDIEBROTHERHOOD</span>
                   <span className="text-[9px] sm:text-[10px] font-mono px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
                     OS
                   </span>
                 </div>
-                <p className="text-[10px] text-zinc-400 font-medium hidden md:block">10-Studio Intelligence Suite</p>
+                <p className="text-[10px] text-zinc-400 font-medium hidden md:block">11-Studio Intelligence Suite</p>
               </div>
             </button>
           </div>
 
           {/* Suite Right Controls: Command Search, Universal Profile Badge & App Menu */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2 [&>button]:shrink-0">
             {/* Live Universal Notification Center */}
-            <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
+            <div className="hidden min-[360px]:block shrink-0">
+              <NotificationCenter onNavigateTo={(app) => navigateTo(app as SuiteAppId)} />
+            </div>
+
+            {supportCheckoutUrl && (
+              <a
+                href={supportCheckoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden shrink-0 rounded-xl border border-amber-500/30 px-2.5 py-1.5 text-[11px] font-bold text-amber-300 transition hover:bg-amber-500/10 xl:block"
+                title="Help keep IndieBrotherhood independent and ad-free"
+              >
+                Keep It Ad-Free
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsFeedbackOpen(true)}
+              className="relative shrink-0 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-300 transition hover:border-amber-500/40 hover:text-amber-400 sm:p-2"
+              title="Send tester feedback directly to the founder"
+              aria-label="Send feedback"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
 
             {/* Direct Messages Trigger */}
             <button
@@ -480,7 +565,7 @@ function SuiteApp() {
 
             <button
               onClick={() => setIsPaletteOpen(true)}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-2 transition cursor-pointer"
+              className="hidden lg:flex p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 items-center gap-2 transition cursor-pointer"
               title="Command Palette (Cmd + K)"
             >
               <Search className="w-3.5 h-3.5" />
@@ -491,7 +576,7 @@ function SuiteApp() {
             </button>
 
             {/* UNIVERSAL PERSISTENT PROFILE & XP COMPONENT */}
-            <div onClick={() => navigateTo('artist-profile')} className="cursor-pointer">
+            <div onClick={() => navigateTo('artist-profile')} className="hidden min-[1700px]:block cursor-pointer">
               <ProfileBadge />
             </div>
 
@@ -501,7 +586,7 @@ function SuiteApp() {
                 type="button"
                 id="suite-master-admin-control-room-btn"
                 onClick={() => setIsAdminControlRoomOpen(true)}
-                className="hidden md:flex px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-black border border-amber-300 shadow-md shadow-amber-500/20 text-xs items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95"
+                className="hidden lg:flex px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-black border border-amber-300 shadow-md shadow-amber-500/20 text-xs items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95"
                 title="Founder Admin Control Room: Real User Logs, Live Kick/Whitelist/Blacklist & Universal Announcements"
               >
                 <Crown className="w-4 h-4 text-zinc-950 fill-zinc-950" />
@@ -510,19 +595,37 @@ function SuiteApp() {
             )}
 
             {/* Login / Profile Switcher Button */}
+            {currentUser.id!=='guest'&&<button onClick={()=>setIsReferralOpen(true)} className="hidden lg:block rounded-xl border border-amber-500/30 px-2 py-1.5 text-xs font-bold text-amber-300 whitespace-nowrap" title="Profile completion and verified referral rewards">Invite & Earn</button>}
+            <HeaderPlanAndCoins user={currentUser} />
             <button
-              onClick={() => setIsAuthModalOpen(true)}
+              onClick={() => currentUser.id === 'guest' ? setIsAuthModalOpen(true) : navigateTo('artist-profile')}
               className={`p-1.5 sm:p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
                 currentUser.isAdmin
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-amber-500/40'
               }`}
-              title={currentUser.isAdmin ? 'Master Admin Active (Unlimited Free Access)' : 'Sign In / Recover Account'}
+              title={currentUser.isAdmin ? 'Open Christopher Ray profile' : currentUser.id !== 'guest' ? 'Open my profile' : 'Sign In / Recover Account'}
             >
-              {currentUser.isAdmin ? (
+              {currentUser.avatarUrl ? (
+                <>
+                  <img src={currentUser.avatarUrl} alt="" className="h-5 w-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                  <span className="hidden max-w-28 truncate text-[11px] sm:inline">
+                    {currentUser.displayName}
+                  </span>
+                </>
+              ) : currentUser.isAdmin ? (
                 <>
                   <Crown className="w-4 h-4 text-amber-400" />
                   <span className="hidden xl:inline text-[11px]">Christopher Ray</span>
+                </>
+              ) : currentUser.id !== 'guest' ? (
+                <>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/15 text-[9px] font-black text-amber-300">
+                    {currentUser.avatarSeed || currentUser.displayName.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="hidden max-w-28 truncate text-[11px] sm:inline">
+                    {currentUser.displayName}
+                  </span>
                 </>
               ) : (
                 <span className="text-[11px] px-1">Login</span>
@@ -543,7 +646,7 @@ function SuiteApp() {
                 ) : (
                   <>
                     <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="font-semibold text-white hidden sm:inline">10 Studios</span>
+                    <span className="font-semibold text-white hidden sm:inline">11 Studios</span>
                   </>
                 )}
               </div>
@@ -552,8 +655,16 @@ function SuiteApp() {
           </div>
         </div>
 
+        {currentUser.id !== 'guest' && (
+          <div className="lg:hidden border-t border-zinc-800/70 bg-zinc-950/95 px-3 py-1.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
+            <button type="button" onClick={() => navigateTo('artist-profile')} className="shrink-0 rounded-lg border border-zinc-800 px-2.5 py-1 text-[11px] font-bold text-zinc-200">My Profile</button>
+            <button type="button" onClick={() => setIsReferralOpen(true)} className="shrink-0 rounded-lg border border-amber-500/30 px-2.5 py-1 text-[11px] font-bold text-amber-300">Invite & Earn</button>
+            {isMasterAdmin && <button type="button" onClick={() => setIsAdminControlRoomOpen(true)} className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-black text-zinc-950">Admin Room</button>}
+          </div>
+        )}
+
         {/* Dedicated Horizontal Scrolling Studio Navigation Ribbon */}
-        <div className="border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur px-3 sm:px-6 py-1.5 overflow-x-auto scrollbar-none flex items-center gap-1.5 text-xs font-medium">
+        <div className="flex items-center gap-1.5 overflow-x-auto border-t border-zinc-800/80 bg-zinc-950/95 px-3 py-1.5 text-xs font-medium scrollbar-none overscroll-x-contain sm:px-6">
           <button
             onClick={() => navigateTo('landing')}
             className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
@@ -600,10 +711,10 @@ function SuiteApp() {
               <button
                 key={app.id}
                 onClick={() => navigateTo(app.id)}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 cursor-pointer ${
                   isSelected
-                    ? 'bg-zinc-100 text-zinc-950 font-bold shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    ? 'flex bg-zinc-100 text-zinc-950 font-bold shadow-sm'
+                    : 'hidden min-[2400px]:flex text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
                 }`}
                 title={`${app.name} (Alt+${app.shortcut})`}
               >
@@ -642,7 +753,7 @@ function SuiteApp() {
                   </div>
                   <div>
                     <h4 className="font-bold text-xs text-white">Why Us & Pricing</h4>
-                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">Manifesto & $4.99 Pro</p>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-snug">Manifesto & $14.99 Pro</p>
                   </div>
                 </button>
 
@@ -734,7 +845,7 @@ function SuiteApp() {
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-white">Why indiebrotherhood (Manifesto & $4.99 Pro)</p>
+                    <p className="text-xs font-bold text-white">Why indiebrotherhood (Manifesto & $14.99 Pro)</p>
                     <p className="text-[11px] text-zinc-400">The story, 4 pillar features, and transparent pricing</p>
                   </div>
                 </div>
@@ -812,7 +923,8 @@ function SuiteApp() {
           </aside>
         )}
 
-        <Suspense
+        {currentUser.id!=='guest'&&['hub','artist-profile'].includes(activeApp)&&<CommunityProgressPrompt key={currentUser.id} onOpen={()=>setIsReferralOpen(true)}/>}
+        <PrivateWorkspaceGate><Suspense
           fallback={
             <div className="flex-1 flex items-center justify-center min-h-[60vh]">
               <div className="text-center space-y-3 font-mono">
@@ -845,7 +957,7 @@ function SuiteApp() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      <span>All 10 Studios Active & Synced</span>
+                      <span>All 11 Studios Active & Synced</span>
                     </div>
                   </div>
 
@@ -854,7 +966,7 @@ function SuiteApp() {
                       The Unified Operating System for Independent Music
                     </h1>
                     <p className="text-sm sm:text-base text-zinc-400 leading-relaxed">
-                      Ten synchronized intelligence tools, songwriting studios, business operations platforms, and live cypher chambers — fully unified with global creator XP progression.
+                      Eleven integrated intelligence tools, creation studios, business operations platforms, and community spaces — unified with creator XP progression.
                     </p>
                   </div>
 
@@ -862,11 +974,11 @@ function SuiteApp() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                     <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800">
                       <p className="text-[11px] font-mono text-zinc-400 uppercase">Total Tools</p>
-                      <p className="text-xl font-extrabold text-white mt-0.5">10 Studios</p>
+                      <p className="text-xl font-extrabold text-white mt-0.5">11 Studios</p>
                     </div>
                     <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800">
                       <p className="text-[11px] font-mono text-zinc-400 uppercase">AI Audio Models</p>
-                      <p className="text-xl font-extrabold text-amber-400 mt-0.5">Gemini 2.5</p>
+                      <p className="text-xl font-extrabold text-amber-400 mt-0.5">Gemini Powered</p>
                     </div>
                     <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800">
                       <p className="text-[11px] font-mono text-zinc-400 uppercase">Progression Engine</p>
@@ -879,6 +991,19 @@ function SuiteApp() {
                   </div>
                 </div>
               </div>
+
+              {supportCheckoutUrl && (
+                <aside className="flex flex-col gap-4 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-sm font-black text-white">Help keep the Brotherhood independent and ad-free</h2>
+                    <p className="mt-1 max-w-2xl text-xs leading-relaxed text-zinc-400">Optional support helps cover secure hosting, storage, and AI infrastructure. It never changes your access, ranking, judgment results, or community standing.</p>
+                  </div>
+                  <a href={supportCheckoutUrl} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-400 px-4 py-2.5 text-xs font-black text-zinc-950 transition hover:bg-amber-300">
+                    Help the Brotherhood
+                    <ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </aside>
+              )}
 
               {/* 3. DAILY QUESTS & CREATIVE STREAK BOARD */}
               <DailyQuestsWidget onNavigateToApp={(appId) => navigateTo(appId as SuiteAppId)} />
@@ -1050,15 +1175,41 @@ function SuiteApp() {
           {/* 9. MEETING ROOM */}
           {activeApp === 'meeting-room' && <MeetingRoomApp />}
 
+          {/* Mastering sessions require a real account and remount on identity changes. */}
+          {activeApp === 'mastering-suite' && (
+            canMountMasteringSuite(currentUser.id) ? (
+              <MasteringSuiteApp key={currentUser.id} />
+            ) : (
+              <div role="status" className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
+                <Lock className="h-10 w-10 text-amber-400" aria-hidden="true" />
+                <div>
+                  <h2 className="text-xl font-bold text-white">Sign in to use Mastering Suite</h2>
+                  <p className="mt-2 max-w-md text-sm text-zinc-400">Audio sessions are isolated to the currently authenticated account and remain in this browser tab.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-400"
+                >
+                  Sign In
+                </button>
+              </div>
+            )
+          )}
+
           {/* 10. ROYALTYOPS */}
           {activeApp === 'royaltyops' && <RoyaltyExtractorApp />}
-        </Suspense>
+        </Suspense></PrivateWorkspaceGate>
       </div>
 
       {/* GLOBAL TOAST & MODAL OVERLAYS */}
+      {isReferralOpen&&currentUser.id!=='guest'&&<PrivateWorkspaceGate><ReferralCenter onClose={()=>setIsReferralOpen(false)}/></PrivateWorkspaceGate>}
       <AchievementToast />
       <GamificationModal />
+      <PurchaseDialog />
       <NotificationToastContainer onNavigateTo={(appId) => navigateTo(appId as SuiteAppId)} />
+      <PersistentCoinWallet user={currentUser} activeApp={activeApp} />
+      <SignupBonusNotice user={currentUser} />
 
       {/* Founder Christopher Ray Admin Control Room Modal */}
       <AdminControlRoomModal
@@ -1080,14 +1231,65 @@ function SuiteApp() {
         onClose={() => setIsDmModalOpen(false)}
         currentUser={currentUser}
       />
+
+      {isFeedbackOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendTesterFeedback();
+            }}
+            className="w-full max-w-lg space-y-4 rounded-2xl border border-amber-500/30 bg-zinc-950 p-5 shadow-2xl sm:p-6"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="feedback-title" className="text-lg font-black text-white">Tell us what needs fixing</h2>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">Your email app will open with the studio, page, account email, and browser details filled in. Review the message before sending it directly to Christopher.</p>
+              </div>
+              <button type="button" onClick={() => setIsFeedbackOpen(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-white" aria-label="Close feedback">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <label className="block space-y-1.5 text-xs font-bold text-zinc-200">
+              <span>What kind of feedback?</span>
+              <select value={feedbackCategory} onChange={(event) => setFeedbackCategory(event.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400">
+                <option>Something is broken</option>
+                <option>Feature needs improvement</option>
+                <option>Mobile or layout problem</option>
+                <option>Suggestion or request</option>
+                <option>Other feedback</option>
+              </select>
+            </label>
+            <label className="block space-y-1.5 text-xs font-bold text-zinc-200">
+              <span>What happened, and what did you expect?</span>
+              <textarea
+                value={feedbackDetails}
+                onChange={(event) => setFeedbackDetails(event.target.value)}
+                minLength={10}
+                maxLength={2000}
+                rows={7}
+                required
+                placeholder="Tell Christopher what you clicked, what happened, and what you expected instead."
+                className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400"
+              />
+              <span className="block text-right font-mono text-[10px] text-zinc-500">{feedbackDetails.length}/2000</span>
+            </label>
+            <button type="submit" disabled={feedbackDetails.trim().length < 10} className="w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-black text-zinc-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500">
+              Open email to Christopher
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function App() {
   return (
-    <GamificationProvider>
-      <SuiteApp />
-    </GamificationProvider>
+    <CoinWalletProvider>
+      <GamificationProvider>
+        <SuiteApp />
+      </GamificationProvider>
+    </CoinWalletProvider>
   );
 }

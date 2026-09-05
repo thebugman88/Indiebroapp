@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../shared/PrivateWorkspaceGate';
 import React, { useState, useEffect } from 'react';
 import { Quiz, QuizType, DifficultyLevel, GenreCategory, QuizResultRecord, UserStatsVault } from './types';
 import { FEATURED_QUIZZES } from './data/quizzes';
@@ -8,7 +9,6 @@ import { QuizRunner } from './components/QuizRunner';
 import { QuizResults } from './components/QuizResults';
 import { AiQuizGeneratorModal } from './components/AiQuizGeneratorModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
-import { SponsoredAdBanner } from './components/SponsoredAdBanner';
 import { Footer } from './components/Footer';
 import {
   Mic,
@@ -29,6 +29,7 @@ const LOCAL_STORAGE_VAULT_KEY = 'sonic_iq_lab_user_stats_vault_2026';
 const LEGACY_STORAGE_VAULT_KEY = 'lyric_pro_user_stats_vault_2026';
 
 export default function App() {
+  const localStorage = usePrivateStorage();
   // Navigation & Modal States
   const [viewMode, setViewMode] = useState<'home' | 'running_quiz' | 'quiz_results'>('home');
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
@@ -200,11 +201,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
-              {/* Native Sponsored Banner */}
-              <SponsoredAdBanner variant="banner" />
-
-              {/* Main Content Layout with Sidebar for Genres */}
+{/* Main Content Layout with Sidebar for Genres */}
               <div className="flex flex-col lg:flex-row gap-8">
                 {/* Sidebar / Genres section matching Immersive UI pattern */}
                 <aside className="w-full lg:w-64 shrink-0 flex flex-col gap-6">

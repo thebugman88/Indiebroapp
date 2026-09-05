@@ -2,9 +2,9 @@ name: Security verification
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, fix/security-foundation, feat/usage-economy]
   push:
-    branches: [main]
+    branches: [main, feat/usage-economy]
   workflow_dispatch:
 
 permissions:
@@ -37,4 +37,6 @@ jobs:
       - name: Verify real Firebase emulator boundaries
         run: npm run test:firebase
       - run: npm run build
+        env:
+          VITE_FIREBASE_APPCHECK_SITE_KEY: CI_PUBLIC_APPCHECK_SITE_KEY
       - run: npm run test:production
