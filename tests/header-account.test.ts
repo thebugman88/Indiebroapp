@@ -91,6 +91,18 @@ test("floating wallet opens a compact summary before the full purchase screen", 
   assert.match(wallet, /month: body\.month/);
 });
 
+test("one shared wallet loop supplies both Coin and Pro status", async () => {
+  const [wallet, gamification] = await Promise.all([
+    readFile("src/context/CoinWalletContext.tsx", "utf8"),
+    readFile("src/context/GamificationContext.tsx", "utf8"),
+  ]);
+  assert.match(wallet, /setInterval\(refresh, 60_000\)/);
+  assert.match(wallet, /proExpiresAt: Number\.isFinite\(body\.proExpiresAt\)/);
+  assert.match(gamification, /useCoinWallet\(\)/);
+  assert.doesNotMatch(gamification, /authenticatedFetch\('\/api\/economy\/wallet'\)/);
+  assert.doesNotMatch(gamification, /setInterval\(refresh, 60000\)/);
+});
+
 test("payment monitoring reports a safe failure stage without discarding pending records", async () => {
   const payments = await readFile("server/payments.ts", "utf8");
   assert.match(payments, /stage = "stripe_reconciliation"/);

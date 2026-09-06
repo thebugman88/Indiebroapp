@@ -1,5 +1,6 @@
 import { requestPurchase } from '../components/PurchaseDialog';
 import { authenticatedFetch } from '../services/authService';
+import { useCoinWallet } from './CoinWalletContext';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
   UserProfileState,
@@ -46,6 +47,7 @@ const GamificationContext = createContext<GamificationContextType | undefined>(u
 export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [profile, setProfile] = useState<UserProfileState>(loadProfileState());
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const { wallet } = useCoinWallet();
 
   // Synchronize on window focus or custom events
   useEffect(() => {
@@ -66,27 +68,15 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     };
   }, []);
 
-  // Subscription storage is a display cache only. Revalidate for each signed-in account.
+  // CoinWalletContext owns the single server-authoritative wallet refresh loop.
+  // Mirror its trusted subscription status into the local gamification display cache.
   useEffect(() => {
-    let revision = 0;
-    const refresh = async () => {
-      const request = ++revision;
-      setProfile(cancelProSubscription());
-      try {
-        const response = await authenticatedFetch('/api/economy/wallet');
-        const status = await response.json();
-        if (request === revision && response.ok && status.tier === 'pro' && status.proExpiresAt > Date.now()) {
-          setProfile(activateProSubscription(status.proExpiresAt));
-        }
-      } catch { /* No trusted status means free access. */ }
-    };
-    void refresh();
-    window.addEventListener('ib_auth_changed', refresh);
-    window.addEventListener('focus', refresh);
-    window.addEventListener('ib_community_changed',refresh);
-    const timer = window.setInterval(refresh, 60000);
-    return () => { revision++; clearInterval(timer); window.removeEventListener('ib_auth_changed', refresh); window.removeEventListener('focus', refresh); window.removeEventListener('ib_community_changed',refresh); };
-  }, []);
+    if (wallet?.tier === 'pro' && wallet.proExpiresAt && wallet.proExpiresAt > Date.now()) {
+      setProfile(activateProSubscription(wallet.proExpiresAt));
+      return;
+    }
+    setProfile(cancelProSubscription());
+  }, [wallet?.tier, wallet?.proExpiresAt]);
 
   // Check URL for stripe payment redirect params on mount
   useEffect(() => {

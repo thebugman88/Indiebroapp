@@ -3,6 +3,7 @@ import { authenticatedFetch, getCurrentAuthUser } from "../services/authService"
 
 export type CoinWallet = {
   tier: "free" | "pro";
+  proExpiresAt?: number;
   total: number;
   monthly: number;
   purchased: number;
@@ -42,6 +43,7 @@ export function CoinWalletProvider({ children }: { children: React.ReactNode }) 
         if (request === revision.current) {
           setWallet({
             tier: body.tier,
+            proExpiresAt: Number.isFinite(body.proExpiresAt) ? body.proExpiresAt : undefined,
             total: body.total,
             monthly: body.monthly,
             purchased: body.purchased,
