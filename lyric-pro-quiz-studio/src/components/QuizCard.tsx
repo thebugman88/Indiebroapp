@@ -27,13 +27,7 @@ export const QuizCard: React.FC<QuizCardProps> = ({ quiz, onSelectQuiz }) => {
             {quiz.difficulty}
           </div>
           <span className="px-2.5 py-0.5 bg-white/5 border border-white/10 text-gray-400 text-[10px] font-medium rounded-full">
-            {quiz.quizType === 'finish_the_song'
-              ? 'Finish Lyrics'
-              : quiz.quizType === 'whats_the_artist'
-              ? 'Guess Artist'
-              : quiz.quizType === 'audio_snip'
-              ? 'Audio Clip'
-              : 'Genre Trivia'}
+            {quiz.quizType.replaceAll('_', ' ')}
           </span>
         </div>
 

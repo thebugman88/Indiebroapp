@@ -1,15 +1,13 @@
 import React from 'react';
-import { ShieldCheck, Sparkles, BarChart2, Radio, Activity } from 'lucide-react';
+import { BarChart2, Radio, Activity } from 'lucide-react';
 
 interface HeaderProps {
   onOpenVault: () => void;
-  onOpenAiGenerator: () => void;
   totalPoints: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenVault,
-  onOpenAiGenerator,
   totalPoints,
 }) => {
   return (
@@ -54,15 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Sonic Anti-Cheat Engine</span>
           </div>
 
-          {/* AI Custom Quiz CTA */}
-          <button
-            onClick={onOpenAiGenerator}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 text-white hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-purple-500/30 cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 fill-white" />
-            <span>Custom Quiz Studio</span>
-          </button>
-
           {/* User Vault / Stats */}
           <button
             onClick={onOpenVault}
@@ -81,4 +70,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

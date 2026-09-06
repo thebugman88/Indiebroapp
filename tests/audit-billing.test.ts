@@ -227,3 +227,27 @@ test('ad-free support CTAs remain hidden until a validated Stripe Payment Link e
   assert.match(app, /Keep It Ad-Free/);
   assert.match(app, /rel="noopener noreferrer"/);
 });
+
+test('Sonic IQ is curated, text-only, and preserves correct answers while shuffling', async () => {
+  const [{ FEATURED_QUIZZES }, { shuffleQuestion }, app, runner] = await Promise.all([
+    import('../lyric-pro-quiz-studio/src/data/quizzes'),
+    import('../lyric-pro-quiz-studio/src/utils/quizDeck'),
+    readFile('lyric-pro-quiz-studio/src/App.tsx', 'utf8'),
+    readFile('lyric-pro-quiz-studio/src/components/QuizRunner.tsx', 'utf8'),
+  ]);
+  assert.deepEqual(FEATURED_QUIZZES.map((quiz) => quiz.quizType), [
+    'rock_legends', 'genre_mix', 'studio_knowledge', 'music_theory', 'indie_business', 'rapid_random',
+  ]);
+  const question = FEATURED_QUIZZES[0].questions[0];
+  const expected = question.options[question.correctIndex];
+  const positions = new Set<number>();
+  let seed = 123456;
+  const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  for (let index = 0; index < 20; index += 1) {
+    const shuffled = shuffleQuestion(question, random);
+    positions.add(shuffled.correctIndex);
+    assert.equal(shuffled.options[shuffled.correctIndex], expected);
+  }
+  assert.ok(positions.size > 1);
+  assert.doesNotMatch(app + runner, /AiQuizGenerator|itunesMusic|audioSynth|PLAY ACTUAL AUDIO|finish_the_song/);
+});
