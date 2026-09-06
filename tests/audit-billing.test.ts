@@ -89,6 +89,33 @@ test('judging chamber requires an explicit session and tallies only confirmed re
   assert.match(source, /Your own uploads cannot be judged by your account/);
 });
 
+test('Hit Analyzer exposes only real audio workflows and keeps free and full analysis separate', async () => {
+  const [app, input] = await Promise.all([
+    readFile('hit-analyzer_-built-by-indiebrotherhood/src/App.tsx', 'utf8'),
+    readFile('hit-analyzer_-built-by-indiebrotherhood/src/components/AudioInputSection.tsx', 'utf8'),
+  ]);
+  assert.match(app, /decodeAudioBuffer\(audioData\)/);
+  assert.match(app, /authenticatedFetch\('\/api\/analyze'/);
+  assert.match(app, /Basic local audio analysis · Free/);
+  assert.match(app, /useCoinAction\('\/api\/analyze'\)/);
+  assert.doesNotMatch(input, /Demo Tracks|SAMPLE_TRACKS|Add URL|handleUrlSubmit/);
+  assert.match(input, /Upload one unreleased audio file for either free local measurements or the full AI analysis/);
+});
+
+test('required acceptance dialogs remain scrollable in mobile portrait and landscape', async () => {
+  const dialogs = await Promise.all([
+    readFile('src/components/PurchaseDialog.tsx', 'utf8'),
+    readFile('judgement-zone/src/components/TermsModal.tsx', 'utf8'),
+    readFile('lyric-pro-studio/src/components/TosModal.tsx', 'utf8'),
+    readFile('lyric-pro-studio/src/components/GenerationDisclaimerModal.tsx', 'utf8'),
+    readFile('hang-out/src/components/TermsModal.tsx', 'utf8'),
+  ]);
+  for (const dialog of dialogs) {
+    assert.match(dialog, /100dvh/);
+    assert.match(dialog, /overflow-y-auto/);
+  }
+});
+
 
 test('Lyric Pro whole-song direction is bounded, persisted, acknowledged and safely applied', async () => {
   const [app, types, quality, server, disclaimer] = await Promise.all([

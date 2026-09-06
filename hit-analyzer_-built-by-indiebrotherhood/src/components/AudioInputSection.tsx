@@ -1,24 +1,21 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Link, Music, Check, Disc, Play, Pause, AlertCircle, FileAudio } from 'lucide-react';
-import { SAMPLE_TRACKS } from '../data/sampleTracks';
-import { SampleTrack } from '../types';
+import { Upload, Music, Check, Play, Pause, FileAudio } from 'lucide-react';
 
 interface AudioInputSectionProps {
   selectedAudioName: string;
   artistName: string;
   audioData: string | null;
   audioUrl: string;
-  inputMethod: 'file' | 'url' | 'sample';
+  inputMethod: 'file';
   mimeType: string;
   onAudioSelected: (data: {
     audioName: string;
     artistName: string;
     audioData: string | null;
     audioUrl: string;
-    inputMethod: 'file' | 'url' | 'sample';
+    inputMethod: 'file';
     mimeType: string;
   }) => void;
-  onLyricsSuggested?: (lyrics: string) => void;
 }
 
 export const AudioInputSection: React.FC<AudioInputSectionProps> = ({
@@ -29,10 +26,7 @@ export const AudioInputSection: React.FC<AudioInputSectionProps> = ({
   inputMethod,
   mimeType,
   onAudioSelected,
-  onLyricsSuggested,
 }) => {
-  const [activeTab, setActiveTab] = useState<'file' | 'url' | 'sample'>(inputMethod);
-  const [urlInput, setUrlInput] = useState(audioUrl);
   const [titleInput, setTitleInput] = useState(selectedAudioName);
   const [artistInput, setArtistInput] = useState(artistName);
   const [dragActive, setDragActive] = useState(false);
@@ -82,38 +76,6 @@ export const AudioInputSection: React.FC<AudioInputSectionProps> = ({
     }
   };
 
-  const handleUrlSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!urlInput.trim()) return;
-
-    onAudioSelected({
-      audioName: titleInput || "Audio Link Track",
-      artistName: artistInput || "Indie Artist",
-      audioData: null,
-      audioUrl: urlInput.trim(),
-      inputMethod: 'url',
-      mimeType: 'audio/mp3',
-    });
-  };
-
-  const handleSelectSample = (sample: SampleTrack) => {
-    setTitleInput(sample.title);
-    setArtistInput(sample.artist);
-    
-    onAudioSelected({
-      audioName: sample.title,
-      artistName: sample.artist,
-      audioData: null,
-      audioUrl: sample.audioUrl,
-      inputMethod: 'sample',
-      mimeType: 'audio/mp3',
-    });
-
-    if (sample.sampleLyrics && onLyricsSuggested) {
-      onLyricsSuggested(sample.sampleLyrics);
-    }
-  };
-
   const toggleAudioPlay = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -129,7 +91,7 @@ export const AudioInputSection: React.FC<AudioInputSectionProps> = ({
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl backdrop-blur-sm">
       
-      {/* Tab Selectors */}
+      {/* One real audio source feeds both analyzers. */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5 flex-wrap gap-3">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -137,49 +99,15 @@ export const AudioInputSection: React.FC<AudioInputSectionProps> = ({
             Song & Audio Source
           </h2>
           <p className="text-xs text-slate-400">
-            Upload your unreleased audio file, enter a streaming URL, or test with a sample track.
+            Upload one unreleased audio file for either free local measurements or the full AI analysis.
           </p>
         </div>
 
-        <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
-          <button
-            type="button"
-            onClick={() => setActiveTab('file')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'file'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
+        <div className="flex bg-indigo-600 text-white shadow p-2 rounded-xl border border-indigo-500">
+          <div className="flex items-center gap-1.5 px-2 text-xs font-semibold">
             <Upload className="w-3.5 h-3.5" />
             Upload File
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('url')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'url'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Link className="w-3.5 h-3.5" />
-            Add URL
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('sample')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'sample'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Disc className="w-3.5 h-3.5 text-amber-400" />
-            Demo Tracks
-          </button>
+          </div>
         </div>
       </div>
 
@@ -237,8 +165,7 @@ export const AudioInputSection: React.FC<AudioInputSectionProps> = ({
       </div>
 
       {/* Active Tab View */}
-      {activeTab === 'file' && (
-        <div
+      <div
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
@@ -279,77 +206,6 @@ export const AudioInputSection: React.FC<AudioInputSectionProps> = ({
             Supports MP3, WAV, M4A, AAC, FLAC (Max 50MB). Only 100% original unreleased tracks.
           </p>
         </div>
-      )}
-
-      {activeTab === 'url' && (
-        <form onSubmit={handleUrlSubmit} className="space-y-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Audio Link / Stream URL
-            </label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Link className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-                <input
-                  type="url"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="https://soundcloud.com/artist/track or https://myhost.com/demo.mp3"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <button
-                type="submit"
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md"
-              >
-                Set URL
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 flex items-center gap-1">
-            <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
-            Accepts SoundCloud, YouTube, Google Drive audio, or direct audio link URLs.
-          </p>
-        </form>
-      )}
-
-      {activeTab === 'sample' && (
-        <div className="space-y-2.5">
-          <label className="block text-xs font-semibold text-slate-300">
-            Select an IndieBrotherhood Demo Track for 1-Click Testing:
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {SAMPLE_TRACKS.map((sample) => {
-              const isSelected = selectedAudioName === sample.title && inputMethod === 'sample';
-              return (
-                <button
-                  key={sample.id}
-                  type="button"
-                  onClick={() => handleSelectSample(sample)}
-                  className={`text-left p-3.5 rounded-xl border transition-all ${
-                    isSelected
-                      ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10'
-                      : 'border-slate-800 bg-slate-950 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-white truncate max-w-[140px]">
-                      {sample.title}
-                    </span>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                  </div>
-                  <p className="text-[11px] text-slate-400 font-medium mb-1">
-                    {sample.artist}
-                  </p>
-                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-indigo-300">
-                    {sample.genre}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Audio Player Preview */}
       {selectedAudioName && (

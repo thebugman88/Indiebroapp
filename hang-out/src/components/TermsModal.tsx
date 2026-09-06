@@ -10,8 +10,8 @@ export const TermsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl border border-amber-500/30 bg-slate-900 p-6 shadow-2xl scrollbar-thin">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto bg-black/80 backdrop-blur-md p-2 sm:p-4">
+      <div className="relative w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[85vh] overflow-y-auto rounded-3xl border border-amber-500/30 bg-slate-900 p-4 sm:p-6 shadow-2xl scrollbar-thin">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 rounded-full bg-slate-800 p-2 text-slate-400 hover:text-white transition"

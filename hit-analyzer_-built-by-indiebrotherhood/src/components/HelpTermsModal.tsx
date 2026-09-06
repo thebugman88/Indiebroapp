@@ -17,8 +17,8 @@ export const HelpTermsModal: React.FC<HelpTermsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
         
         {/* Top Header */}
         <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
@@ -199,7 +199,7 @@ export const HelpTermsModal: React.FC<HelpTermsModalProps> = ({
                   <div>
                     <h4 className="font-bold text-white text-sm mb-0.5">Select Your Audio Source</h4>
                     <p className="text-xs text-slate-400">
-                      Upload an MP3/WAV file, enter a SoundCloud/YouTube URL, or pick one of our built-in IndieBrotherhood demo tracks for a instant preview.
+                      Upload an MP3, WAV, M4A, AAC, or FLAC file. The same uploaded audio powers either free local measurements or the full Coin-priced AI analysis.
                     </p>
                   </div>
                 </div>

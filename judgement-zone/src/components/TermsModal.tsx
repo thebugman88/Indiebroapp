@@ -23,10 +23,10 @@ export const TermsModal: React.FC<TermsModalProps> = ({
   const canAccept = agreedRights && agreedAnonymous && agreedLiability;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
       <div
         id="terms-of-service-card"
-        className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto shadow-2xl relative"
+        className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-2xl w-full p-4 sm:p-8 max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-y-auto shadow-2xl relative"
       >
         {/* Header */}
         <div className="text-center mb-6">

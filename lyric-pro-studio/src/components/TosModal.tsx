@@ -19,8 +19,8 @@ export const TosModal: React.FC<TosModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-      <div className="bg-zinc-950 border border-zinc-800 max-w-2xl w-full rounded-2xl p-6 shadow-2xl flex flex-col justify-between max-h-[90vh]">
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-start sm:items-center justify-center overflow-y-auto p-2 sm:p-4">
+      <div className="bg-zinc-950 border border-zinc-800 max-w-2xl w-full rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col justify-between max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-hidden">
         
         {/* MODAL HEADER */}
         <div>
@@ -105,7 +105,7 @@ export const TosModal: React.FC<TosModalProps> = ({
         </div>
 
         {/* MODAL FOOTER & ACCEPTANCE */}
-        <div className="border-t border-zinc-800 pt-4 mt-4 space-y-4">
+        <div className="border-t border-zinc-800 pt-4 mt-4 space-y-4 shrink-0 bg-zinc-950">
           <label className="flex items-start space-x-3 cursor-pointer p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 transition">
             <input
               type="checkbox"

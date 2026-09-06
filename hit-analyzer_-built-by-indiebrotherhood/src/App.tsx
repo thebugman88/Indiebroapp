@@ -34,7 +34,7 @@ export default function App() {
   const [artistName, setArtistName] = useState<string>('');
   const [audioData, setAudioData] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>('');
-  const [inputMethod, setInputMethod] = useState<'file' | 'url' | 'sample'>('file');
+  const [inputMethod, setInputMethod] = useState<'file'>('file');
   const [mimeType, setMimeType] = useState<string>('audio/mp3');
 
   // Lyrics state
@@ -65,7 +65,7 @@ export default function App() {
     artistName: string;
     audioData: string | null;
     audioUrl: string;
-    inputMethod: 'file' | 'url' | 'sample';
+    inputMethod: 'file';
     mimeType: string;
   }) => {
     setSelectedAudioName(data.audioName);
@@ -86,7 +86,7 @@ export default function App() {
 
   const handleAnalyzeClick = () => {
     if (!audioData) {
-      setErrorMessage('Please upload an audio file first. Track URLs and demo metadata cannot be measured on their own.');
+      setErrorMessage('Please upload an audio file first.');
       return;
     }
 
@@ -204,7 +204,6 @@ export default function App() {
                 inputMethod={inputMethod}
                 mimeType={mimeType}
                 onAudioSelected={handleAudioSelected}
-                onLyricsSuggested={(sampleLyrics) => setLyrics(sampleLyrics)}
               />
             </div>
 

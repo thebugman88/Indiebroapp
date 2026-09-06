@@ -130,13 +130,13 @@ export function PurchaseDialog() {
     }
   }
   return (
-    <div className="fixed inset-0 z-[10000] bg-black/90 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[10000] bg-black/90 flex items-start sm:items-center justify-center overflow-y-auto p-2 sm:p-4">
       <section
         ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-labelledby="purchase-title"
-        className="bg-zinc-950 border border-amber-500/50 rounded-2xl p-6 max-w-xl w-full max-h-[90vh] overflow-auto text-zinc-200 space-y-4"
+        className="bg-zinc-950 border border-amber-500/50 rounded-2xl p-4 sm:p-6 max-w-xl w-full max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-y-auto text-zinc-200 space-y-4"
       >
         <div className="flex justify-between gap-4">
           <h2 id="purchase-title" className="text-xl font-bold text-amber-400">
