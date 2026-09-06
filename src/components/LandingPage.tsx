@@ -213,6 +213,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
         <div className="absolute top-0 right-10 w-72 h-72 bg-cyan-500/5 blur-[100px] pointer-events-none rounded-full" />
 
         <div className="max-w-6xl mx-auto text-center space-y-8 relative z-10">
+          <img
+            src="/brand/indiebrotherhood-wordmark.webp"
+            alt="IndieBrotherhood"
+            className="mx-auto h-20 w-auto max-w-full object-contain sm:h-24"
+          />
           {/* Catchphrase Pill Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-zinc-900/90 border border-amber-500/30 text-amber-300 text-xs font-mono shadow-xl backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
@@ -505,9 +510,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
       {/* 7. FINAL CALL TO ACTION */}
       <section className="py-20 px-4 sm:px-6 text-center relative overflow-hidden">
         <div className="max-w-3xl mx-auto space-y-6 relative z-10">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto shadow-xl">
-            <Sparkles className="w-6 h-6" />
-          </div>
+          <img src="/brand/ibh-mark.webp" alt="IndieBrotherhood" className="mx-auto h-24 w-24 object-contain drop-shadow-2xl" />
 
           <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
             Simplifying the Hustle.{' '}

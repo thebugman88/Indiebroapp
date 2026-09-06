@@ -27,7 +27,6 @@ import {
   Layers,
   ArrowUpRight,
   HelpCircle,
-  Home,
   X,
   Compass,
   Trophy,
@@ -499,24 +498,14 @@ function SuiteApp() {
           {/* Logo & Suite Brand */}
           <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <button
-              onClick={() => navigateTo('landing')}
+              onClick={() => navigateTo('hub')}
               className="flex items-center gap-2 hover:opacity-90 transition group text-left cursor-pointer"
-              title="View Manifesto & Pricing"
+              title="Back to Master Hub"
+              aria-label="IndieBrotherhood — back to Master Hub"
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-600 p-[1px] shadow-lg shadow-amber-500/20 flex-shrink-0">
-                <div className="w-full h-full bg-zinc-950 rounded-[7px] flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
-                </div>
-              </div>
-              <div className="hidden sm:block">
-                <div className="flex items-center gap-1.5 leading-none">
-                  <span className="font-extrabold tracking-tight text-white text-xs sm:text-sm">INDIEBROTHERHOOD</span>
-                  <span className="text-[9px] sm:text-[10px] font-mono px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
-                    OS
-                  </span>
-                </div>
-                <p className="text-[10px] text-zinc-400 font-medium hidden md:block">11-Studio Intelligence Suite</p>
-              </div>
+              <img src="/brand/ibh-mark.webp" alt="" className="h-9 w-9 object-contain sm:hidden" />
+              <img src="/brand/indiebrotherhood-wordmark.webp" alt="IndieBrotherhood" className="hidden h-11 w-auto max-w-[220px] object-contain sm:block" />
+              <span className="sr-only">11-Studio Intelligence Suite</span>
             </button>
           </div>
 
@@ -907,22 +896,6 @@ function SuiteApp() {
 
       {/* 2. ACTIVE APPLICATION VIEWPORT */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {/* Floating Quick Return to Hub (Shown when inside any sub-studio) */}
-        {activeApp !== 'hub' && activeApp !== 'landing' && (
-          <aside aria-label="Quick Hub Return" className="fixed bottom-5 right-5 z-40">
-            <button
-              onClick={() => navigateTo('hub')}
-              className="px-3.5 py-2 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 shadow-2xl flex items-center gap-2 transition-all hover:scale-105 backdrop-blur-md group cursor-pointer"
-            >
-              <Home className="w-3.5 h-3.5 text-amber-400 group-hover:-translate-y-0.5 transition-transform" />
-              <span>Back to Main Hub</span>
-              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-                Alt+H
-              </kbd>
-            </button>
-          </aside>
-        )}
-
         {currentUser.id!=='guest'&&['hub','artist-profile'].includes(activeApp)&&<CommunityProgressPrompt key={currentUser.id} onOpen={()=>setIsReferralOpen(true)}/>}
         <PrivateWorkspaceGate><Suspense
           fallback={

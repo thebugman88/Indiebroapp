@@ -99,6 +99,20 @@ test("payment monitoring reports a safe failure stage without discarding pending
   assert.match(payments, /durable pending records retained/);
 });
 
+test("brand logo owns hub navigation and the redundant floating home control is removed", async () => {
+  const [app, landing, wallet] = await Promise.all([
+    readFile("src/App.tsx", "utf8"),
+    readFile("src/components/LandingPage.tsx", "utf8"),
+    readFile("src/components/PersistentCoinWallet.tsx", "utf8"),
+  ]);
+  assert.match(app, /aria-label="IndieBrotherhood — back to Master Hub"/);
+  assert.match(app, /onClick=\{\(\) => navigateTo\('hub'\)\}[\s\S]*indiebrotherhood-wordmark\.webp/);
+  assert.doesNotMatch(app, /Back to Main Hub/);
+  assert.match(landing, /brand\/indiebrotherhood-wordmark\.webp/);
+  assert.match(landing, /brand\/ibh-mark\.webp/);
+  assert.match(wallet, /opacity-55 hover:opacity-100 focus-visible:opacity-100/);
+});
+
 test("profile edit opens real settings and supports bounded local photo uploads", async () => {
   const profile = await readFile("src/components/ArtistProfilePage.tsx", "utf8");
   assert.match(profile, /setActiveTab\('environment'\)/);

@@ -67,7 +67,7 @@ export function PersistentCoinWallet({
     <button
       type="button"
       onClick={() => { setView("summary"); setOpen(value => !value); }}
-      className="fixed left-3 z-[70] flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-2xl border border-amber-400/40 bg-zinc-950/95 px-3 py-2 text-left shadow-2xl shadow-black/60 backdrop-blur-md transition hover:border-amber-300 hover:bg-zinc-900 sm:left-4"
+      className={`fixed left-3 z-[70] flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-2xl border border-amber-400/40 bg-zinc-950/90 px-3 py-2 text-left shadow-2xl shadow-black/60 backdrop-blur-md transition hover:border-amber-300 hover:bg-zinc-900 sm:left-4 ${open ? "opacity-100" : "opacity-55 hover:opacity-100 focus-visible:opacity-100"}`}
       style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}
       aria-label={`${balance}. ${context}. Open Plan and Coins.`}
       title="Open Coin wallet"

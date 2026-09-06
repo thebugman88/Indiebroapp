@@ -140,12 +140,10 @@ export const GamificationModal: React.FC = () => {
         {/* 1. Modal Top Bar */}
         <div className="p-4 sm:p-6 bg-gradient-to-r from-zinc-900 via-[#101524] to-zinc-900 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Trophy className="w-5 h-5" />
-            </div>
+            <img src="/brand/ibh-mark.webp" alt="" className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" />
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-extrabold text-white">indiebrotherhood Creator OS</h2>
+                <img src="/brand/indiebrotherhood-wordmark.webp" alt="IndieBrotherhood Creator OS" className="h-6 w-auto max-w-[130px] object-contain sm:h-8 sm:max-w-[220px]" />
                 {isPro ? (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 font-black flex items-center gap-1">
                     <Crown className="w-3 h-3 fill-zinc-950" />
