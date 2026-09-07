@@ -1,4 +1,5 @@
 import { usePrivateStorage } from '../../shared/PrivateWorkspaceGate';
+import { useGamification } from '../../src/context/GamificationContext';
 import React, { useState, useEffect } from 'react';
 import { Quiz, QuizType, DifficultyLevel, GenreCategory, QuizResultRecord, UserStatsVault } from './types';
 import { FEATURED_QUIZZES } from './data/quizzes';
@@ -28,6 +29,7 @@ const RECENT_QUESTIONS_KEY = 'sonic_iq_recent_questions_2026';
 
 export default function App() {
   const localStorage = usePrivateStorage();
+  const { awardXP } = useGamification();
   // Navigation & Modal States
   const [viewMode, setViewMode] = useState<'home' | 'running_quiz' | 'quiz_results'>('home');
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
@@ -97,6 +99,13 @@ export default function App() {
   // Complete Quiz Callback
   const handleCompleteQuiz = (result: QuizResultRecord) => {
     setLatestResult(result);
+    awardXP({
+      amount: 100,
+      actionTitle: `Completed Sonic IQ: ${result.quizTitle}`,
+      sourceApp: 'Sonic IQ',
+      badgeId: 'sonic-genius',
+      badgeIncrement: 1,
+    });
 
     // Update Vault Stats
     setVault((prev) => {

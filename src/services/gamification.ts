@@ -472,6 +472,7 @@ export function loadProfileState(): UserProfileState {
       return init;
     }
     const parsed = JSON.parse(raw) as UserProfileState;
+    const original = raw;
     const today = getTodayString();
 
     // Default migration fields for real user state
@@ -510,6 +511,11 @@ export function loadProfileState(): UserProfileState {
 
     // Dynamically evaluate real user activity state from storage
     syncRealActivityCounters(parsed);
+
+    // Streak advances, daily refreshes, migrations, and activity-derived badge
+    // progress must survive a refresh instead of changing only the returned object.
+    const serialized = JSON.stringify(parsed);
+    if (serialized !== original) currentPrivateStorage().setItem(STORAGE_KEY, serialized);
 
     return parsed;
   } catch (err) {
@@ -607,10 +613,12 @@ export function syncRealActivityCounters(profile: UserProfileState): boolean {
     // 6. Trivia Rounds
     let triviaCount = 0;
     try {
-      const qRaw = currentPrivateStorage().getItem('soniciq_quiz_history');
+      const qRaw = currentPrivateStorage().getItem('sonic_iq_lab_user_stats_vault_2026')
+        || currentPrivateStorage().getItem('soniciq_quiz_history');
       if (qRaw) {
-        const arr = JSON.parse(qRaw);
-        if (Array.isArray(arr)) triviaCount += arr.length;
+        const value = JSON.parse(qRaw);
+        if (Array.isArray(value)) triviaCount += value.length;
+        else if (Array.isArray(value?.completedResults)) triviaCount += value.completedResults.length;
       }
     } catch {}
 

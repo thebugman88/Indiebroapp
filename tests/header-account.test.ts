@@ -103,6 +103,23 @@ test("one shared wallet loop supplies both Coin and Pro status", async () => {
   assert.doesNotMatch(gamification, /setInterval\(refresh, 60000\)/);
 });
 
+test("profile progression reloads after private storage unlock and Sonic IQ records XP", async () => {
+  const [context, service, sonic] = await Promise.all([
+    readFile("src/context/GamificationContext.tsx", "utf8"),
+    readFile("src/services/gamification.ts", "utf8"),
+    readFile("lyric-pro-quiz-studio/src/App.tsx", "utf8"),
+  ]);
+  assert.match(context, /useState<UserProfileState>\(getInitialState\)/);
+  assert.match(context, /ib_private_storage_changed/);
+  assert.match(context, /storage\.status === 'ready' && storage\.uid === user\.id/);
+  assert.match(context, /if \(!wallet \|\| privateStorageStatus\(\)\.status !== 'ready'\) return/);
+  assert.match(service, /if \(serialized !== original\) currentPrivateStorage\(\)\.setItem\(STORAGE_KEY, serialized\)/);
+  assert.match(service, /sonic_iq_lab_user_stats_vault_2026/);
+  assert.match(service, /value\?\.completedResults/);
+  assert.match(sonic, /sourceApp: 'Sonic IQ'/);
+  assert.match(sonic, /badgeId: 'sonic-genius'/);
+});
+
 test("payment monitoring reports a safe failure stage without discarding pending records", async () => {
   const payments = await readFile("server/payments.ts", "utf8");
   assert.match(payments, /stage = "stripe_reconciliation"/);

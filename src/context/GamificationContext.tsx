@@ -1,10 +1,13 @@
 import { requestPurchase } from '../components/PurchaseDialog';
 import { authenticatedFetch } from '../services/authService';
+import { getCurrentAuthUser } from '../services/authService';
+import { privateStorageStatus } from '../../shared/privateStorage';
 import { useCoinWallet } from './CoinWalletContext';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
   UserProfileState,
   loadProfileState,
+  getInitialState,
   saveProfileState,
   grantUserXP,
   GrantXpOptions,
@@ -45,32 +48,41 @@ interface GamificationContextType {
 const GamificationContext = createContext<GamificationContextType | undefined>(undefined);
 
 export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [profile, setProfile] = useState<UserProfileState>(loadProfileState());
+  // Auth and encrypted workspace unlock asynchronously. Never manufacture a
+  // save from the guest adapter while the real account vault is still locked.
+  const [profile, setProfile] = useState<UserProfileState>(getInitialState);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const { wallet } = useCoinWallet();
 
   // Synchronize on window focus or custom events
   useEffect(() => {
-    const handleProfileUpdate = (e: Event) => {
-      const customEvent = e as CustomEvent<UserProfileState>;
-      if (customEvent.detail) {
-        setProfile(customEvent.detail);
-      } else {
+    const reloadReadyProfile = () => {
+      const storage = privateStorageStatus();
+      const user = getCurrentAuthUser();
+      if (user.id !== 'guest' && storage.status === 'ready' && storage.uid === user.id) {
         setProfile(loadProfileState());
+      } else if (user.id === 'guest') {
+        setProfile(getInitialState());
       }
     };
 
-    window.addEventListener('ib_profile_updated', handleProfileUpdate);
-    window.addEventListener('storage', handleProfileUpdate);
+    reloadReadyProfile();
+    window.addEventListener('ib_profile_updated', reloadReadyProfile);
+    window.addEventListener('ib_auth_changed', reloadReadyProfile);
+    window.addEventListener('ib_private_storage_changed', reloadReadyProfile);
+    window.addEventListener('storage', reloadReadyProfile);
     return () => {
-      window.removeEventListener('ib_profile_updated', handleProfileUpdate);
-      window.removeEventListener('storage', handleProfileUpdate);
+      window.removeEventListener('ib_profile_updated', reloadReadyProfile);
+      window.removeEventListener('ib_auth_changed', reloadReadyProfile);
+      window.removeEventListener('ib_private_storage_changed', reloadReadyProfile);
+      window.removeEventListener('storage', reloadReadyProfile);
     };
   }, []);
 
   // CoinWalletContext owns the single server-authoritative wallet refresh loop.
   // Mirror its trusted subscription status into the local gamification display cache.
   useEffect(() => {
+    if (!wallet || privateStorageStatus().status !== 'ready') return;
     if (wallet?.tier === 'pro' && wallet.proExpiresAt && wallet.proExpiresAt > Date.now()) {
       setProfile(activateProSubscription(wallet.proExpiresAt));
       return;
