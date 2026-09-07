@@ -57,6 +57,7 @@ import {
   saveCurrentAuthUser,
   RegisteredUser,
   ADMIN_EMAIL,
+  authenticatedFetch,
 } from './services/authService';
 import { getUnreadDmCount } from './services/dmService';
 import { canMountMasteringSuite } from './masteringSuiteAccess';
@@ -74,6 +75,43 @@ const ArtistAssistantApp = React.lazy(() => import('../indiebrotherhood-artist-a
 const MeetingRoomApp = React.lazy(() => import('../meeting-room/src/App'));
 const RoyaltyExtractorApp = React.lazy(() => import('../royalty-and-isrc-metadata-extractor/src/App'));
 const MasteringSuiteApp = React.lazy(() => import('../mastering-suite/src/App'));
+
+const AdultOnlyHangOut: React.FC = () => {
+  const [status, setStatus] = useState<'loading' | 'allowed' | 'blocked'>('loading');
+  const [birthDate, setBirthDate] = useState('');
+  const [guardianPermission, setGuardianPermission] = useState(false);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    authenticatedFetch('/api/account/age-status').then(async response => {
+      const body = await response.json().catch(() => ({}));
+      if (live) setStatus(response.ok && body.adultEligible === true ? 'allowed' : 'blocked');
+    }).catch(() => { if (live) setStatus('blocked'); });
+    return () => { live = false; };
+  }, []);
+  if (status === 'allowed') return <HangOutApp />;
+  return <div role="status" className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
+    <Lock className="h-10 w-10 text-amber-400" aria-hidden="true" />
+    <div><h2 className="text-xl font-bold text-white">Hang Out is for adults 18+ only</h2><p className="mt-2 max-w-md text-sm text-zinc-400">{status === 'loading' ? 'Confirming age eligibility…' : 'Rooms, direct messages, cyphers, and battles require a one-time adult age declaration.'}</p></div>
+    {status === 'blocked' && <form className="w-full max-w-sm space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-left" onSubmit={async event => {
+      event.preventDefault(); setBusy(true); setMessage('');
+      try {
+        const response = await authenticatedFetch('/api/account/declare-age', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ birthDate, guardianPermission }) });
+        const body = await response.json().catch(() => ({}));
+        if (response.ok && body.adultEligible === true) setStatus('allowed');
+        else setMessage(body.error || 'This account is not eligible for adult community features.');
+      } catch { setMessage('Age eligibility could not be confirmed. Try again later.'); }
+      finally { setBusy(false); }
+    }}>
+      <label className="block text-sm font-bold text-zinc-200">Birth date<input required type="date" value={birthDate} onChange={event => setBirthDate(event.target.value)} autoComplete="bday" className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-white" /></label>
+      <p className="text-xs text-zinc-400">Used once to determine your age group. The exact date is not retained.</p>
+      <label className="flex items-start gap-2 text-xs text-zinc-300"><input required type="checkbox" checked={guardianPermission} onChange={event => setGuardianPermission(event.target.checked)} className="mt-0.5" /><span>I confirm this declaration is accurate and accept the <a href="/api/legal/terms-of-service" target="_blank" className="text-amber-300 underline">Terms</a> and <a href="/api/legal/privacy" target="_blank" className="text-amber-300 underline">Privacy Policy</a>.</span></label>
+      <button disabled={busy} className="w-full rounded-xl bg-amber-400 p-3 font-bold text-zinc-950 disabled:opacity-50">{busy ? 'Checking…' : 'Confirm age eligibility'}</button>
+      {message && <p className="text-sm text-amber-200">{message}</p>}
+    </form>}
+  </div>;
+};
 
 export type SuiteAppId =
   | 'landing'
@@ -1131,7 +1169,7 @@ function SuiteApp() {
           {activeApp === 'hit-analyzer' && <HitAnalyzerApp />}
 
           {/* 4. HANG OUT */}
-          {activeApp === 'hang-out' && <HangOutApp />}
+          {activeApp === 'hang-out' && <AdultOnlyHangOut />}
 
           {/* 5. LYRIC PRO STUDIO */}
           {activeApp === 'lyric-pro' && <LyricProStudioApp />}
@@ -1174,6 +1212,16 @@ function SuiteApp() {
           {activeApp === 'royaltyops' && <RoyaltyExtractorApp />}
         </Suspense></PrivateWorkspaceGate>
       </div>
+
+      <footer className="border-t border-zinc-900 bg-black px-4 py-5 text-center text-xs text-zinc-500">
+        <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <a href="/api/legal/terms-of-service" target="_blank" rel="noreferrer" className="hover:text-amber-300">Terms of Service</a>
+          <a href="/api/legal/privacy" target="_blank" rel="noreferrer" className="hover:text-amber-300">Privacy Policy</a>
+          <a href="/api/legal/purchase-terms" target="_blank" rel="noreferrer" className="hover:text-amber-300">Purchase Terms</a>
+          <a href="mailto:xchristopherrayx@gmail.com" className="hover:text-amber-300">Safety &amp; support</a>
+        </nav>
+        <p className="mt-2">© 2026 indiebrotherhood</p>
+      </footer>
 
       {/* GLOBAL TOAST & MODAL OVERLAYS */}
       {isReferralOpen&&currentUser.id!=='guest'&&<PrivateWorkspaceGate><ReferralCenter onClose={()=>setIsReferralOpen(false)}/></PrivateWorkspaceGate>}

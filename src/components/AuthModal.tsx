@@ -8,6 +8,8 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [guardianPermission, setGuardianPermission] = useState(false);
   const [referralCode,setReferralCode]=useState(inviteFromUrl);
   const [message, setMessage] = useState('');
   const [verificationNotice, setVerificationNotice] = useState(false);
@@ -21,7 +23,7 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
         setMessage(result.message || result.error || 'Please try again.');
       } else {
         if (tab === 'signup') {
-          const result = await registerUser({ email, password, displayName });
+          const result = await registerUser({ email, password, displayName, birthDate, guardianPermission });
           if (result.success && result.registeredUid) {
             rememberReferralInvite(result.registeredUid, referralCode);
             setPassword('');
@@ -56,6 +58,8 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initial
       <p className="text-sm text-slate-300 mb-4">For shared-device privacy, your session and encryption keys stay in memory. Refreshing or closing this page requires signing in again. Download work you want to keep.</p>
       <form onSubmit={submit} className="space-y-4">
         {tab === 'signup' && <label className="block">Artist name<input required value={displayName} onChange={e => setDisplayName(e.target.value)} autoComplete="nickname" className={fieldClass} /></label>}
+        {tab === 'signup' && <label className="block">Birth date<input required type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} autoComplete="bday" className={fieldClass} /><span className="mt-1 block text-xs text-slate-400">Used once to determine your age group. Your exact birth date is not retained.</span></label>}
+        {tab === 'signup' && <label className="flex items-start gap-2 text-sm text-slate-300"><input required type="checkbox" checked={guardianPermission} onChange={e => setGuardianPermission(e.target.checked)} className="mt-1"/><span>I am 18 or older, or my parent/legal guardian permits me to use indiebrotherhood. I accept the <a href="/api/legal/terms-of-service" target="_blank" className="text-amber-300 underline">Terms</a> and <a href="/api/legal/privacy" target="_blank" className="text-amber-300 underline">Privacy Policy</a>.</span></label>}
         {tab==='signup'&&<label className="block text-sm">Referral code (optional)<input className={fieldClass} value={referralCode} maxLength={24} pattern="[A-Fa-f0-9]{24}" onChange={e=>setReferralCode(e.target.value.toUpperCase())}/><span className="mt-1 block text-xs text-slate-400">After verifying your email, open Invite & Earn to attach it and complete the checklist. Save this code if you close the page.</span></label>}
         <label className="block">Email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" className={fieldClass} /></label>
         {tab !== 'recover' && <label className="block">Password<input required type="password" minLength={tab === 'signup' ? 8 : undefined} value={password} onChange={e => setPassword(e.target.value)} autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} className={fieldClass} /></label>}

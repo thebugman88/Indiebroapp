@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import express from "express";
 import { getFirestore } from "firebase-admin/firestore";
 import { getFirebaseAdminApp } from "./auth";
+import { deleteAgeClaim, getAgeClaim, saveAgeClaim } from './ageGate';
 
 export function normalizeAccountName(value: unknown) {
   if (typeof value !== "string") throw new Error("INVALID_NAME");
@@ -37,10 +38,36 @@ export async function claimAccountName(uid: string, value: unknown) {
 }
 
 export const accountNamesRouter = express.Router();
-accountNamesRouter.post("/claim-name", async (req, res) => {
+accountNamesRouter.get('/age-status', async (_req, res) => {
   try {
-    res.json(await claimAccountName(res.locals.identity.uid, req.body?.displayName));
+    const claim = await getAgeClaim(res.locals.identity.uid);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ declared: Boolean(claim), ageBand: claim?.ageBand || null, adultEligible: claim?.adultEligible === true });
+  } catch { res.status(503).json({ error: 'Age eligibility could not be confirmed.' }); }
+});
+accountNamesRouter.post('/declare-age', async (req, res) => {
+  try {
+    const existing = await getAgeClaim(res.locals.identity.uid);
+    if (existing) { res.status(409).json({ code: 'AGE_ALREADY_DECLARED', error: 'This account already has an age declaration.' }); return; }
+    const claim = await saveAgeClaim(res.locals.identity.uid, req.body?.birthDate, req.body?.guardianPermission);
+    res.json({ declared: true, ageBand: claim.ageBand, adultEligible: claim.adultEligible });
   } catch (error) {
+    const code = (error as Error).message;
+    if (code === 'UNDER_MINIMUM_AGE') { res.status(403).json({ code, error: 'You must be at least 13 to use an account.' }); return; }
+    if (code === 'GUARDIAN_PERMISSION_REQUIRED') { res.status(403).json({ code, error: 'A parent or legal guardian must give permission for a member under 18.' }); return; }
+    if (code === 'INVALID_BIRTH_DATE') { res.status(400).json({ code, error: 'Enter a valid birth date.' }); return; }
+    res.status(503).json({ error: 'The age declaration could not be saved. Try again later.' });
+  }
+});
+accountNamesRouter.post("/claim-name", async (req, res) => {
+  let ageCreated = false;
+  try {
+    const age = await saveAgeClaim(res.locals.identity.uid, req.body?.birthDate, req.body?.guardianPermission);
+    ageCreated = true;
+    const name = await claimAccountName(res.locals.identity.uid, req.body?.displayName);
+    res.json({ ...name, ageBand: age.ageBand, adultEligible: age.adultEligible });
+  } catch (error) {
+    if (ageCreated) await deleteAgeClaim(res.locals.identity.uid).catch(() => {});
     const code = (error as Error).message;
     if (code === "NAME_UNAVAILABLE") {
       res.status(409).json({ code, error: "That artist name is unavailable. Choose another name." });
@@ -48,6 +75,18 @@ accountNamesRouter.post("/claim-name", async (req, res) => {
     }
     if (code === "NAME_LOCKED") {
       res.status(409).json({ code, error: "Your original artist name is permanently attached to this account." });
+      return;
+    }
+    if (code === 'UNDER_MINIMUM_AGE') {
+      res.status(403).json({ code, error: 'You must be at least 13 to create an account.' });
+      return;
+    }
+    if (code === 'GUARDIAN_PERMISSION_REQUIRED') {
+      res.status(403).json({ code, error: 'A parent or legal guardian must give permission for a member under 18.' });
+      return;
+    }
+    if (code === 'INVALID_BIRTH_DATE') {
+      res.status(400).json({ code, error: 'Enter a valid birth date.' });
       return;
     }
     if (code === "INVALID_NAME") {

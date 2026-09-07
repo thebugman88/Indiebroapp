@@ -7,6 +7,8 @@ import { browserKeys, assertEncryptionConfigured } from './server/dataProtection
 import { economyRouter, usageMiddleware, economyDb } from './server/economy';
 import { startPaymentMonitor } from './server/payments';
 import { PURCHASE_POLICY } from './shared/economy';
+import { LEGAL_DOCUMENTS, STUDIO_NOTICES } from './shared/legal';
+import { isAdultEligible, requireAdult } from './server/ageGate';
 import { judgementRouter } from './server/judgement';
 import { attachRealtime } from './server/realtime';
 import { createMessagingRouter } from './server/messaging';
@@ -89,7 +91,7 @@ app.post('/api/stripe/webhook', ...createStripeWebhook(getStripeClient));
 
 // Public metadata is explicitly allowlisted; every other API requires verified identity.
 app.use('/api', (req, res, next) => {
-  if (req.method === 'GET' && ['/health', '/stripe/config', '/support/config', '/legal/terms'].includes(req.path)) return next();
+  if (req.method === 'GET' && (['/health', '/stripe/config', '/support/config'].includes(req.path) || req.path.startsWith('/legal/'))) return next();
   return requireAuth(req, res, next);
 });
 app.use(['/api/admin', '/api/audit', '/api/resilience'], requireAdmin);
@@ -117,12 +119,23 @@ app.use('/api/account', accountNamesRouter);
 app.use('/api/stripe', createBillingRouter(getStripeClient));
 app.use(usageMiddleware);
 app.get('/api/legal/terms',(_req,res)=>res.type('text/plain').send('IndieBrotherhood — Purchase Terms and AI Disclosure\n\n'+PURCHASE_POLICY));
+app.get('/api/legal/:document', (req, res) => {
+  const document = LEGAL_DOCUMENTS[req.params.document as keyof typeof LEGAL_DOCUMENTS];
+  if (!document) return res.sendStatus(404);
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  return res.type('text/plain').send(document.text);
+});
+app.get('/api/legal/studios/:studio', (req, res) => {
+  const notice = STUDIO_NOTICES[req.params.studio];
+  if (!notice) return res.sendStatus(404);
+  return res.json({ studio: req.params.studio, notice });
+});
 app.use('/api/economy',economyRouter);
 app.use('/api/community',communityRouter);
 app.use('/api/referrals',referralsRouter);
 app.use(semanticRouter);
 app.use(extraAiRouter);
-app.use('/api/dm', createMessagingRouter());
+app.use('/api/dm', requireAdult, createMessagingRouter());
 app.use('/api/judgement', judgementRouter);
 
 const httpServer = createHttpServer(app);
@@ -589,6 +602,11 @@ app.post('/api/generate-lyrics', async (req: Request, res: Response) => {
   const accountId = res.locals.identity.uid;
   let input:ReturnType<typeof lyricInput>;
   try {input=lyricInput(payload);}catch {return res.status(400).json({error:'Invalid lyric request. Check the selected mode and input lengths.'});}
+  if (input.explicit) {
+    try {
+      if (!await isAdultEligible(accountId)) return res.status(403).json({ code: 'ADULT_ONLY', error: 'Lyric Pro explicit mode is available only to members who have declared they are 18 or older.' });
+    } catch { return res.status(503).json({ error: 'Age eligibility could not be confirmed. Try again later.' }); }
+  }
 
   // 1. Security AI Sentinel: Bot & Excessive Request Check
   const securityCheck = recordAccountRequest({
@@ -869,7 +887,7 @@ Create ${numberOfQuestions} multiple-choice questions with exactly 4 options and
 // -------------------------------------------------------------
 // 9. RESILIENT HANG OUT GEMINI APIS
 // -------------------------------------------------------------
-app.post('/api/gemini/battle-judge', async (req: Request, res: Response) => {
+app.post('/api/gemini/battle-judge', requireAdult, async (req: Request, res: Response) => {
   try {
     const { player1Name, player2Name, player1Verses, player2Verses, tier } = req.body;
 
@@ -912,7 +930,7 @@ Provide an authentic verdict in JSON.`;
   } catch (error: any) { return res.status(503).json({ error: 'The AI provider is unavailable. No generated result was returned.' }); }
 });
 
-app.post('/api/gemini/ai-bot-rap', async (req: Request, res: Response) => {
+app.post('/api/gemini/ai-bot-rap', requireAdult, async (req: Request, res: Response) => {
   try {
     const { botName, tier, opponentVerse } = req.body;
     const prompt = `You are ${botName || 'MC Spitfire'}, dropping battle bars in "${tier || 'Fluent'}" tier for indiebrotherhood. Counter verse: "${opponentVerse || 'Ready'}". Return 4-8 fiery bars.`;

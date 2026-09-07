@@ -182,7 +182,7 @@ export async function loginUser(email: string, password: string) {
     return { success: true, user: await syncUser(result.user) };
   } catch (error) { return { success: false, error: authError(error) }; }
 }
-export async function registerUser(params: { email: string; displayName: string; password: string }) {
+export async function registerUser(params: { email: string; displayName: string; password: string; birthDate: string; guardianPermission: boolean }) {
   if (!auth) return { success: false, error: 'Firebase sign-in is not configured yet.' };
   if (!params.displayName.trim() || params.password.length < 8) return { success: false, error: 'Enter a name and a password of at least 8 characters.' };
   try {
@@ -192,7 +192,7 @@ export async function registerUser(params: { email: string; displayName: string;
       const claim = await authenticatedFetch('/api/account/claim-name', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: params.displayName }),
+        body: JSON.stringify({ displayName: params.displayName, birthDate: params.birthDate, guardianPermission: params.guardianPermission }),
       });
       const body = await claim.json();
       if (!claim.ok) throw new Error(body?.error || 'Artist-name registration failed.');
