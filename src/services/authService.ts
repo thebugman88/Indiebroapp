@@ -182,7 +182,7 @@ export async function loginUser(email: string, password: string) {
     return { success: true, user: await syncUser(result.user) };
   } catch (error) { return { success: false, error: authError(error) }; }
 }
-export async function registerUser(params: { email: string; displayName: string; password: string; birthDate: string; guardianPermission: boolean }) {
+export async function registerUser(params: { email: string; displayName: string; password: string; birthDate: string; guardianEmail?: string }) {
   if (!auth) return { success: false, error: 'Firebase sign-in is not configured yet.' };
   if (!params.displayName.trim() || params.password.length < 8) return { success: false, error: 'Enter a name and a password of at least 8 characters.' };
   try {
@@ -192,12 +192,16 @@ export async function registerUser(params: { email: string; displayName: string;
       const claim = await authenticatedFetch('/api/account/claim-name', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: params.displayName, birthDate: params.birthDate, guardianPermission: params.guardianPermission }),
+        body: JSON.stringify({ displayName: params.displayName, birthDate: params.birthDate, guardianEmail: params.guardianEmail }),
       });
       const body = await claim.json();
       if (!claim.ok) throw new Error(body?.error || 'Artist-name registration failed.');
       await updateProfile(result.user, { displayName: body.displayName });
-      let message = 'Account created and artist name reserved. Verify your email, then return here and sign in.';
+      let message = body.ageBand === 'minor'
+        ? body.guardianDelivery === 'sent'
+          ? 'Teen account created. Verify your email and ask your parent or guardian to approve the separate permission email.'
+          : 'Teen account created but guardian email delivery is unavailable. Verify your email, then request a new guardian approval link.'
+        : 'Account created and artist name reserved. Verify your email, then return here and sign in.';
       try {
         await sendEmailVerification(result.user);
       } catch {

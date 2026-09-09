@@ -8,7 +8,8 @@ import { economyRouter, usageMiddleware, economyDb } from './server/economy';
 import { startPaymentMonitor } from './server/payments';
 import { PURCHASE_POLICY } from './shared/economy';
 import { LEGAL_DOCUMENTS, STUDIO_NOTICES } from './shared/legal';
-import { isAdultEligible, requireAdult } from './server/ageGate';
+import { isAdultEligible, requireAdult, requireGuardianApproval } from './server/ageGate';
+import { guardianConsentRouter } from './server/guardianConsent';
 import { judgementRouter } from './server/judgement';
 import { attachRealtime } from './server/realtime';
 import { createMessagingRouter } from './server/messaging';
@@ -91,7 +92,8 @@ app.post('/api/stripe/webhook', ...createStripeWebhook(getStripeClient));
 
 // Public metadata is explicitly allowlisted; every other API requires verified identity.
 app.use('/api', (req, res, next) => {
-  if (req.method === 'GET' && (['/health', '/stripe/config', '/support/config'].includes(req.path) || req.path.startsWith('/legal/'))) return next();
+  if ((req.method === 'GET' || req.method === 'HEAD') && (['/health', '/stripe/config', '/support/config'].includes(req.path) || req.path.startsWith('/legal/'))) return next();
+  if (req.method === 'POST' && req.path === '/legal/guardian-consent') return next();
   return requireAuth(req, res, next);
 });
 app.use(['/api/admin', '/api/audit', '/api/resilience'], requireAdmin);
@@ -101,6 +103,7 @@ app.use('/api/security', (req, res, next) => {
 });
 // Authenticate before parsing large media payloads.
 app.use(express.json({ limit: '22mb' }));
+app.use(express.urlencoded({ extended: false, limit: '16kb' }));
 // Attach AI Code Sentinel & Threat Detection Observer
 app.use('/api', durableSecurityGuard);
 app.use('/api', codeSentinelMiddleware);
@@ -116,9 +119,13 @@ app.get('/api/privacy/key', (req, res) => {
 // Name claiming is allowed before email verification so signup can reserve one
 // immutable, server-authoritative artist identity before ending the session.
 app.use('/api/account', accountNamesRouter);
+// Known teen accounts remain locked until the signed guardian link is approved.
+// Legacy accounts without an age record are not silently reclassified.
+app.use('/api', requireGuardianApproval);
 app.use('/api/stripe', createBillingRouter(getStripeClient));
 app.use(usageMiddleware);
 app.get('/api/legal/terms',(_req,res)=>res.type('text/plain').send('IndieBrotherhood — Purchase Terms and AI Disclosure\n\n'+PURCHASE_POLICY));
+app.use('/api/legal', guardianConsentRouter);
 app.get('/api/legal/:document', (req, res) => {
   const document = LEGAL_DOCUMENTS[req.params.document as keyof typeof LEGAL_DOCUMENTS];
   if (!document) return res.sendStatus(404);

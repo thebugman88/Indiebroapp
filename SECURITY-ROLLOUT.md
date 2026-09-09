@@ -22,6 +22,7 @@ Scope: root unified suite at baseline `214e1be`. This is a staged security fix, 
 6. Register `/api/stripe/webhook` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `customer.subscription.created`, `.updated`, `.deleted`. Use Stripe test mode to verify payment, renewal, cancellation, duplicate events, and database-outage retries before accepting live payments. Test-mode keys do not activate any production account if staging uses separate Firebase data.
 7. Existing real Stripe subscriptions without `metadata.firebaseUid` need a deliberate, verified account mapping before migration. Do not infer ownership from browser data or silently invent it.
 8. Build the **root** suite and start the persistent Node server. Static hosting alone does not run these APIs. Set `PORT` if the host requires it. This change does not convert Express into Vercel serverless functions or change standalone app deployment configs.
+9. Before accepting registrations from ages 13–17, verify `indiebrotherhood.com` with the transactional email provider, store `RESEND_API_KEY` only in Secret Manager, and set `GUARDIAN_EMAIL_FROM` to a verified sender. Without both settings, teen accounts safely remain `guardian_pending`; adult registration continues normally. Test delivery, the seven-day expiration, one-time approval, resend behavior, and the permanent adult-feature block. Guardian email approval is an additional safeguard and is not government-ID or relationship verification.
 
 ## Contracts
 

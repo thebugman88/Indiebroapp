@@ -2,9 +2,9 @@ import { PURCHASE_POLICY, TERMS_VERSION as PURCHASE_TERMS_VERSION } from './econ
 
 export const LEGAL_OPERATOR = 'indiebrotherhood';
 export const LEGAL_CONTACT_EMAIL = 'xchristopherrayx@gmail.com';
-export const TERMS_VERSION = '2026-09-07-terms-v1';
-export const PRIVACY_VERSION = '2026-09-07-privacy-v1';
-export const AGE_POLICY_VERSION = '2026-09-07-age-v1';
+export const TERMS_VERSION = '2026-09-09-terms-v2';
+export const PRIVACY_VERSION = '2026-09-09-privacy-v2';
+export const AGE_POLICY_VERSION = '2026-09-09-age-v2';
 
 export const TERMS_OF_SERVICE = `indiebrotherhood Terms of Service
 Effective: September 7, 2026 · Version ${TERMS_VERSION}
@@ -12,7 +12,7 @@ Effective: September 7, 2026 · Version ${TERMS_VERSION}
 These Terms govern your use of indiebrotherhood, an independent-music software and community service operated under the name indiebrotherhood. Contact: ${LEGAL_CONTACT_EMAIL}.
 
 1. Eligibility and age safety
-You must be at least 13 to create or use an account. If you are under 18, you must have permission from a parent or legal guardian. Hang Out—including rooms, direct messages, cyphers, and battles—is for adults 18 and older only. Lyric Pro's explicit-content setting is also 18+; clean lyric tools may be used by otherwise eligible members. We may require an age declaration, restrict access when an age cannot be established, and suspend accounts that provide false information. An entered birth date is a user declaration, not government-ID verification.
+You must be at least 13 to create or use an account. If you are under 18, a parent or legal guardian must approve the account through our separate, expiring consent link before the tools unlock. Hang Out—including rooms, direct messages, cyphers, and battles—is for adults 18 and older only. Lyric Pro's explicit-content setting is also 18+; guardian approval never unlocks adult-only features. We may require an age declaration, restrict access when an age cannot be established, and suspend accounts that provide false information. An entered birth date is a user declaration, not government-ID verification.
 
 2. Accounts
 Provide accurate information, protect your credentials, and use only your own account. Artist names are unique and permanently reserved to the first account that successfully claims them. Do not impersonate another person or evade a restriction.
@@ -47,7 +47,7 @@ This policy explains how indiebrotherhood handles information. Contact: ${LEGAL_
 We handle account information (email, unique artist name, authentication identifiers, verification status, and profile choices); an age declaration and the resulting minor/adult eligibility status; content you choose to upload or enter; feature activity, XP, streaks, badges, Coin balances and transactions; purchase and subscription records; support messages; and security/technical data such as request time, device/browser information, IP-derived security signals, and error logs.
 
 2. Age data
-During signup, the server uses the entered birth date to determine whether the account is under 13, a 13–17 minor, or an adult. The exact birth date is not retained by indiebrotherhood after that calculation. We retain the derived age band, guardian-permission declaration where required, policy version, and declaration time. Users without a sufficient adult declaration cannot access Hang Out, DMs, cyphers, battles, or Lyric Pro explicit mode.
+During signup, the server uses the entered birth date to determine whether the account is under 13, a 13–17 minor, or an adult. The exact birth date is not retained by indiebrotherhood after that calculation. We retain the derived age band, guardian-approval status, applicable policy versions, and declaration/approval times. For a teen account we encrypt the guardian email used to send a single-use approval link. Users without a sufficient adult declaration cannot access Hang Out, DMs, cyphers, battles, or Lyric Pro explicit mode.
 
 3. How we use information
 We use information to authenticate users; provide, personalize, secure, meter, and improve tools; maintain profiles and progress; process purchases; prevent fraud and abuse; moderate community features; respond to support; comply with law; and communicate important service changes.
@@ -65,7 +65,7 @@ Retention depends on the feature and legal/security need. Browser drafts may dis
 We use access controls, verified authentication, encryption measures, rate limits, monitoring, and separation of private records. No internet service is perfectly secure. Keep your password private and report suspected compromise promptly.
 
 8. Children and community safety
-Accounts are not intended for children under 13. Members aged 13–17 require parent or guardian permission and cannot use adult-restricted features. We do not knowingly permit under-13 accounts. Report suspected child endangerment or predatory conduct immediately to ${LEGAL_CONTACT_EMAIL}.
+Accounts are not intended for children under 13. Members aged 13–17 require approval through a parent or guardian email and cannot use adult-restricted features. We do not knowingly permit under-13 accounts. Report suspected child endangerment or predatory conduct immediately to ${LEGAL_CONTACT_EMAIL}.
 
 9. Choices and changes
 You can choose whether to invoke cloud AI, upload content, make a purchase, or join eligible community features. Material policy changes receive a new version and may require renewed acceptance. Questions: ${LEGAL_CONTACT_EMAIL}.`;

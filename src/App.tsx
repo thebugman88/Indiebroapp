@@ -50,6 +50,7 @@ import { AdminControlRoomModal } from './components/AdminControlRoomModal';
 import { HeaderPlanAndCoins } from './components/HeaderPlanAndCoins';
 import { PersistentCoinWallet } from './components/PersistentCoinWallet';
 import { SignupBonusNotice } from './components/SignupBonusNotice';
+import { AccountEligibilityGate } from './components/AccountEligibilityGate';
 import { CoinWalletProvider } from './context/CoinWalletContext';
 import { grantUserXP } from './services/gamification';
 import {
@@ -79,7 +80,8 @@ const MasteringSuiteApp = React.lazy(() => import('../mastering-suite/src/App'))
 const AdultOnlyHangOut: React.FC = () => {
   const [status, setStatus] = useState<'loading' | 'allowed' | 'blocked'>('loading');
   const [birthDate, setBirthDate] = useState('');
-  const [guardianPermission, setGuardianPermission] = useState(false);
+  const [guardianEmail, setGuardianEmail] = useState('');
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -97,7 +99,7 @@ const AdultOnlyHangOut: React.FC = () => {
     {status === 'blocked' && <form className="w-full max-w-sm space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-left" onSubmit={async event => {
       event.preventDefault(); setBusy(true); setMessage('');
       try {
-        const response = await authenticatedFetch('/api/account/declare-age', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ birthDate, guardianPermission }) });
+        const response = await authenticatedFetch('/api/account/declare-age', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ birthDate, guardianEmail }) });
         const body = await response.json().catch(() => ({}));
         if (response.ok && body.adultEligible === true) setStatus('allowed');
         else setMessage(body.error || 'This account is not eligible for adult community features.');
@@ -106,7 +108,8 @@ const AdultOnlyHangOut: React.FC = () => {
     }}>
       <label className="block text-sm font-bold text-zinc-200">Birth date<input required type="date" value={birthDate} onChange={event => setBirthDate(event.target.value)} autoComplete="bday" className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-white" /></label>
       <p className="text-xs text-zinc-400">Used once to determine your age group. The exact date is not retained.</p>
-      <label className="flex items-start gap-2 text-xs text-zinc-300"><input required type="checkbox" checked={guardianPermission} onChange={event => setGuardianPermission(event.target.checked)} className="mt-0.5" /><span>I confirm this declaration is accurate and accept the <a href="/api/legal/terms-of-service" target="_blank" className="text-amber-300 underline">Terms</a> and <a href="/api/legal/privacy" target="_blank" className="text-amber-300 underline">Privacy Policy</a>.</span></label>
+      <label className="block text-sm font-bold text-zinc-200">Guardian email if under 18<input type="email" value={guardianEmail} onChange={event => setGuardianEmail(event.target.value)} className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-white" /></label>
+      <label className="flex items-start gap-2 text-xs text-zinc-300"><input required type="checkbox" checked={acceptedPolicies} onChange={event => setAcceptedPolicies(event.target.checked)} className="mt-0.5" /><span>I confirm this declaration is accurate and accept the <a href="/api/legal/terms-of-service" target="_blank" className="text-amber-300 underline">Terms</a> and <a href="/api/legal/privacy" target="_blank" className="text-amber-300 underline">Privacy Policy</a>.</span></label>
       <button disabled={busy} className="w-full rounded-xl bg-amber-400 p-3 font-bold text-zinc-950 disabled:opacity-50">{busy ? 'Checking…' : 'Confirm age eligibility'}</button>
       {message && <p className="text-sm text-amber-200">{message}</p>}
     </form>}
@@ -935,7 +938,7 @@ function SuiteApp() {
       {/* 2. ACTIVE APPLICATION VIEWPORT */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         {currentUser.id!=='guest'&&['hub','artist-profile'].includes(activeApp)&&<CommunityProgressPrompt key={currentUser.id} onOpen={()=>setIsReferralOpen(true)}/>}
-        <PrivateWorkspaceGate><Suspense
+        <AccountEligibilityGate userId={currentUser.id}><PrivateWorkspaceGate><Suspense
           fallback={
             <div className="flex-1 flex items-center justify-center min-h-[60vh]">
               <div className="text-center space-y-3 font-mono">
@@ -1210,7 +1213,7 @@ function SuiteApp() {
 
           {/* 10. ROYALTYOPS */}
           {activeApp === 'royaltyops' && <RoyaltyExtractorApp />}
-        </Suspense></PrivateWorkspaceGate>
+        </Suspense></PrivateWorkspaceGate></AccountEligibilityGate>
       </div>
 
       <footer className="border-t border-zinc-900 bg-black px-4 py-5 text-center text-xs text-zinc-500">
