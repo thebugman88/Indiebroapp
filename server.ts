@@ -101,8 +101,12 @@ app.use('/api/security', (req, res, next) => {
   if (req.method === 'GET' && ['/account-status','/guidelines'].includes(req.path)) return next();
   return requireAdmin(req, res, next);
 });
-// Authenticate before parsing large media payloads.
-app.use(express.json({ limit: '22mb' }));
+// Authenticate before parsing request bodies. Only the two audio-upload paths
+// need the larger allowance; keeping it global lets unrelated API endpoints
+// consume tens of megabytes of memory per request.
+app.use('/api/analyze', express.json({ limit: '22mb' }));
+app.use('/api/judgement/tracks', express.json({ limit: '22mb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '16kb' }));
 // Attach AI Code Sentinel & Threat Detection Observer
 app.use('/api', durableSecurityGuard);
