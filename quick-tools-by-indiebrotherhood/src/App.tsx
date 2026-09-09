@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../shared/PrivateWorkspaceGate';
 import React, { useState, useEffect, useCallback } from 'react';
 import { ActiveTool } from './types';
 import { Header } from './components/Header';
@@ -13,6 +14,7 @@ import { SmartLinkGenerator } from './components/SmartLinkGenerator';
 import { BottomLookupDock } from './components/BottomLookupDock';
 
 export default function App() {
+  const localStorage = usePrivateStorage();
   const parseToolFromHash = (): ActiveTool => {
     try {
       const raw = window.location.hash.replace(/^#\/?/, '');

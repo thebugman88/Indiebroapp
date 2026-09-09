@@ -55,6 +55,8 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [useSearch, setUseSearch] = useState<boolean>(settings.enableWebSearch);
+  const [pendingLegalPrompt, setPendingLegalPrompt] = useState<string | null>(null);
+  const [legalAcknowledged, setLegalAcknowledged] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -77,6 +79,9 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
     }
   }, [initialPrompt]);
 
+  const isLegalInformationRequest = (text: string) =>
+    /\b(legal|lawyer|attorney|contract|agreement|split[- ]?sheet|copyright|trademark|infringement|license|licensing|clearance|ownership|master rights?|publishing rights?|royalt(?:y|ies) dispute|lawsuit|sue|terms of service)\b/i.test(text);
+
   const QUICK_PROMPTS = [
     {
       title: "Spotify Editorial Pitch",
@@ -96,9 +101,14 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
     },
   ];
 
-  const handleSend = async (textToSend?: string) => {
+  const handleSend = async (textToSend?: string, acknowledgedForThisRequest = false) => {
     const text = textToSend || inputText;
     if (!text.trim() || isLoading) return;
+    if (isLegalInformationRequest(text) && !acknowledgedForThisRequest) {
+      setPendingLegalPrompt(text.trim());
+      setLegalAcknowledged(false);
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: `msg_${Date.now()}_user`,
@@ -127,6 +137,7 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
           artistProfile: profile,
           songCatalog: songs,
           enableSearch: useSearch,
+          legalInformationAcknowledged: isLegalInformationRequest(text) && acknowledgedForThisRequest,
           customApiKey: settings.customApiKey,
         }),
       });
@@ -180,7 +191,7 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-              Gemini Music Career Assistant & Legal Advisor
+              IndieBrotherhood Music Career Assistant
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-normal border border-emerald-500/30">
                 Live & Grounded
               </span>
@@ -363,6 +374,60 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
+      {pendingLegalPrompt && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="legal-information-title"
+        >
+          <div className="w-full max-w-lg space-y-4 rounded-2xl border border-amber-500/40 bg-slate-950 p-6 shadow-2xl">
+            <div>
+              <h3 id="legal-information-title" className="text-lg font-black text-white">
+                General information only
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                IndieBrotherhood is not a legal service or law firm and does not provide legal advice or representation. Information from this Assistant is for general educational purposes only. If you need legal services or advice about your specific situation, consult a qualified attorney or other appropriate legal professional outside this app.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={legalAcknowledged}
+                onChange={(event) => setLegalAcknowledged(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-amber-400"
+              />
+              <span>I understand that this is general information, not legal advice or a legal service.</span>
+            </label>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingLegalPrompt(null);
+                  setLegalAcknowledged(false);
+                }}
+                className="rounded-xl border border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!legalAcknowledged}
+                onClick={() => {
+                  const prompt = pendingLegalPrompt;
+                  setPendingLegalPrompt(null);
+                  setLegalAcknowledged(false);
+                  void handleSend(prompt, true);
+                }}
+                className="rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              >
+                I understand — continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input Form Bar */}
       <div className="p-3 border-t border-slate-800 bg-slate-950/80">
         <form
@@ -383,7 +448,7 @@ export const AssistantChat: React.FC<AssistantChatProps> = ({
                 handleSend();
               }
             }}
-            placeholder="Ask anything about music law, marketing, splits, Spotify pitches, or festival submissions..."
+            placeholder="Ask about music business, releases, rights education, royalties, promotion, or artist strategy..."
             className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
           />
 

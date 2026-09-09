@@ -10,7 +10,7 @@ import {
   conversationId,
   type MessageStore,
 } from "../server/messaging";
-import { freshJudge, reviewMutation } from "../server/judgement";
+import { consumeSubmissionCredits, flagMutation, freshJudge, reviewMutation } from "../server/judgement";
 import { decodeAudioDataUrl } from "../server/media";
 
 const verify = async (token: string) => {
@@ -244,6 +244,7 @@ test("reviews cannot overwrite ownership, forge rewards, review twice, or skip q
   assert.equal(result.review.completedFullListen, false);
   assert.equal(result.track.aggregatedScores.overall, 8);
   assert.equal(result.profile.dailyAuditsRemaining, 19);
+  assert.equal(result.profile.judgementCredits, 4);
   assert.throws(
     () => reviewMutation(result.track, result.profile, body, start),
     /already/,
@@ -281,6 +282,28 @@ test("reviews cannot overwrite ownership, forge rewards, review twice, or skip q
       reviewMutation({ ...track, ownerId: undefined }, profile, body, start),
     /cannot/,
   );
+});
+
+test("judgment credits gate submissions and matching flags return a track only at five", () => {
+  const starter = freshJudge("alice");
+  assert.equal(consumeSubmissionCredits(starter).judgementCredits, 0);
+  assert.throws(
+    () => consumeSubmissionCredits({ ...starter, judgementCredits: 2 }),
+    /three valid judgments/,
+  );
+  let track: any = {
+    id: "flagged-track", ownerId: "owner", status: "evaluating",
+    creationType: "human-created", flagCounts: { "bad-quality": 0, "wrong-ai-room": 0 },
+  };
+  for (let count = 1; count <= 5; count++) {
+    const result = flagMutation(track, "wrong-ai-room", Date.UTC(2026, 8, 2));
+    track = result.track;
+    assert.equal(result.count, count);
+    assert.equal(result.returned, count === 5);
+  }
+  assert.equal(track.status, "returned");
+  assert.equal(track.returnedReason, "wrong-ai-room");
+  assert.throws(() => flagMutation(track, "bad-quality"), /cannot be flagged/);
 });
 
 test("audio parser rejects remote URLs, spoofed media and oversized payloads", () => {

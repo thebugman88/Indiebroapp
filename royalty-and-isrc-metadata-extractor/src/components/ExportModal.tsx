@@ -14,12 +14,14 @@ import { ParsedTrack, ExportPlatform } from '../types';
 import { PLATFORM_SPECS, generatePlatformCSV, exportTracks } from '../services/exportEngine';
 
 interface ExportModalProps {
+  isCurrent: () => boolean;
   tracks: ParsedTrack[];
   selectedTrackIds: string[];
   onClose: () => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
+  isCurrent,
   tracks,
   selectedTrackIds,
   onClose,
@@ -39,11 +41,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const previewCsv = generatePlatformCSV(activeTracks.slice(0, 5), platform);
 
   const handleDownload = () => {
+    if (!isCurrent()) return;
     exportTracks(activeTracks, platform, customFileName.trim() || undefined);
     onClose();
   };
 
   const handleCopyClipboard = async () => {
+    if (!isCurrent()) return;
     const fullCsv = generatePlatformCSV(activeTracks, platform);
     await navigator.clipboard.writeText(fullCsv);
     setCopiedSuccess(true);

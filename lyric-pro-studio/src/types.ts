@@ -67,6 +67,7 @@ export interface LyricGenerateRequest {
   autoRandomize?: boolean;
   userLyrics?: string;
   userLyricsOption?: UserLyricsOption;
+  creativePrompt?: string;
   userId?: string;
   userEmail?: string;
 }
@@ -122,6 +123,7 @@ export interface SavedLyricEntry {
   vibe: string;
   explicit: boolean;
   mode: CreationMode;
+  creativePrompt?: string;
   setA: LyricSet;
   setB: LyricSet;
 }

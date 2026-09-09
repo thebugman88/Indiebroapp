@@ -1,0 +1,45 @@
+name: App build matrix
+
+on:
+  pull_request:
+  push:
+    branches: [main, feat/usage-economy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apps:
+    name: ${{ matrix.app }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        app:
+          - hang-out
+          - hit-analyzer_-built-by-indiebrotherhood
+          - indiebrotherhood-artist-assistant
+          - indiebrotherhood-semantic-lab
+          - judgement-zone
+          - lyric-pro-quiz-studio
+          - lyric-pro-studio
+          - meeting-room
+          - quick-tools-by-indiebrotherhood
+          - royalty-and-isrc-metadata-extractor
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - name: Install suite dependencies for shared imports
+        run: npx --yes bun@1.4.0 install --frozen-lockfile --ignore-scripts
+      - name: Install app dependencies independently
+        working-directory: ${{ matrix.app }}
+        run: npx --yes bun@1.4.0 install --frozen-lockfile --ignore-scripts
+      - name: Typecheck, build and reject browser secret leaks
+        run: npm run check:apps -- ${{ matrix.app }}

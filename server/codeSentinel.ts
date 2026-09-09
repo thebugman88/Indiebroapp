@@ -1,3 +1,5 @@
+import { structuralThreat } from './securityGuard';
+import { sealPrivate, openPrivate } from './dataProtection';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -31,6 +33,7 @@ export interface SecurityIncident {
   rawSignatureExcerpt: string;
   actionTaken: SecurityActionTaken;
   autoRepairApplied?: string;
+  quarantineUntil?: number;
   recommendedRemediation: string;
 }
 
@@ -51,7 +54,12 @@ const HEALTH_LOG_FILE = path.join(LOGS_DIR, 'system-health.log');
 
 // Memory store for incident records & IP tracking
 const securityIncidents: SecurityIncident[] = [];
-const quarantinedIps = new Set<string>();
+const quarantinedIps = new Map<string, number>();
+const QUARANTINE_MS = 5 * 60 * 1000;
+const recoveryWindows = new Map<string, { count: number; start: number }>();
+function expireQuarantines() {
+  for (const [key, until] of quarantinedIps) if (until <= Date.now()) quarantinedIps.delete(key);
+}
 const ipRequestWindows = new Map<string, { count: number; windowStart: number }>();
 const accountSecurityStore = new Map<string, AccountSecurityState>();
 let totalRequestsInspected = 0;
@@ -120,13 +128,11 @@ function persistSecurityLogs(incident: SecurityIncident) {
   try {
     ensureLogsDir();
     // 1. JSON Structured Log
-    fs.writeFileSync(AUDIT_FILE, JSON.stringify(securityIncidents, null, 2), 'utf-8');
+    fs.writeFileSync(AUDIT_FILE, JSON.stringify(sealPrivate(securityIncidents, 'security-local-log')), {encoding:'utf-8',mode:0o600});
 
-    // 2. Append to clean system-health.log file
-    const logLine = `[${incident.timestamp}] [${incident.severity}] [${incident.actionTaken}] Origin: ${incident.threatOriginIp} | Endpoint: ${incident.method} ${incident.endpoint} | Threat: ${incident.threatType} | Remedy: ${incident.recommendedRemediation}\n`;
-    fs.appendFileSync(HEALTH_LOG_FILE, logLine, 'utf-8');
+    // Plaintext request bodies, IPs, and identity fields never go to disk logs.
   } catch (err) {
-    console.error('Failed to write security logs:', err);
+    console.warn('[Security] Encrypted local audit persistence unavailable.');
   }
 }
 
@@ -134,12 +140,18 @@ function loadSecurityLogs() {
   try {
     if (fs.existsSync(AUDIT_FILE)) {
       const raw = fs.readFileSync(AUDIT_FILE, 'utf-8');
-      const loaded = JSON.parse(raw) as SecurityIncident[];
+      const loaded = openPrivate<SecurityIncident[]>(JSON.parse(raw), "security-local-log");
+      // Logs are newest first. The latest block/unblock determines state.
+      const resolved = new Set<string>();
       for (const item of loaded) {
+        if (!resolved.has(item.threatOriginIp) && (item.actionTaken === 'BLOCKED_AND_QUARANTINED' || item.threatType === 'MANUAL_REMEDIATION_UNBLOCK')) {
+          resolved.add(item.threatOriginIp);
+          const until = item.quarantineUntil ?? Date.parse(item.timestamp) + QUARANTINE_MS;
+          if (item.actionTaken === 'BLOCKED_AND_QUARANTINED' && until > Date.now()) quarantinedIps.set(item.threatOriginIp, until);
+        }
         securityIncidents.push(item);
         severityCounts[item.severity] = (severityCounts[item.severity] || 0) + 1;
         if (item.actionTaken === 'BLOCKED_AND_QUARANTINED') {
-          quarantinedIps.add(item.threatOriginIp);
           threatsBlockedCount++;
         }
         if (item.actionTaken === 'SELF_REPAIRED') {
@@ -148,7 +160,7 @@ function loadSecurityLogs() {
       }
     }
   } catch (err) {
-    console.error('Failed to load previous security logs:', err);
+    console.warn('[Security] Prior local audit log requires migration or a valid encryption key.');
   }
 }
 
@@ -173,14 +185,15 @@ export function recordSecurityIncident(params: {
     id: `sec_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     timestamp: new Date().toISOString(),
     threatOriginIp: params.threatOriginIp,
-    userAgent: params.userAgent || 'unknown',
-    endpoint: params.endpoint,
+    userAgent: 'redacted',
+    endpoint: params.endpoint.split('?')[0].slice(0,200),
     method: params.method,
     severity: params.severity,
     threatType: params.threatType,
-    rawSignatureExcerpt: params.rawSignatureExcerpt.slice(0, 200),
+    rawSignatureExcerpt: '[request content redacted]',
     actionTaken: params.actionTaken,
     autoRepairApplied: params.autoRepairApplied,
+    ...(params.actionTaken === 'BLOCKED_AND_QUARANTINED' ? { quarantineUntil: Date.now() + QUARANTINE_MS } : {}),
     recommendedRemediation: params.recommendedRemediation,
   };
 
@@ -193,7 +206,7 @@ export function recordSecurityIncident(params: {
   severityCounts[params.severity] = (severityCounts[params.severity] || 0) + 1;
 
   if (params.actionTaken === 'BLOCKED_AND_QUARANTINED') {
-    quarantinedIps.add(params.threatOriginIp);
+    quarantinedIps.set(params.threatOriginIp, incident.quarantineUntil!);
     threatsBlockedCount++;
   } else if (params.actionTaken === 'SELF_REPAIRED') {
     selfRepairsCount++;
@@ -274,20 +287,39 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
   const userAgent = req.headers['user-agent'] || 'unknown';
   const endpoint = req.originalUrl || req.url;
 
+  expireQuarantines();
+  const normalizedPath = endpoint.split('?')[0].replace(/\/+$/, '').toLowerCase();
+  // Authentication/admin checks precede Sentinel. Keep cancellation and admin
+  // recovery reachable, with an independent bounded rate limit.
+  if (req.method === 'POST' && res.locals.identity?.uid &&
+      (normalizedPath === '/api/stripe/cancel' ||
+       (normalizedPath === '/api/security/remediate' && res.locals.identity.admin === true && res.locals.identity.email_verified === true))) {
+    for (const [key, value] of recoveryWindows) if (Date.now() - value.start >= 60000) recoveryWindows.delete(key);
+    const window = recoveryWindows.get(rateKey) || { count: 0, start: Date.now() };
+    window.count++; recoveryWindows.set(rateKey, window);
+    if (window.count > 10) {
+      res.setHeader('Retry-After', Math.max(1, Math.ceil((window.start + 60000 - Date.now()) / 1000)));
+      return res.status(429).json({ error: 'Too many recovery requests. Retry after the indicated delay.' });
+    }
+    return next();
+  }
   // 1. IP Quarantine Check
   if (quarantinedIps.has(rateKey)) {
-    console.warn(`[SENTINEL BLOCKED] Quarantined IP attempt: ${clientIp} on ${endpoint}`);
+    console.warn('[Security] Cooldown request blocked.');
+    res.setHeader('Retry-After', Math.max(1, Math.ceil((quarantinedIps.get(rateKey)! - Date.now()) / 1000)));
     return res.status(403).json({
       error: 'Access Denied by indiebrotherhood Code Sentinel',
       status: 'QUARANTINED',
-      reason: 'Your IP address has been isolated due to anomalous threat signatures.',
+      reason: 'This account/request source is temporarily restricted after a threat signature.',
+      retryAt: quarantinedIps.get(rateKey),
       incidentId: `sec_lock_${Date.now()}`,
-      remediation: 'Contact system security or submit an unblock token.',
+      remediation: 'Retry after the indicated delay or contact support. Subscription cancellation remains available.',
     });
   }
 
   // 2. Rate-Limiting & Burst Protection (120 req / 60s per verified UID, or IP for public routes)
   const now = Date.now();
+  for (const [key, value] of ipRequestWindows) if (now - value.windowStart >= 60000) ipRequestWindows.delete(key);
   const windowData = ipRequestWindows.get(rateKey) || { count: 0, windowStart: now };
   if (now - windowData.windowStart > 60000) {
     windowData.count = 1;
@@ -298,60 +330,23 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
   ipRequestWindows.set(rateKey, windowData);
 
   if (windowData.count > 120) {
-    const incident = recordSecurityIncident({
-      threatOriginIp: rateKey,
-      userAgent,
-      endpoint,
-      method: req.method,
-      severity: 'HIGH',
-      threatType: 'RATE_LIMIT_BURST_FLOOD',
-      rawSignatureExcerpt: `Rate: ${windowData.count} requests / minute`,
-      actionTaken: 'BLOCKED_AND_QUARANTINED',
-      recommendedRemediation: 'Quarantine origin IP, verify rate limit configuration.',
+    if (windowData.count === 121) recordSecurityIncident({
+      threatOriginIp: rateKey, userAgent, endpoint, method: req.method,
+      severity: 'HIGH', threatType: 'RATE_LIMIT_BURST_FLOOD',
+      rawSignatureExcerpt: 'Exceeded 120 requests per minute', actionTaken: 'WARNED',
+      recommendedRemediation: 'Retry after the request window resets.',
     });
-
-    return res.status(429).json({
-      error: 'Rate Limit Exceeded. Account/request source temporarily blocked.',
-      incidentId: incident.id,
-      remediation: incident.recommendedRemediation,
-    });
+    const retryAfter = Math.max(1, Math.ceil((windowData.windowStart + 60000 - now) / 1000));
+    res.setHeader('Retry-After', retryAfter);
+    return res.status(429).json({ error: 'Rate limit exceeded. Retry after the indicated delay.', retryAfter });
   }
 
   // 3. Payload & Parameter Threat Signature Scanning
-  const inspectTargets: string[] = [];
-  if (req.query) inspectTargets.push(JSON.stringify(req.query));
-  if (req.params) inspectTargets.push(JSON.stringify(req.params));
-  if (req.body && typeof req.body === 'object') {
-    // Only inspect first 20KB to avoid audio base64 false positives
-    const bodyStr = JSON.stringify(req.body);
-    inspectTargets.push(bodyStr.slice(0, 20000));
-  }
-
-  const combinedPayload = inspectTargets.join(' ');
-
-  for (const pattern of MALICIOUS_PATTERNS) {
-    if (pattern.regex.test(combinedPayload) || pattern.regex.test(endpoint)) {
-      const match = combinedPayload.match(pattern.regex)?.[0] || endpoint;
-      const incident = recordSecurityIncident({
-        threatOriginIp: rateKey,
-        userAgent,
-        endpoint,
-        method: req.method,
-        severity: pattern.severity,
-        threatType: pattern.threatType,
-        rawSignatureExcerpt: match,
-        actionTaken: 'BLOCKED_AND_QUARANTINED',
-        recommendedRemediation: pattern.remediation,
-      });
-
-      return res.status(403).json({
-        error: 'Security Sentinel Block: Malicious payload signature detected.',
-        threatType: pattern.threatType,
-        severity: pattern.severity,
-        incidentId: incident.id,
-        remediation: pattern.remediation,
-      });
-    }
+  // Human creative text may legitimately mention code or quotations. Detect
+  // dangerous object structure, not keywords in lyrics or private messages.
+  if (structuralThreat(req.body) || structuralThreat(req.query)) {
+    recordSecurityIncident({threatOriginIp:rateKey,endpoint,method:req.method,severity:'CRITICAL',threatType:'PROTOTYPE_POLLUTION_ATTACK',rawSignatureExcerpt:'redacted',actionTaken:'BLOCKED_AND_QUARANTINED',recommendedRemediation:'Review unsafe object structure.'});
+    return res.status(403).json({error:'Unsafe request structure blocked.'});
   }
 
   // 4. Automated Defensive Self-Repair for Incoming Body
@@ -381,12 +376,13 @@ export function codeSentinelMiddleware(req: Request, res: Response, next: NextFu
  * Get Security & Health Statistics
  */
 export function getSecurityStats(): SecurityStats {
+  expireQuarantines();
   return {
     totalRequestsInspected,
     threatsBlocked: threatsBlockedCount,
     selfRepairsExecuted: selfRepairsCount,
     activeQuarantinedIps: quarantinedIps.size,
-    quarantinedIps: Array.from(quarantinedIps),
+    quarantinedIps: Array.from(quarantinedIps.keys()),
     severityCounts,
     uptimeSeconds: Math.floor((Date.now() - serverStartTime) / 1000),
     lastIncidentTimestamp: securityIncidents[0]?.timestamp,
@@ -514,7 +510,7 @@ export function recordAccountRequest(params: {
 
     recordSecurityIncident({
       threatOriginIp: params.clientIp,
-      endpoint: params.endpoint,
+      endpoint: params.endpoint.split('?')[0].slice(0,200),
       method: 'POST',
       severity: 'HIGH',
       threatType: isBotHammering ? 'BOT_RAPID_CLICK_DEFENSE' : 'EXCESSIVE_ACCOUNT_REQUESTS',
@@ -633,26 +629,26 @@ export function getStartupSecurityGuidelines() {
       {
         id: 'rule_anti_bot',
         title: 'Zero Automated Bot or Script Scraping',
-        description: 'Automated macros, clicker scripts, and headless bot crawlers are strictly prohibited. The Security AI continuously inspects click cadence, origin entropy, and request signatures.',
+        description: 'Request limits and unsafe object-structure checks protect the service. Optional AI review receives aggregate counts only and cannot ban accounts.',
         penalty: 'Immediate automated account quarantine & cooldown pause.',
       },
       {
         id: 'rule_fair_cadence',
         title: 'Human Creation Pacing & Fair AI Cooldown',
-        description: 'Lyric Pro generates multi-platinum studio-grade arrangements. Allow a minimum 3-4 second creative breath between generations to allow the Gemini AI neural cluster to synthesize optimal prosody.',
+        description: 'Allow time between generations. Rapid request bursts can trigger temporary account cooldowns to keep the service available.',
         penalty: 'Repeated rapid bursts trigger temporary 60-90 second Security AI cool-off periods.',
       },
       {
         id: 'rule_pure_lyrics',
         title: 'Strict Lyricist & Prosody Output Integrity',
         description: 'Lyric Pro only generates pure song lyrics with syllable counts, rhyme markers, energy levels, and earworm motifs. Conversational filler and system prompts are forbidden in output.',
-        penalty: 'System self-corrects and guarantees pure structured musical output.',
+        penalty: 'Invalid, incomplete, or overlapping outputs are rejected; failed requests restore their Coins.',
       },
       {
         id: 'rule_commercial_ownership',
         title: 'Originality & Commercial Ownership Rights',
-        description: 'All generated compositions are granted for commercial release, recording, and royalty distribution with zero legal liability placed upon the platform.',
-        penalty: 'Commercial protections apply to verified accounts.',
+        description: 'Original writing instructions and recent-history checks reduce repetition. They cannot guarantee worldwide uniqueness or copyright clearance. Review lyrics before release.',
+        penalty: 'Do not submit lyrics you are not authorized to use.',
       },
     ],
   };

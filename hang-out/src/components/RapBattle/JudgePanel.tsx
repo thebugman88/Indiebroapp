@@ -1,4 +1,5 @@
 import { authenticatedFetch } from '../../../../src/services/authService';
+import { useCoinAction } from '../../../../src/useCoinAction';
 import React, { useState } from 'react';
 import { BattleState, UserProfile } from '../../types';
 import { backendApiUrl } from '../../services/backend';
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export const JudgePanel: React.FC<Props> = ({ battle, currentUser, onVote }) => {
+  const judgeCoin = useCoinAction('/api/gemini/battle-judge');
   const [judgeData, setJudgeData] = useState<any>(battle.judgeScore || null);
   const [isLoadingJudge, setIsLoadingJudge] = useState(false);
 
@@ -108,7 +110,7 @@ export const JudgePanel: React.FC<Props> = ({ battle, currentUser, onVote }) => 
           </h4>
           <button
             onClick={triggerAiJudge}
-            disabled={isLoadingJudge}
+            disabled={isLoadingJudge || judgeCoin.insufficient}
             className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition"
           >
             {isLoadingJudge ? (
@@ -119,7 +121,7 @@ export const JudgePanel: React.FC<Props> = ({ battle, currentUser, onVote }) => 
             ) : (
               <>
                 <Award className="h-3.5 w-3.5" />
-                {judgeData ? 'Re-Evaluate Verses' : 'Run Master Evaluation'}
+                {judgeCoin.insufficient ? judgeCoin.label : `${judgeData ? 'Re-Evaluate Verses' : 'Run Master Evaluation'} · ${judgeCoin.action?.cost ?? 5} BC`}
               </>
             )}
           </button>

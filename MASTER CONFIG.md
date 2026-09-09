@@ -30,7 +30,7 @@ Keep these in Vercel or Firebase/Google Cloud secret storage, never in client bu
 ## Firebase Console Checklist
 
 - Create separate Firebase projects or clearly separated environments.
-- Enable Anonymous Auth and the account providers selected by the founder.
+- For the root suite enable Email/Password; anonymous identities are rejected. Additional providers require an explicit product decision.
 - Create Firestore and deploy reviewed rules and indexes.
 - Create Storage and deploy reviewed Storage Rules.
 - Enable App Check for web traffic.
@@ -50,7 +50,7 @@ Keep these in Vercel or Firebase/Google Cloud secret storage, never in client bu
 
 ## Runtime Contracts
 
-- Static app: Vite build produces `dist`; Vercel serves it.
+- Static-only child app: Vite produces `dist`. Root and server-backed child builds publish only `dist/client`; server artifacts are outside that public directory.
 - API app: frontend calls a documented `/api/...` endpoint; endpoint validates auth, input, limits, and errors.
 - Realtime app: client connects to a managed or persistent service with authenticated room membership.
 - File flow: validate type and size, upload to Storage, persist a Storage path, serve through authorized access.
@@ -69,7 +69,7 @@ Keep these in Vercel or Firebase/Google Cloud secret storage, never in client bu
 
 ## Judgement Zone Current Config
 
-`judgement-zone/firebase.json` correctly references `firestore.rules` and `storage.rules`. `src/vite-env.d.ts` correctly types the Firebase variables. The app still needs Firebase Storage upload code, trusted review mutations, Functions/API configuration, indexes, emulator tests, and a project selection strategy before launch.
+`judgement-zone/firebase.json` correctly references `firestore.rules` and `storage.rules`. `src/vite-env.d.ts` correctly types the Firebase variables. The root integration implements private audio uploads, trusted mutations, indexes and emulator tests. Artwork persistence, live Storage/IAM checks and environment selection remain pending. Standalone clients are not approved for production.
 
 ## Security foundation update (2026-08-30)
 
@@ -79,3 +79,7 @@ The root unified suite now uses Firebase Email/Password authentication and Fireb
 ## Remaining audit remediation (2026-08-30)
 
 The follow-up replaces the disabled raw relay with authenticated room protocols, implements private durable DMs and server-owned Judgment Zone mutations/uploads, removes fabricated analysis/catalog/chart results, and connects missing root AI routes. See `AUDIT-REMEDIATION.md` for all eleven findings and explicit staging/remaining-platform boundaries. This supersedes the first-batch realtime pause and “still open” list, but does not imply production deployment or complete the older platform roadmap.
+
+## Build and key-handling update
+
+`BUILD-VALIDATION.md` is the toolchain/install/output contract. Per-app manifests and locks are retained. Browser builds allow only `VITE_FIREBASE_` variables; never add `VITE_GEMINI_API_KEY` or inject `GEMINI_API_KEY` through Vite. BYOK is a user-entered page-memory mode where implemented; preferences persist with credential fields blank. Reload clears the entered key. The root Artist Assistant ignores custom-key overrides and uses platform billing; its separate legacy server must not be used as an unmetered fallback.

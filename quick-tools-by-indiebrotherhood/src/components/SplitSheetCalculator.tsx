@@ -1,3 +1,4 @@
+import { usePrivateStorage } from '../../../shared/PrivateWorkspaceGate';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users,
@@ -36,6 +37,7 @@ const INITIAL_COLLABORATORS: Collaborator[] = [
 ];
 
 export const SplitSheetCalculator: React.FC<SplitSheetCalculatorProps> = ({ isAutoSaveOn }) => {
+  const localStorage = usePrivateStorage();
   const [songTitle, setSongTitle] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('indie_split_sheet_meta') || '{}').songTitle || '';

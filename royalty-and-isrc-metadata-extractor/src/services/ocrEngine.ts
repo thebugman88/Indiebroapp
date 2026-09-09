@@ -1,4 +1,7 @@
 import { createWorker, Worker } from 'tesseract.js';
+import workerPath from 'tesseract.js/dist/worker.min.js?url';
+import corePath from 'tesseract.js-core/tesseract-core-lstm.wasm.js?url';
+import { privateStorageStatus } from '../../../shared/privateStorage';
 import { OCRBoundingBox, ParsedTrack, AppSettings } from '../types';
 import { preprocessImage } from './imagePreprocessor';
 import { parseOcrTextToTracks } from './parser';
@@ -7,11 +10,18 @@ import { resolveIsrcMetadata } from './musicBrainz';
 
 let cachedWorker: Worker | null = null;
 let currentLanguage = 'eng';
+let workerRevision=privateStorageStatus().revision;
+if(typeof window!=='undefined')window.addEventListener('ib_private_storage_changed',()=>{
+  const revision=privateStorageStatus().revision;
+  if(revision!==workerRevision){workerRevision=revision;const old=cachedWorker;cachedWorker=null;void old?.terminate().catch(()=>{});}
+});
 
 export async function getOcrWorker(
   lang = 'eng',
   onProgress?: (progress: number, status: string) => void
 ): Promise<Worker> {
+  if(!/^[a-z]{3}$/.test(lang))throw new Error('Unsupported OCR language.');
+  const revision=privateStorageStatus().revision;
   if (cachedWorker && currentLanguage === lang) {
     return cachedWorker;
   }
@@ -26,12 +36,14 @@ export async function getOcrWorker(
   }
 
   const worker = await createWorker(lang, 1, {
+    workerPath,corePath,workerBlobURL:false,
     logger: (m) => {
       if (onProgress && m.status === 'recognizing text') {
         onProgress(Math.round(m.progress * 100), m.status);
       }
     },
   });
+  if(privateStorageStatus().revision!==revision){await worker.terminate();throw new Error('Account changed during OCR initialization.');}
 
   cachedWorker = worker;
   currentLanguage = lang;

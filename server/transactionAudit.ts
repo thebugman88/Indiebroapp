@@ -191,7 +191,7 @@ export function logAfterFulfillmentSucceeded(params: {
       userId: params.userId || 'artist_subscriber',
       userEmail: params.userEmail,
       tier: params.tier || 'pro',
-      amountUsd: params.amountPaid || 4.99,
+      amountUsd: params.amountPaid || 14.99,
       currency: 'USD',
       stripeSessionId,
       stripeCustomerId: params.stripeCustomerId,

@@ -1,21 +1,19 @@
+import { usePrivateStorage } from '../../shared/PrivateWorkspaceGate';
+import { useGamification } from '../../src/context/GamificationContext';
 import React, { useState, useEffect } from 'react';
 import { Quiz, QuizType, DifficultyLevel, GenreCategory, QuizResultRecord, UserStatsVault } from './types';
 import { FEATURED_QUIZZES } from './data/quizzes';
+import { buildQuizRound } from './utils/quizDeck';
 import { Header } from './components/Header';
 import { QuizCard } from './components/QuizCard';
 import { TimedModal } from './components/TimedModal';
 import { QuizRunner } from './components/QuizRunner';
 import { QuizResults } from './components/QuizResults';
-import { AiQuizGeneratorModal } from './components/AiQuizGeneratorModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
-import { SponsoredAdBanner } from './components/SponsoredAdBanner';
 import { Footer } from './components/Footer';
 import {
-  Mic,
-  Music,
   Disc,
   Flame,
-  Sparkles,
   Zap,
   HelpCircle,
   ChevronDown,
@@ -27,14 +25,16 @@ import {
 
 const LOCAL_STORAGE_VAULT_KEY = 'sonic_iq_lab_user_stats_vault_2026';
 const LEGACY_STORAGE_VAULT_KEY = 'lyric_pro_user_stats_vault_2026';
+const RECENT_QUESTIONS_KEY = 'sonic_iq_recent_questions_2026';
 
 export default function App() {
+  const localStorage = usePrivateStorage();
+  const { awardXP } = useGamification();
   // Navigation & Modal States
   const [viewMode, setViewMode] = useState<'home' | 'running_quiz' | 'quiz_results'>('home');
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [activeDifficulty, setActiveDifficulty] = useState<DifficultyLevel>('medium');
   const [showTimedModal, setShowTimedModal] = useState(false);
-  const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [showVaultModal, setShowVaultModal] = useState(false);
   const [latestResult, setLatestResult] = useState<QuizResultRecord | null>(null);
 
@@ -44,7 +44,6 @@ export default function App() {
   const [explainerOpen, setExplainerOpen] = useState(false);
 
   // Custom AI generated quizzes pool
-  const [customAiQuizzes, setCustomAiQuizzes] = useState<Quiz[]>([]);
 
   // User Stats Vault State
   const [vault, setVault] = useState<UserStatsVault>(() => {
@@ -73,10 +72,8 @@ export default function App() {
   }, [vault]);
 
   // Combine curated + custom AI quizzes
-  const allAvailableQuizzes = [...customAiQuizzes, ...FEATURED_QUIZZES];
-
   // Filtered List
-  const filteredQuizzes = allAvailableQuizzes.filter((quiz) => {
+  const filteredQuizzes = FEATURED_QUIZZES.filter((quiz) => {
     const matchesGenre = selectedGenre === 'all' || quiz.genre === selectedGenre;
     const matchesType = selectedQuizType === 'all' || quiz.quizType === selectedQuizType;
     return matchesGenre && matchesType;
@@ -84,7 +81,11 @@ export default function App() {
 
   // Handle Quiz Card Click -> Triggers mandatory pre-quiz timed pop-up modal
   const handleSelectQuiz = (quiz: Quiz) => {
-    setActiveQuiz(quiz);
+    let recentIds: string[] = [];
+    try { recentIds = JSON.parse(localStorage.getItem(RECENT_QUESTIONS_KEY) || '[]'); } catch { recentIds = []; }
+    const round = buildQuizRound(quiz, recentIds);
+    localStorage.setItem(RECENT_QUESTIONS_KEY, JSON.stringify([...round.questions.map((item) => item.id), ...recentIds].slice(0, 30)));
+    setActiveQuiz(round);
     setActiveDifficulty(quiz.difficulty);
     setShowTimedModal(true);
   };
@@ -98,6 +99,13 @@ export default function App() {
   // Complete Quiz Callback
   const handleCompleteQuiz = (result: QuizResultRecord) => {
     setLatestResult(result);
+    awardXP({
+      amount: 100,
+      actionTitle: `Completed Sonic IQ: ${result.quizTitle}`,
+      sourceApp: 'Sonic IQ',
+      badgeId: 'sonic-genius',
+      badgeIncrement: 1,
+    });
 
     // Update Vault Stats
     setVault((prev) => {
@@ -118,15 +126,6 @@ export default function App() {
     });
 
     setViewMode('quiz_results');
-  };
-
-  // Handle AI Quiz Generation completed
-  const handleAiQuizCreated = (quiz: Quiz) => {
-    setCustomAiQuizzes((prev) => [quiz, ...prev]);
-    setShowAiGenerator(false);
-    setActiveQuiz(quiz);
-    setActiveDifficulty(quiz.difficulty);
-    setShowTimedModal(true);
   };
 
   const handleClearVault = () => {
@@ -150,7 +149,6 @@ export default function App() {
         {/* Persistent Header Bar */}
         <Header
           onOpenVault={() => setShowVaultModal(true)}
-          onOpenAiGenerator={() => setShowAiGenerator(true)}
           totalPoints={vault.totalPoints}
         />
 
@@ -179,7 +177,7 @@ export default function App() {
                   </h1>
 
                   <p className="text-sm text-gray-300 leading-relaxed font-sans">
-                    Choose from Finish the Song lyrics, What's the Artist guessing games, or genre-specific challenges. Every question features a strict anti-cheat timer to ensure pure music intuition and skill.
+                    Take a quick, text-only music break with rock, genre, studio, theory, and indie-business trivia. Each round reshuffles its questions and answer positions.
                   </p>
 
                   {/* Audio Equalizer Visualizer Strip */}
@@ -200,11 +198,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
-              {/* Native Sponsored Banner */}
-              <SponsoredAdBanner variant="banner" />
-
-              {/* Main Content Layout with Sidebar for Genres */}
+{/* Main Content Layout with Sidebar for Genres */}
               <div className="flex flex-col lg:flex-row gap-8">
                 {/* Sidebar / Genres section matching Immersive UI pattern */}
                 <aside className="w-full lg:w-64 shrink-0 flex flex-col gap-6">
@@ -222,13 +216,7 @@ export default function App() {
                     <div className="flex flex-col gap-1.5">
                       {[
                         { id: 'all', label: 'All Genres' },
-                        { id: 'hip_hop', label: 'Hip-Hop & Rap' },
-                        { id: 'pop', label: 'Pop Icons' },
                         { id: 'rock', label: 'Classic Rock' },
-                        { id: 'rnb', label: 'R&B & Soul' },
-                        { id: 'nostalgia', label: '90s / 2000s' },
-                        { id: 'edm', label: 'EDM & Festival' },
-                        { id: 'country', label: 'Country / Folk' },
                       ].map((cat) => {
                         const isSelected = selectedGenre === cat.id;
                         return (
@@ -249,17 +237,10 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Custom Quiz Studio Promotion Panel */}
+                  {/* Local quiz promise */}
                   <div className="p-5 rounded-[28px] bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border border-indigo-500/20 backdrop-blur-md space-y-2">
-                    <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider">Sonic Custom Studio</p>
-                    <p className="text-sm text-white font-extrabold leading-snug">Generate custom quizzes for any artist or decade.</p>
-                    <button
-                      onClick={() => setShowAiGenerator(true)}
-                      className="mt-3 w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-transform active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 fill-white" />
-                      <span>CREATE CUSTOM QUIZ</span>
-                    </button>
+                    <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider">Zero-Coin Cooldown</p>
+                    <p className="text-sm text-white font-extrabold leading-snug">Curated locally. No AI wait, no audio loading, and no Coin charge.</p>
                   </div>
                 </aside>
 
@@ -272,7 +253,7 @@ export default function App() {
                       Quiz Format Mode
                     </h3>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <button
                         onClick={() => setSelectedQuizType('all')}
                         className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
@@ -288,45 +269,26 @@ export default function App() {
                           </span>
                         </div>
                         <p className="text-[11px] text-gray-400 mt-1 leading-snug">
-                          Browse both Lyric Completion and Artist Identification.
+                          Browse every curated music category.
                         </p>
                       </button>
 
                       <button
-                        onClick={() => setSelectedQuizType('finish_the_song')}
+                        onClick={() => setSelectedQuizType('rapid_random')}
                         className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                          selectedQuizType === 'finish_the_song'
+                          selectedQuizType === 'rapid_random'
                             ? 'bg-purple-950/40 border-purple-500 text-white shadow-lg shadow-purple-500/10'
                             : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <Mic className="w-4 h-4 text-purple-400" />
+                          <Zap className="w-4 h-4 text-purple-400" />
                           <span className="text-xs font-bold uppercase text-white">
-                            Finish The Song
+                            Rapid Random
                           </span>
                         </div>
                         <p className="text-[11px] text-gray-400 mt-1 leading-snug">
-                          Fill in the missing lyrics or completing lines.
-                        </p>
-                      </button>
-
-                      <button
-                        onClick={() => setSelectedQuizType('whats_the_artist')}
-                        className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                          selectedQuizType === 'whats_the_artist'
-                            ? 'bg-purple-950/40 border-purple-500 text-white shadow-lg shadow-purple-500/10'
-                            : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Music className="w-4 h-4 text-purple-400" />
-                          <span className="text-xs font-bold uppercase text-white">
-                            What's The Artist
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-1 leading-snug">
-                          Identify the famous music icon behind the lyric hook.
+                          Pull five shuffled questions from the complete vault.
                         </p>
                       </button>
                     </div>
@@ -422,10 +384,10 @@ export default function App() {
 
                           <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl space-y-1">
                             <span className="text-purple-300 font-bold block">
-                              ✨ 3. Custom Quiz Studio
+                              ✨ 3. Fresh Local Rounds
                             </span>
                             <p className="text-gray-400 text-[11px]">
-                              Generate custom lyrics and artist quizzes for any artist, genre, or era in seconds.
+                              Questions and A–D answers reshuffle each round, with recent questions placed last.
                             </p>
                           </div>
                         </div>
@@ -468,14 +430,6 @@ export default function App() {
           onSelectDifficulty={setActiveDifficulty}
           onConfirmStart={handleConfirmStartQuiz}
           onClose={() => setShowTimedModal(false)}
-        />
-      )}
-
-      {/* AI Quiz Generator Modal */}
-      {showAiGenerator && (
-        <AiQuizGeneratorModal
-          onQuizGenerated={handleAiQuizCreated}
-          onClose={() => setShowAiGenerator(false)}
         />
       )}
 

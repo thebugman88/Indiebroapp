@@ -53,7 +53,7 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
             <div>
               <p className="font-semibold text-slate-200">Zero-Leak Local Privacy</p>
-              <p className="text-[11px] text-slate-400">IndexedDB persistence; your master data is private</p>
+              <p className="text-[11px] text-slate-400">Account-scoped browser storage; export backups regularly</p>
             </div>
           </div>
 

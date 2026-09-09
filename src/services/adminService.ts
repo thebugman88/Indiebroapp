@@ -1,3 +1,4 @@
+import { currentPrivateStorage } from '../../shared/privateStorage';
 import { authenticatedFetch } from './authService';
 /**
  * Admin Management & Telemetry Service
@@ -69,7 +70,7 @@ export function logUserActivity(params: {
   if (typeof window === 'undefined') return;
   try {
     const currentUser = getCurrentAuthUser();
-    const raw = localStorage.getItem(ACTIVITY_LOGS_KEY);
+    const raw = currentPrivateStorage().getItem(ACTIVITY_LOGS_KEY);
     const logs: UserActivityLog[] = raw ? JSON.parse(raw) : [];
 
     const newLog: UserActivityLog = {
@@ -85,7 +86,7 @@ export function logUserActivity(params: {
     };
 
     const updated = [newLog, ...logs].slice(0, 300); // keep 300 recent logs
-    localStorage.setItem(ACTIVITY_LOGS_KEY, JSON.stringify(updated));
+    currentPrivateStorage().setItem(ACTIVITY_LOGS_KEY, JSON.stringify(updated));
     window.dispatchEvent(new CustomEvent('ib_activity_logged', { detail: newLog }));
   } catch (e) {
     console.error('Failed to log user activity:', e);
@@ -98,7 +99,7 @@ export function logUserActivity(params: {
 export function getActivityLogs(): UserActivityLog[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(ACTIVITY_LOGS_KEY);
+    const raw = currentPrivateStorage().getItem(ACTIVITY_LOGS_KEY);
     if (raw) {
       return JSON.parse(raw);
     }
@@ -112,7 +113,7 @@ export function getActivityLogs(): UserActivityLog[] {
 export function getUserOverrides(): Record<string, UserStatusOverride> {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem(USER_STATUS_OVERRIDES_KEY);
+    const raw = currentPrivateStorage().getItem(USER_STATUS_OVERRIDES_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
   return {};
@@ -121,7 +122,7 @@ export function getUserOverrides(): Record<string, UserStatusOverride> {
 function saveUserOverrides(overrides: Record<string, UserStatusOverride>): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(USER_STATUS_OVERRIDES_KEY, JSON.stringify(overrides));
+    currentPrivateStorage().setItem(USER_STATUS_OVERRIDES_KEY, JSON.stringify(overrides));
     window.dispatchEvent(new CustomEvent('ib_user_overrides_changed', { detail: overrides }));
   } catch {}
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { FileManager } from './components/FileManager';
@@ -11,16 +11,37 @@ import { AiAssistantModal } from './components/AiAssistantModal';
 import { ByokIntegrationsModal } from './components/ByokIntegrationsModal';
 import { Footer } from './components/Footer';
 import { Folder, MediaFile, ParsedTrack, AppSettings } from './types';
-import * as storage from './services/storage';
+import { createRoyaltyStorage, DEFAULT_SETTINGS } from './services/storage';
+import { getCurrentAuthUser } from '../../src/services/authService';
 import { processImageWithOCR } from './services/ocrEngine';
 import { Sparkles, Bot } from 'lucide-react';
 
 export default function App() {
+  const [session, setSession] = useState(() => ({ uid: getCurrentAuthUser().id, revision: 0 }));
+  useEffect(() => {
+    const sync = () => { const uid = getCurrentAuthUser().id; setSession(old => old.uid === uid ? old : { uid, revision: old.revision + 1 }); };
+    window.addEventListener('ib_auth_changed', sync); sync();
+    return () => window.removeEventListener('ib_auth_changed', sync);
+  }, []);
+  if (session.uid === 'guest') return <p role="status" className="p-6 text-amber-300">Sign in to use your private RoyaltyOps workspace.</p>;
+  return <RoyaltyWorkspace key={session.revision} uid={session.uid} />;
+}
+function RoyaltyWorkspace({ uid }: { uid: string }) {
+  const active = useRef(true);
+  const isCurrent = () => active.current && getCurrentAuthUser().id === uid;
+  useEffect(() => {
+    active.current = true;
+    const changed = () => { if (getCurrentAuthUser().id !== uid) active.current = false; };
+    window.addEventListener('ib_auth_changed', changed);
+    return () => { active.current = false; window.removeEventListener('ib_auth_changed', changed); };
+  }, [uid]);
+  const [storage] = useState(() => createRoyaltyStorage(uid, isCurrent));
+  const [storageError, setStorageError] = useState('');
   // Application Data States (Loaded from IndexedDB)
   const [folders, setFolders] = useState<Folder[]>([]);
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [tracks, setTracks] = useState<ParsedTrack[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(storage.DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Navigation & View States
@@ -52,12 +73,14 @@ export default function App() {
         storage.getAllTracks(),
         storage.getSettings(),
       ]);
+      if (!isCurrent()) return;
+      setStorageError('');
       setFolders(savedFolders);
       setFiles(savedFiles);
       setTracks(savedTracks);
       setSettings(savedSettings);
     } catch (err) {
-      console.error('Failed to load database from IndexedDB:', err);
+      if (isCurrent()) setStorageError('Saved data could not be loaded. It has not been replaced. Check browser storage and reopen RoyaltyOps.');
     } finally {
       setIsLoaded(true);
     }
@@ -141,6 +164,7 @@ export default function App() {
   };
 
   const handleRunOcr = async (fileId: string) => {
+    if (!isCurrent()) return;
     const file = await storage.getFileById(fileId);
     if (!file) return;
 
@@ -196,6 +220,7 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('OCR processing error:', err);
+      if (!isCurrent()) return;
       await storage.updateFileStatus(fileId, 'error', 0, undefined, err.message || 'OCR processing failed');
       setFiles(prev => prev.map(f => f.id === fileId ? {
         ...f,
@@ -393,6 +418,8 @@ export default function App() {
     return files.filter(f => f.folderId === folderId).length;
   };
 
+  if (storageError) return <p role="alert" className="p-6 text-red-300">{storageError}</p>;
+
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
@@ -560,7 +587,7 @@ export default function App() {
 
       {/* Platform Export Modal */}
       {isExportModalOpen && (
-        <ExportModal
+        <ExportModal isCurrent={isCurrent}
           tracks={tracks}
           selectedTrackIds={selectedTrackIds}
           onClose={() => setIsExportModalOpen(false)}

@@ -1,3 +1,4 @@
+import { cancellableAttempt, CancellationUnconfirmed, ProviderDeadline } from './aiCancellation';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ResilientAiOptions {
@@ -10,6 +11,9 @@ export interface ResilientAiOptions {
   maxRetriesPerModel?: number;
   temperature?: number;
   timeoutMs?: number;
+  signal?: AbortSignal;
+  maxOutputTokens?: number;
+  thinkingBudget?: number;
 }
 
 export interface AttemptLog {
@@ -32,10 +36,12 @@ export interface ResilientAiResult<T = any> {
 
 // Default multi-model fallback chain for indiebrotherhood
 export const DEFAULT_MODEL_CHAIN = [
-  'gemini-3.7-flash',
-  'gemini-3.1-pro-preview',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
+  // Verified against the Generative Language API for this deployment.
+  // Override explicitly for staged model migrations without editing code.
+  ...(process.env.GEMINI_MODEL_CHAIN || 'gemini-3.6-flash,gemini-flash-latest')
+    .split(',')
+    .map((model) => model.trim())
+    .filter(Boolean),
 ];
 
 /**
@@ -110,7 +116,9 @@ export async function executeResilientAi<T = any>(
     ? options.models
     : DEFAULT_MODEL_CHAIN;
 
-  const maxRetries = options.maxRetriesPerModel ?? 1;
+  // Retry one explicit provider-capacity failure before moving to the next
+  // verified model. Billing remains bound to the caller's stable request ID.
+  const maxRetries = options.maxRetriesPerModel ?? 2;
   const timeoutMs = options.timeoutMs ?? 25000;
   const attemptHistory: AttemptLog[] = [];
 
@@ -132,6 +140,8 @@ export async function executeResilientAi<T = any>(
         }
 
         const config: any = {};
+        if(options.maxOutputTokens)config.maxOutputTokens=options.maxOutputTokens;
+        if (typeof options.thinkingBudget === 'number') config.thinkingConfig = { thinkingBudget: options.thinkingBudget };
         if (options.responseMimeType) {
           config.responseMimeType = options.responseMimeType;
         }
@@ -146,19 +156,12 @@ export async function executeResilientAi<T = any>(
         }
 
         // Run with timeout wrapper
-        const aiPromise = client.models.generateContent({
+        const response: any = await cancellableAttempt(signal => client.models.generateContent({
           model: currentModel,
           contents: contentParts.length === 1 && typeof contentParts[0].text === 'string' && !options.parts
-            ? contentParts[0].text
-            : { parts: contentParts },
-          config: Object.keys(config).length > 0 ? config : undefined,
-        });
-
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms on model ${currentModel}`)), timeoutMs)
-        );
-
-        const response: any = await Promise.race([aiPromise, timeoutPromise]);
+            ? contentParts[0].text : { parts: contentParts },
+          config: { ...config, abortSignal: signal },
+        }), timeoutMs, options.signal);
         const rawText = response.text || '';
         const attemptDuration = Date.now() - attemptStart;
 
@@ -184,6 +187,7 @@ export async function executeResilientAi<T = any>(
           totalDurationMs: Date.now() - startTime,
         };
       } catch (err: any) {
+        if (err instanceof CancellationUnconfirmed || err instanceof ProviderDeadline || options.signal?.aborted) throw new Error("AI request canceled or timed out; no fallback started.");
         const attemptDuration = Date.now() - attemptStart;
         const errMsg = err?.message || String(err);
         const errStatus = err?.status || err?.statusCode || 500;
@@ -192,10 +196,20 @@ export async function executeResilientAi<T = any>(
         const is429 = errStatus === 429 || errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate');
         const is503 = errStatus === 503 || errMsg.includes('503') || errMsg.toLowerCase().includes('overloaded') || errMsg.toLowerCase().includes('unavailable');
         const isTimeout = errMsg.toLowerCase().includes('timeout') || errStatus === 504;
+        if(isTimeout)throw new Error('AI provider timed out; no additional generation started.');
 
         if (is429) statusType = 'RATE_LIMITED_429';
         else if (is503) statusType = 'UNAVAILABLE_503';
         else if (isTimeout) statusType = 'TIMEOUT';
+
+        // Log only operational metadata. Never log prompts, generated content, or credentials.
+        console.warn('[AI Gateway] Provider attempt failed.', {
+          model: currentModel,
+          attempt,
+          status: statusType,
+          httpStatus: Number.isFinite(Number(errStatus)) ? Number(errStatus) : 500,
+          durationMs: attemptDuration,
+        });
 
         attemptHistory.push({
           model: currentModel,
@@ -211,8 +225,9 @@ export async function executeResilientAi<T = any>(
         const backoffTime = Math.min(200 * Math.pow(2, attempt) + Math.random() * 100, 1500);
         await new Promise((r) => setTimeout(r, backoffTime));
 
-        // If rate limited or unavailable, immediately break to next model tier
-        if (is429 || is503 || isTimeout) {
+        // Rate limits should move to the next available model immediately.
+        // A confirmed high-demand response gets one bounded retry, then falls back.
+        if (is429 || isTimeout || (is503 && attempt >= maxRetries)) {
           break;
         }
       }

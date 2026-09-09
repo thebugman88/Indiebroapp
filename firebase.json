@@ -1,1 +1,9 @@
-{"firestore":{"rules":"judgement-zone/firestore.rules","indexes":"judgement-zone/firestore.indexes.json"}}
+{
+  "firestore": {
+    "rules": "judgement-zone/firestore.rules",
+    "indexes": "judgement-zone/firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "judgement-zone/storage.rules"
+  }
+}

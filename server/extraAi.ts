@@ -20,6 +20,19 @@ app.post("/api/ai/ocr-parse", async (req, res) => {
       documentType = "general",
     } = req.body;
 
+    if (
+      imageBase64 &&
+      !["image/png", "image/jpeg", "image/webp"].includes(mimeType)
+    ) {
+      res
+        .status(400)
+        .json({
+          error:
+            "Enhanced OCR accepts one PNG, JPEG or WebP page per request (5 BC). Convert multi-page documents to individual images first.",
+        });
+      return;
+    }
+
     if (!imageBase64 && !rawText) {
       return res
         .status(400)
@@ -112,7 +125,7 @@ If split sheets are shown, ensure writer splits total up to 100% where stated.`;
       rawModelResponse: response.text,
     });
   } catch (err: any) {
-    console.error("OCR Parse Error:", err);
+    console.error("[OCR] Provider or parsing failed; private inputs were not logged.");
     return res.status(500).json({
       error: "Failed to process image/document OCR.",
     });
@@ -199,7 +212,7 @@ Return a structured JSON with:
     const parsed = JSON.parse(response.text || "{}");
     return res.json({ success: true, plan: parsed });
   } catch (err: any) {
-    console.error("Strategy Generator Error:", err);
+    console.error("[Strategy] Provider request failed.");
     return res.status(500).json({
       error: "Failed to generate release strategy plan.",
     });
@@ -250,7 +263,7 @@ Return ONLY a JSON with:
     const result = JSON.parse(response.text || "{}");
     return res.json({ success: true, result });
   } catch (err: any) {
-    console.error("Logical Correction Error:", err);
+    console.error("[Correction] Provider request failed.");
     return res.status(500).json({
       error: "Failed to apply logical correction.",
     });
@@ -288,7 +301,7 @@ app.post("/api/ai/web-search", async (req, res) => {
       sources,
     });
   } catch (err: any) {
-    console.error("Search Error:", err);
+    console.error("[Search] Provider request failed.");
     return res.status(500).json({
       error: "Failed to execute web search.",
     });
@@ -353,7 +366,7 @@ Provide a detailed, actionable marketing strategy in JSON format:
     const strategy = JSON.parse(response.text || "{}");
     return res.json({ success: true, strategy });
   } catch (error: any) {
-    console.error("Marketing advisor error:", error);
+    console.error("[Marketing] Provider request failed.");
     return res.status(500).json({ error: "Failed to generate marketing plan" });
   }
 });

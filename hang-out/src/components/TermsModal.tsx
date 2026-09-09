@@ -10,8 +10,8 @@ export const TermsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl border border-amber-500/30 bg-slate-900 p-6 shadow-2xl scrollbar-thin">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto bg-black/80 backdrop-blur-md p-2 sm:p-4">
+      <div className="relative w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[85vh] overflow-y-auto rounded-3xl border border-amber-500/30 bg-slate-900 p-4 sm:p-6 shadow-2xl scrollbar-thin">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 rounded-full bg-slate-800 p-2 text-slate-400 hover:text-white transition"
@@ -24,38 +24,30 @@ export const TermsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Terms of Service & Artist Legal Agreement</h2>
-            <p className="text-xs text-amber-400 font-semibold">Hang Out by indiebrotherhood</p>
+            <h2 className="text-xl font-bold text-white">Hang Out safety notice</h2>
+            <p className="text-xs text-amber-400 font-semibold">Adult community · 18+ only</p>
           </div>
         </div>
 
         <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
           <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800 space-y-2">
-            <h3 className="font-extrabold text-sm text-amber-300">1. Intellectual Property & 100% Artist Ownership</h3>
-            <p>
-              All lyrics, rap verses, musical compositions, instrumental beats, audio recordings, artwork, and marketing text posted on Hang Out remain 100% the sole intellectual property of the respective artist or creator. "indiebrotherhood" claims zero ownership over your creative output.
-            </p>
+            <h3 className="font-extrabold text-sm text-amber-300">Adults only</h3>
+            <p>Hang Out—including rooms, direct messages, cyphers, and battles—is restricted to members who have declared they are 18 or older.</p>
           </div>
 
           <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800 space-y-2">
-            <h3 className="font-extrabold text-sm text-amber-300">2. Rap Battle Etiquette & Conduct Policy</h3>
-            <p>
-              While competitive wordplay, humor, and punchlines are encouraged in the Rap Battle Arena, hate speech, explicit slurs, physical threats, harassment, or personal targeted leaks are strictly prohibited. Violators will be permanently muted or removed.
-            </p>
+            <h3 className="font-extrabold text-sm text-amber-300">Community conduct</h3>
+            <p>No grooming, predatory conduct, sexual exploitation, harassment, threats, hate, doxxing, stalking, fraud, or child endangerment. Messages may be moderated for safety. Report unsafe conduct immediately.</p>
           </div>
 
           <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800 space-y-2">
-            <h3 className="font-extrabold text-sm text-amber-300">3. Platform Limitation of Liability</h3>
-            <p>
-              Hang Out and indiebrotherhood provide this real-time community hub on an "as-is" basis for networking, entertainment, and collaboration. The platform operators are not liable for informal collaboration disputes, royalty splits negotiated between users outside formal legal contracts, or third-party user transmissions.
-            </p>
+            <h3 className="font-extrabold text-sm text-amber-300">Your work</h3>
+            <p>You retain rights you already hold. Submit only material you own or have permission to share, and use a written agreement for collaborations and royalty splits.</p>
           </div>
 
           <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800 space-y-2">
-            <h3 className="font-extrabold text-sm text-amber-300">4. DMCA & Copyright Infringement</h3>
-            <p>
-              Do not post copyrighted audio or artwork that you do not hold rights to. If you believe your copyrighted work was shared without permission, notify our community team for immediate removal.
-            </p>
+            <h3 className="font-extrabold text-sm text-amber-300">Master policies</h3>
+            <p>This short notice does not replace the <a href="/api/legal/terms-of-service" target="_blank" rel="noreferrer" className="text-amber-300 underline">Terms of Service</a> or <a href="/api/legal/privacy" target="_blank" rel="noreferrer" className="text-amber-300 underline">Privacy Policy</a>. Contact <a href="mailto:xchristopherrayx@gmail.com" className="text-amber-300 underline">xchristopherrayx@gmail.com</a> for safety reports.</p>
           </div>
         </div>
 

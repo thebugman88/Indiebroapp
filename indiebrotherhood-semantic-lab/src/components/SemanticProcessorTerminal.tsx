@@ -3,6 +3,7 @@ import { Terminal, Sparkles, Mic2, Music, Hash, Zap, RefreshCw, Layers, CheckCir
 import { InputMode, EngineMode } from '../types';
 import { analyzeTextDensity } from '../utils/analyzer';
 import { playHudClick } from '../utils/audio';
+import { useCoinAction } from '../../../src/useCoinAction';
 
 interface SemanticProcessorTerminalProps {
   inputMode: InputMode;
@@ -27,6 +28,7 @@ export const SemanticProcessorTerminal: React.FC<SemanticProcessorTerminalProps>
   unleashedDrive,
   bpm,
 }) => {
+  const synthesisCoin = useCoinAction('/api/synthesize');
   // Real-time dynamic syllable and rhyme density calculation
   const densityMetrics = useMemo(() => {
     return analyzeTextDensity(inputText);
@@ -283,7 +285,7 @@ export const SemanticProcessorTerminal: React.FC<SemanticProcessorTerminalProps>
 
         <button
           id="execute-synthesis-btn"
-          disabled={isSynthesizing || !inputText.trim()}
+          disabled={isSynthesizing || !inputText.trim() || synthesisCoin.insufficient}
           onClick={() => {
             playHudClick('synthesize');
             onExecuteSynthesis();
@@ -304,7 +306,7 @@ export const SemanticProcessorTerminal: React.FC<SemanticProcessorTerminalProps>
           ) : (
             <>
               <Zap className="w-4 h-4 text-zinc-950 group-hover:scale-110 transition-transform" />
-              <span>EXECUTE FULL WRITE SYNTHESIS</span>
+              <span>{synthesisCoin.insufficient ? synthesisCoin.label : `EXECUTE FULL WRITE SYNTHESIS · ${synthesisCoin.action?.cost ?? 15} BC`}</span>
               <ArrowRight className="w-4 h-4 text-zinc-950 group-hover:translate-x-1 transition-transform" />
             </>
           )}

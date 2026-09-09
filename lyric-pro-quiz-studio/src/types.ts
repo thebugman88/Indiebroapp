@@ -1,23 +1,15 @@
-export type QuizType = 'finish_the_song' | 'whats_the_artist' | 'genre_trivia' | 'audio_snip' | 'ai_custom';
+export type QuizType = 'rock_legends' | 'genre_mix' | 'studio_knowledge' | 'music_theory' | 'indie_business' | 'rapid_random';
 
 export type DifficultyLevel = 'easy' | 'medium' | 'expert';
 
 export type GenreCategory = 
   | 'all'
-  | 'hip_hop'
-  | 'pop'
   | 'rock'
-  | 'rnb'
-  | 'nostalgia'
-  | 'country'
-  | 'edm';
+  ;
 
 export interface Question {
   id: string;
   questionText: string;
-  songContext?: string; // e.g. "Song: Sicko Mode by Travis Scott"
-  artistContext?: string; // e.g. "Year: 2018 | Album: Astroworld"
-  audioUrl?: string; // High quality actual audio preview clip URL
   options: string[];
   correctIndex: number;
   explanation: string;

@@ -1,3 +1,4 @@
+import { sealPrivate, openPrivate } from './dataProtection';
 import express from "express";
 import { createHash, randomUUID } from "node:crypto";
 import { getFirestore, FieldPath } from "firebase-admin/firestore";
@@ -31,12 +32,15 @@ export const firestoreMessages: MessageStore = {
       .get();
     return snapshot.docs.map((doc) => {
       const data = doc.data();
-      const peer = data.members.find((member: string) => member !== uid);
+      if (!data.members.includes(uid)) throw new Error("Conversation access denied.");
+      const details = openPrivate(data.private, `dm-preview:${doc.id}`);
+      if(!Array.isArray(details.members)||details.members.length!==2||!details.members.includes(uid)||conversationId(details.members[0],details.members[1])!==doc.id)throw new Error('Conversation integrity check failed.');
+      const peer = details.members.find((member: string) => member !== uid);
       return {
         id: peer,
-        name: data.names[peer] || "Artist",
+        name: details.names[peer] || "Artist",
         unreadCount: data.unread?.[uid] || 0,
-        lastMessageSnippet: data.lastMessage,
+        lastMessageSnippet: details.lastMessage,
         lastMessageTime: data.updatedAt,
       };
     });
@@ -61,7 +65,11 @@ export const firestoreMessages: MessageStore = {
       if ((current.data()?.updatedAt || 0) <= readAt)
         t.update(ref, new FieldPath("unread", uid), 0);
     });
-    return messages.docs.map((doc) => doc.data()).reverse();
+    return messages.docs.map((doc) => {
+      const message=openPrivate(doc.data().private, `dm:${ref.id}:${doc.id}`);
+      if(message.id!==doc.id||conversationId(message.senderId,message.recipientId)!==ref.id||![message.senderId,message.recipientId].includes(uid))throw new Error('Message integrity check failed.');
+      return message;
+    }).reverse();
   },
   async send(uid, peer, message, names) {
     const ref = db()
@@ -72,17 +80,13 @@ export const firestoreMessages: MessageStore = {
       const old = current.data();
       const timestamp = Date.now();
       t.create(ref.collection("messages").doc(message.id), {
-        ...message,
         timestamp,
+        private: sealPrivate({ ...message, timestamp }, `dm:${ref.id}:${message.id}`),
       });
       t.set(ref, {
         members: [uid, peer].sort(),
-        names,
         updatedAt: timestamp,
-        lastMessage:
-          message.type === "audio"
-            ? "Voice message"
-            : message.content.slice(0, 160),
+        private: sealPrivate({ members:[uid,peer].sort(),names, lastMessage: message.type === "audio" ? "Voice message" : message.content.slice(0, 160) }, `dm-preview:${ref.id}`),
         unread: {
           ...(old?.unread || {}),
           [peer]: (old?.unread?.[peer] || 0) + 1,

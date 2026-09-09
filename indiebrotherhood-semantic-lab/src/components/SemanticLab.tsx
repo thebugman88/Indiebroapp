@@ -179,6 +179,7 @@ export const SemanticLab: React.FC = () => {
 
         {/* 3. Enhanced Semantic Injection Terminal (Dual-Mode + Real-time Syllable & Rhyme Meter) */}
         <section aria-label="Semantic Injection Processor">
+          <p className="text-sm text-zinc-300 mb-3">Free local text analysis: {inputText.trim() ? inputText.trim().split(/\s+/).length : 0} words · {inputText.length} characters · {inputText.split(/\n/).filter(line => line.trim()).length} non-empty lines. Editing and live meters are free; deep AI synthesis costs 15 BC.</p>
           <SemanticProcessorTerminal
             inputMode={inputMode}
             onInputModeChange={setInputMode}

@@ -1,3 +1,5 @@
+import { isBlocked } from './securityGuard';
+import { isAdultEligible } from './ageGate';
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
@@ -532,7 +534,8 @@ export function attachRealtime(
       const recheck = setInterval(() => {
         if (c.token)
           void verify(c.token)
-            .then((identity) => {
+            .then(async (identity) => {
+              if (verify === verifyFirebaseToken && await isBlocked(identity.uid) > Date.now()) { ws.close(4003,"Account restricted"); return; }
               if (
                 identity.admin !== c.identity?.admin ||
                 identity.email_verified !== c.identity?.email_verified
@@ -566,6 +569,11 @@ export function attachRealtime(
                   return;
                 }
                 const identity = await verify(msg.token);
+                if (verify === verifyFirebaseToken && await isBlocked(identity.uid) > Date.now()) throw new Error("Account restricted.");
+                if (c.kind === 'hangout' && verify === verifyFirebaseToken && !await isAdultEligible(identity.uid)) {
+                  ws.close(4003, 'Hang Out is available only to adults 18 and older');
+                  return;
+                }
                 if (ws.readyState !== WebSocket.OPEN) return;
                 if (
                   !identity.uid ||

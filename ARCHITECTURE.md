@@ -23,3 +23,7 @@ Use stable lowercase collection and route names, explicit environment prefixes w
 ## Change Checklist
 
 Before a cross-project change, update the relevant master document, identify the owning project, define the backend contract, add a focused test, validate the deployment target, and record a rollback path.
+
+## Current build ownership
+
+The root suite now integrates ten child frontends through shared authenticated API contracts. Child manifests and lockfiles remain independent; shared imports require a complete repository checkout and root dependencies. `shared/browserSettings.ts` is owned by root security maintenance and strips provider credentials at the Artist Assistant/RoyaltyOps persistence boundaries. It does not supply authentication or cloud synchronization. See `BUILD-VALIDATION.md` for cross-platform validation, artifact paths and rollback.

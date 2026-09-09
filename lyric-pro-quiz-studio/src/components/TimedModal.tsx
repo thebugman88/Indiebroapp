@@ -52,11 +52,7 @@ export const TimedModal: React.FC<TimedModalProps> = ({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="text-[10px] uppercase font-bold tracking-wider text-purple-400">
-                  {quiz.quizType === 'finish_the_song'
-                    ? 'FINISH THE SONG'
-                    : quiz.quizType === 'whats_the_artist'
-                    ? 'WHAT\'S THE ARTIST'
-                    : 'GENRE TRIVIA'}{' '}
+                  {quiz.quizType.replaceAll('_', ' ').toUpperCase()}{' '}
                   • {quiz.questions.length} QUESTIONS
                 </span>
                 <h3 className="text-base font-bold text-white mt-0.5">{quiz.title}</h3>
@@ -72,7 +68,7 @@ export const TimedModal: React.FC<TimedModalProps> = ({
               <span className="font-bold text-purple-300 uppercase block text-[11px] mb-0.5">
                 Notice: These are timed quizzes!
               </span>
-              To maintain fair competition and prevent external lyric lookup, every question runs on an unpauseable countdown timer. If the clock runs out before you answer, the question counts as <span className="text-pink-400 font-bold uppercase underline">WRONG</span> (0 points).
+              To keep each round quick and fair, every question runs on an unpauseable countdown timer. If the clock runs out before you answer, the question counts as <span className="text-pink-400 font-bold uppercase underline">WRONG</span> (0 points).
             </div>
           </div>
 
